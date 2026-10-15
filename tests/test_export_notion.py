@@ -418,8 +418,6 @@ def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
         "- ✅ Ship\n- ⏸️ Vendor\n<empty-block/>\n"
         '- 🔵 **Mon**: Start <span color="blue">**api**</span>\n\tkick-off\n- Later\n<empty-block/>\n'
         '- <span color="yellow">**Zone**</span>: ████░░░░░░ 42.9%\n'
-        'Jan to Dec {color="gray"}\n'
-        '- <span color="red">**Q1**</span>: 25.0%, slow\n- **Rest**: 75.0%\n'
     )
 
 

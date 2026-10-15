@@ -55,12 +55,15 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
 }
+DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
+    "range": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
+}
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
-    "markdown": [],
-    "notion": [],
-    "adf": [],
-    "slack": ["walkthrough"],
+    "markdown": ["range"],
+    "notion": ["range"],
+    "adf": ["range"],
+    "slack": ["range", "walkthrough"],
 }
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
@@ -113,7 +116,7 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
 
     assert verdicts == {
         feature: {target: seeded.get(target, "keep") for target in EXPORT_TARGETS}
-        for feature, seeded in SEEDED_VERDICTS.items()
+        for feature, seeded in {**SEEDED_VERDICTS, **DIAGRAM_VERDICTS}.items()
     }
 
 

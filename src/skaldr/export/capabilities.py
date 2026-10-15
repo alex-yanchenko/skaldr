@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Final, Literal
 
@@ -18,6 +18,7 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
+OccurrenceFeature = Literal["range"]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -25,6 +26,7 @@ Feature = Literal[
     CellCountFeature,
     GridInAStepFeature,
     ScriptFormFeature,
+    OccurrenceFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
@@ -83,7 +85,12 @@ class ScriptForm:
     feature: ScriptFormFeature = field(default="subscript or superscript with no Unicode form", init=False)
 
 
-Details = Placement | HeldByAListItem | ListStart | CellCount | GridInAStep | ScriptForm
+@dataclass(frozen=True)
+class Occurrence:
+    feature: OccurrenceFeature
+
+
+Details = Placement | HeldByAListItem | ListStart | CellCount | GridInAStep | ScriptForm | Occurrence
 
 
 @dataclass(frozen=True)
@@ -108,6 +115,18 @@ _CANVAS_LIST_ITEM_WHY: Final = (
 def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget, Capability]:
     kept: dict[ExportTarget, Capability] = dict.fromkeys(EXPORT_TARGETS, "keep")
     return {**kept, **cells}
+
+
+_TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
+    "markdown": "GitHub",
+    "notion": "Notion",
+    "adf": "ADF",
+    "slack": "a Slack canvas",
+}
+
+
+def _refused_by(targets: Iterable[ExportTarget], cannot: str, instead: str) -> dict[ExportTarget, Capability]:
+    return {target: Rejection(f"{_TARGET_SUBJECTS[target]} cannot {cannot}", instead) for target in targets}
 
 
 CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
@@ -159,6 +178,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {

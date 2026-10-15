@@ -24,12 +24,6 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 * **Count status**: HEALTHY
 * **Total units**: 10,000
 
-&nbsp;
-
-* **Matched cleanly**: 85.0%, 8,500 units
-* **Floor-fixable**: 11.0%, 1,100
-* **Vendor**: 4.0%, 400
-
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated.

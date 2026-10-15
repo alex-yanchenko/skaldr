@@ -24,7 +24,6 @@ from skaldr.export.lower.prose import (
     lower_meter,
     lower_note,
     lower_quote,
-    lower_range,
     lower_references,
     lower_section_fields,
     lower_status_list,
@@ -208,7 +207,7 @@ def _block_nodes(block: models.AnyBlock, lowering: Lowering, depth: int) -> list
         case models.Meter():
             return lower_meter(block)
         case models.Range():
-            return lower_range(block, lowering)
+            return []
         case models.Code():
             return lower_code(block)
         case models.Math():

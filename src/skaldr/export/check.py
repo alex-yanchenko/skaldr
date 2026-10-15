@@ -19,6 +19,7 @@ from skaldr.export.capabilities import (
     HeldByAListItem,
     ListItemFeature,
     ListStart,
+    Occurrence,
     Placement,
     Rejection,
     ScriptForm,
@@ -62,7 +63,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
-from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
+from skaldr.models import AnyBlock, InnerGrid, Range, Report, Walkthrough, walk_located_block
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -349,6 +350,16 @@ def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator
                 yield FeatureHit(GridInAStep(), where)
 
 
+def _block_hits(path: str, block: AnyBlock) -> Iterator[FeatureHit]:
+    match block:
+        case Walkthrough():
+            yield from _grids_in_walkthrough_steps(path, block)
+        case Range():
+            yield FeatureHit(Occurrence("range"), path)
+        case _:
+            return
+
+
 def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
     located = (
         located_block
@@ -357,8 +368,7 @@ def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHi
         for located_block in walk_located_block(region.source_index, report.blocks[region.source_index])
     )
     for path, block in located:
-        if isinstance(block, Walkthrough):
-            yield from _grids_in_walkthrough_steps(path, block)
+        yield from _block_hits(path, block)
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:

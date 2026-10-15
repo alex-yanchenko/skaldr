@@ -145,16 +145,19 @@ def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
     )
 
 
-def test_the_example_is_rejected_for_the_code_block_in_its_walkthrough(tmp_path: Path) -> None:
-    example = load_report(EXAMPLE)
+def test_the_walkthrough_of_the_example_is_rejected_for_its_code_block(tmp_path: Path) -> None:
+    data = read_yaml(EXAMPLE)
+    walkthrough = parse_report(
+        {**data, "blocks": [block for block in data["blocks"] if block["type"] == "walkthrough"]}
+    )
 
     with pytest.raises(ExportRejectedError) as raised:
-        export_slack(example, tmp_path / "out")
+        export_slack(walkthrough, tmp_path / "out")
 
     assert vars(raised.value) == _canvas_rejection(
         _list_item_why("a code block"),
         OUT_OF_THE_STEP,
-        f"at {_first_step_detail_a_canvas_list_item_cannot_hold(example)}",
+        f"at {_first_step_detail_a_canvas_list_item_cannot_hold(walkthrough)}",
     )
 
 

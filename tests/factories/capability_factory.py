@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.export_targets import ExportTarget
-from tests.factories.report_factory import make_report, make_toggle
+from tests.factories.report_factory import in_a_grid_cell, make_report, make_section, make_toggle
 
 TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "a"}]}
 LONG_TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "v"}] * 300}
@@ -153,3 +153,36 @@ CLEAN_BLOCKS: list[dict[str, Any]] = [
     make_toggle(make_toggle()),
     walkthrough_holding({"type": "text", "body": "Lock the aisle."}),
 ]
+
+RANGE: dict[str, Any] = {
+    "type": "range",
+    "segments": [{"label": "Counted", "span": 3}, {"label": "Left", "span": 1}],
+}
+USE_A_METER = "use a meter or a table"
+DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
+    "markdown-range": RefusedCase(
+        "markdown", [RANGE], "GitHub cannot draw a range bar", USE_A_METER, "at blocks.0.range"
+    ),
+    "notion-range": RefusedCase(
+        "notion", [RANGE], "Notion cannot draw a range bar", USE_A_METER, "at blocks.0.range"
+    ),
+    "adf-range": RefusedCase("adf", [RANGE], "ADF cannot draw a range bar", USE_A_METER, "at blocks.0.range"),
+    "slack-range": RefusedCase(
+        "slack", [RANGE], "a Slack canvas cannot draw a range bar", USE_A_METER, "at blocks.0.range"
+    ),
+    "adf-range-in-a-panel-in-a-section": RefusedCase(
+        "adf",
+        [make_section("counts", blocks=in_a_panel(RANGE))],
+        "ADF cannot draw a range bar",
+        USE_A_METER,
+        "at blocks.0.section.blocks.0.panel.blocks.0.range",
+    ),
+    "notion-range-in-a-grid-cell": RefusedCase(
+        "notion",
+        [in_a_grid_cell([RANGE])],
+        "Notion cannot draw a range bar",
+        USE_A_METER,
+        "at blocks.0.grid.cells.0.blocks.0.range",
+    ),
+}
+DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]

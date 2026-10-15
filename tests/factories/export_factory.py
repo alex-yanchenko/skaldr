@@ -60,14 +60,6 @@ BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
         ],
     },
     {"type": "meter", "items": [{"label": "Zone", "value": 3, "max": 7, "tone": "warning"}]},
-    {
-        "type": "range",
-        "axis": {"min": "Jan", "max": "Dec"},
-        "segments": [
-            {"label": "Q1", "span": 1, "tone": "danger", "sub": "slow"},
-            {"label": "Rest", "span": 3},
-        ],
-    },
 ]
 
 

@@ -1473,9 +1473,7 @@ def test_every_badge_and_state_block_becomes_github_markdown() -> None:
         "- **Owners**: **web**\n\n"
         "* ✅ Ship\n* ⏸️ Vendor\n\n"
         "- 🔵 **Mon**: Start **api**\n\n  kick-off\n- Later\n\n"
-        "* **Zone**: ████░░░░░░ 42.9%\n\n"
-        "Jan to Dec\n\n"
-        "- **Q1**: 25.0%, slow\n- **Rest**: 75.0%\n"
+        "* **Zone**: ████░░░░░░ 42.9%\n"
     )
 
 

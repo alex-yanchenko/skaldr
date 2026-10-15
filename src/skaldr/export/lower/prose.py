@@ -200,33 +200,6 @@ def lower_meter(block: models.Meter) -> list[Node]:
     return [bullets(_meter_entry(item) for item in block.items)]
 
 
-def _range_segment(segment: models.RangeSegment, total: float, lowering: Lowering) -> ListEntry:
-    share = plain(compute.pct(segment.span, total))
-    if segment.sub:
-        share += (Plain(", "), *lowering.rich(segment.sub))
-    return ListEntry(with_bold_label(segment.label, share, segment.tone))
-
-
-def _axis_ends(axis: models.RangeAxis | None) -> list[Node]:
-    start = (axis.min or "").strip() if axis else ""
-    end = (axis.max or "").strip() if axis else ""
-    if start and end:
-        words = f"{start} to {end}"
-    elif start or end:
-        words = f"From {start}" if start else f"To {end}"
-    else:
-        return []
-    return [Paragraph(plain(words), "muted")]
-
-
-def lower_range(block: models.Range, lowering: Lowering) -> list[Node]:
-    total = sum(segment.span for segment in block.segments)
-    return [
-        *_axis_ends(block.axis),
-        bullets(_range_segment(segment, total, lowering) for segment in block.segments),
-    ]
-
-
 def lower_code(block: models.Code) -> list[Node]:
     label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
     language = "diff" if block.mode == "diff" else block_code_language(block)

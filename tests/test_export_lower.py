@@ -1046,48 +1046,17 @@ def test_a_meter_reading_is_a_gauge_with_its_share_and_tone() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("axis", "note"),
-    [
-        pytest.param({"min": "Jan"}, (Paragraph((Plain("From Jan"),), "muted"),), id="start-only"),
-        pytest.param({"max": "Dec"}, (Paragraph((Plain("To Dec"),), "muted"),), id="end-only"),
-        pytest.param({"min": "Jan", "max": "Dec"}, (Paragraph((Plain("Jan to Dec"),), "muted"),), id="both"),
-        pytest.param(
-            {"min": "  ", "max": "Dec"}, (Paragraph((Plain("To Dec"),), "muted"),), id="blank-start"
-        ),
-        pytest.param(None, (), id="no-axis"),
-    ],
-)
-def test_a_range_shows_the_axis_ends_it_has_and_each_segment_share(
-    axis: dict[str, str] | None, note: tuple[Node, ...]
-) -> None:
+def test_a_range_lowers_to_nothing_since_every_export_refuses_it() -> None:
     block = {
         "type": "range",
+        "axis": {"min": "Jan", "max": "Dec"},
         "segments": [
             {"label": "Seg", "span": 1, "tone": "danger", "sub": "one"},
             {"label": "Rest", "span": 3},
         ],
-        **({"axis": axis} if axis else {}),
     }
 
-    assert lowered([block]) == (
-        *note,
-        ListNode(
-            "bullet",
-            (
-                ListEntry(
-                    (
-                        Tinted("danger", None, bold("Seg")),
-                        Plain(": "),
-                        Plain("25.0%"),
-                        Plain(", "),
-                        Plain("one"),
-                    )
-                ),
-                ListEntry((*bold("Rest"), Plain(": "), Plain("75.0%"))),
-            ),
-        ),
-    )
+    assert lowered([{"type": "text", "body": "Before."}, block]) == (Paragraph((Plain("Before."),)),)
 
 
 def test_status_and_timeline_entries_lead_with_their_state_mark() -> None:
