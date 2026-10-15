@@ -1067,6 +1067,25 @@ def test_a_table_of_contents_writes_nothing() -> None:
             id="date-range-labelled-with-itself-is-the-canvas-dates-alone",
         ),
         pytest.param(
+            DateMention(
+                (Styled("bold", make_rich_text("2026-10-05/2026-10-09")),),
+                date(2026, 10, 5),
+                date(2026, 10, 9),
+            ),
+            "![](slack_date:2026-10-05) to ![](slack_date:2026-10-09)",
+            id="bold-range-labelled-with-itself-is-the-canvas-dates-alone",
+        ),
+        pytest.param(
+            DateMention((Styled("bold", make_rich_text("2026-10-01")),), date(2026, 10, 1), None),
+            "![](slack_date:2026-10-01)",
+            id="bold-date-labelled-with-itself-is-the-canvas-date-alone",
+        ),
+        pytest.param(
+            DateMention(make_rich_text(" 2026-10-01 "), date(2026, 10, 1), None),
+            "![](slack_date:2026-10-01)",
+            id="padded-date-labelled-with-itself-is-the-canvas-date-alone",
+        ),
+        pytest.param(
             DateMention(make_rich_text("2026-10-01"), date(2026, 10, 1), date(2026, 10, 3)),
             "2026-10-01 ![](slack_date:2026-10-01) to ![](slack_date:2026-10-03)",
             id="date-range-labelled-with-its-start-keeps-the-label",

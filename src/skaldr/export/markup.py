@@ -25,6 +25,7 @@ from skaldr.models import Person, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
+    DateMention,
     Link,
     MarkerStyle,
     ScriptPosition,
@@ -32,6 +33,7 @@ from skaldr.richtext import (
     StyleName,
     TextRunWriter,
     Tinted,
+    write_runs,
 )
 
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
@@ -202,6 +204,9 @@ class MarkupRuns(TextRunWriter, ABC):
     def date_mention(self, label: str, _start: date, _end: date | None, /) -> str:
         return label
 
+    def date_mention_around(self, run: DateMention, written_label: str, /) -> str:
+        return self.date_mention(written_label, run.start, run.end)
+
     def person_mention(self, label: str, _key: str, _person: Person, /) -> str:
         return label
 
@@ -358,6 +363,8 @@ class CommonMarkRuns(MarkupRuns, ABC):
                     pieces += self._anchor_link_pieces(run, enclosing)
                 case SectionLink():
                     pieces += self._anchor_link_pieces(run, enclosing)
+                case DateMention():
+                    pieces.append(self.date_mention_around(run, write_runs(run.label, self)))
                 case Chip():
                     pieces.append(_Emphasis("bold", self.escape(run.label)))
                 case _:
