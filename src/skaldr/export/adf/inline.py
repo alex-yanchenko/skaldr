@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Final
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 from typing_extensions import assert_never
 
@@ -49,6 +49,7 @@ from skaldr.export.runs import (
 from skaldr.export.tree import ToneName
 from skaldr.models import ALLOWED_URL_SCHEMES, Person, StatusState, SwimlaneStepState, ToneLiteral
 from skaldr.richtext import Citation, ScriptPosition, StyleName
+from skaldr.typed_links import issue_url
 
 AdfInlines = tuple[AdfInline, ...]
 
@@ -106,7 +107,7 @@ class IssueLinks:
                 )
 
     def url_of(self, key: str) -> str:
-        return f"{self.site_url.rstrip('/')}/browse/{quote(key, safe='')}"
+        return issue_url(self.site_url, key)
 
 
 def _issue_key_pattern(links: IssueLinks) -> re.Pattern[str]:

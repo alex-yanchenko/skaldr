@@ -1,7 +1,6 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TypeVar
-from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
@@ -61,13 +60,13 @@ from skaldr.publish_block.jira import (
 )
 from skaldr.publish_block.target import JsonFields
 from skaldr.services import SERVICES, Service
+from skaldr.typed_links import issue_url
 
 GLOBAL_ID_PREFIX = "skaldr"
 GLOBAL_ID_SEPARATOR = ":"
 GLOBAL_ID_LIMIT = 255
 DOCUMENT_ITEM = "document"
 SECTION_ITEM = "section"
-BROWSE_PATH = "/browse/"
 STAMP_PROPERTY = "skaldr.stamp"
 LAYOUT_PROPERTY = "skaldr.layout"
 LABEL_PREFIX = "skaldr-"
@@ -355,7 +354,7 @@ class JiraTransport:
         return display_name
 
     def item_link(self, item_id: str, _title: str, /) -> ItemLink:
-        return ItemLink(f"{self._client.site}{BROWSE_PATH}{quote(item_id, safe='')}", item_id)
+        return ItemLink(issue_url(self._client.site, item_id), item_id)
 
     def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
         return tuple(self._links_of(item_id, stamp).values())
