@@ -1493,7 +1493,7 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | `divider` | a rule |
 | `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
 | a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand; a tab's title is led by an icon when its tone is info, success, warning or danger, and a request case's by the icon of its status |
-| `grid` | its cells one after another; a table in a cell of a grid with two or more cells, an inner grid's cells included, fails the export, since ADF cannot place it there; a `chart`, `comparison`, `matrix` or `swimlane` is written as a table, so it fails the same way; move the block out of the grid. A grid with one cell shows its table full width, so it is kept |
+| `grid` | its cells one after another |
 | `flow`, `fan` | a bulleted list with each step and where it leads, plus the list of steps the diagram could not show |
 | `chart` | its data table |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |

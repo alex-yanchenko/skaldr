@@ -227,33 +227,6 @@ def _in_a_grid_cell_refused_by_a_canvas(
 
 
 CONTAINER_ADF_REFUSALS: dict[str, RefusedCase] = {
-    "adf-table-in-a-grid-cell": RefusedCase(
-        "adf",
-        "table inside a grid cell",
-        [two_cell_grid(TABLE)],
-        "ADF cannot place a table inside a grid cell",
-        "move the table out of the grid",
-        "at blocks.0.grid.cells.1.blocks.0.table",
-        also_refused_by=("slack",),
-    ),
-    "adf-table-in-a-cell-of-a-grid-inside-a-one-cell-grid": RefusedCase(
-        "adf",
-        "table inside a grid cell",
-        [one_cell_grid(two_cell_grid(TABLE))],
-        "ADF cannot place a table inside a grid cell",
-        "move the table out of the grid",
-        "at blocks.0.grid.cells.0.blocks.0.grid.cells.1.blocks.0.table",
-        also_refused_by=("slack",),
-    ),
-    "adf-chart-in-a-grid-cell": RefusedCase(
-        "adf",
-        "table inside a grid cell",
-        [two_cell_grid(BAR_CHART)],
-        "ADF cannot place a chart inside a grid cell",
-        "move the chart out of the grid",
-        "at blocks.0.grid.cells.1.blocks.0.chart",
-        also_refused_by=("slack",),
-    ),
     "adf-divider-in-a-walkthrough-step": RefusedCase(
         "adf",
         "divider inside a walkthrough step",
@@ -281,7 +254,7 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
         "table inside a callout", BAR_CHART, "chart", "adf"
     ),
     "slack-chart-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
-        "table inside a grid cell", BAR_CHART, "chart", "adf"
+        "table inside a grid cell", BAR_CHART, "chart"
     ),
     "slack-request-with-a-verdict-in-a-panel": _in_a_panel_refused_by_a_canvas(
         "callout inside a callout",
@@ -311,7 +284,7 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
         "at blocks.0.grid",
     ),
     "slack-table-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
-        "table inside a grid cell", TABLE, "table", "adf"
+        "table inside a grid cell", TABLE, "table"
     ),
     "slack-callout-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
         "callout inside a grid cell", {"type": "callout", "tone": "info", "body": "x"}, "callout"

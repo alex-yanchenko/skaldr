@@ -70,7 +70,6 @@ from skaldr.export.tree import (
     Tabs,
     Toggle,
     ToneName,
-    every_node_within,
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
@@ -102,13 +101,6 @@ def _require_the_container_holds(node: Node, produced: Iterable[AdfBlock], conta
                 f"ADF does not allow a {block['type']} inside a {container}, written from a "
                 f"{type(node).__name__}; the export check should have refused it"
             )
-
-
-def _require_no_table_within_a_grid_cell(node: Columns) -> None:
-    if any(isinstance(inner, TableNode) for inner in every_node_within(nested_nodes(node))):
-        raise ExportInvariantError(
-            "ADF has no form for a table inside a grid cell; the export check should have refused it"
-        )
 
 
 def _require_no_divider_in_a_list_item(child: Node) -> None:
@@ -198,7 +190,6 @@ class _AdfBlocks:
             case Toggle():
                 return [self.expand(container, export_visible_text(node.title), node.children)]
             case Columns():
-                _require_no_table_within_a_grid_cell(node)
                 return self.blocks(nested_nodes(node), container)
             case Tabs():
                 return self.tabs_blocks(node, container)

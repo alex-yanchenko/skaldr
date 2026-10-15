@@ -256,16 +256,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
-    "table inside a grid cell": _kept_except(
-        {
-            "adf": Rejection(
-                "ADF cannot place a {held} inside a grid cell",
-                "move the {held} out of the grid",
-                names_the_heading=True,
-            ),
-            "slack": _CANVAS_COLUMN_CANNOT_HOLD,
-        }
-    ),
+    "table inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "callout inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "divider inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "toned grid cell": _kept_except(

@@ -1,4 +1,3 @@
-from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
@@ -338,12 +337,6 @@ def with_authored_path(node: Node, path: str | None) -> Node:
             | TableOfContents()
         ):
             return replace(node, authored_at=path)
-
-
-def every_node_within(nodes: Iterable[Node]) -> Iterator[Node]:
-    for node in nodes:
-        yield node
-        yield from every_node_within(nested_nodes(node))
 
 
 def nested_nodes(node: Node) -> tuple[Node, ...]:
