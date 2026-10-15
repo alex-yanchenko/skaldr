@@ -174,6 +174,15 @@ def test_a_writer_writes_the_swapped_form_exactly_where_the_capability_table_lis
     assert is_the_swapped_form == swaps(feature, target)
 
 
+@pytest.mark.parametrize("target", ["markdown", "notion"])
+def test_a_one_series_chart_is_written_as_its_data_table_once_its_cell_lists_a_swap(
+    monkeypatch: pytest.MonkeyPatch, target: ExportTarget
+) -> None:
+    monkeypatch.setitem(CAPABILITIES["chart"], target, Swap("the chart's data table"))
+
+    assert _written_without_the_check(SWAPPED_BLOCKS["chart"], target) == SWAPPED_FORMS["chart"][target]
+
+
 @pytest.mark.parametrize("target", ["adf", "slack"])
 @pytest.mark.parametrize("blocks", [pytest.param([FLOW], id="flow"), pytest.param([FAN], id="fan")])
 def test_a_writer_that_cannot_draw_a_diagram_raises_an_internal_error_for_a_flow_or_fan_handed_to_it(
@@ -318,6 +327,12 @@ def test_a_stacked_bar_chart_with_one_series_is_drawn_as_the_same_mermaid_chart_
             [{"type": "text", "body": "**bold [$`x`$](https://example.com/x)**"}],
             "at blocks.0.text",
             id="inline-math-in-a-link-in-bold",
+        ),
+        pytest.param(
+            "chart",
+            [xy_chart("bar", [4, 6], stacked=True)],
+            "at blocks.0.chart",
+            id="stacked-bar-with-one-series-is-a-chart",
         ),
     ],
 )

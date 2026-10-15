@@ -44,7 +44,17 @@ def web_address_of(media: Media, target: ExportTarget) -> str:
 
 
 def mermaid_cannot_draw(figure: Figure) -> bool:
-    return isinstance(figure, XYChart) and len(figure.series) > 1
+    return figure_feature(figure) == "chart with several series"
+
+
+def swaps_the_figure(node: Diagram, target: ExportTarget) -> bool:
+    return swaps(figure_feature(node.figure), target)
+
+
+def figure_mermaid_draws(node: Diagram, target: ExportTarget) -> Figure:
+    if mermaid_cannot_draw(node.figure):
+        require_the_swap(figure_feature(node.figure), target)
+    return node.figure
 
 
 def data_table_swapped_in(node: Diagram, target: ExportTarget) -> tuple[Node, ...]:
