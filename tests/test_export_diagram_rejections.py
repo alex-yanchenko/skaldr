@@ -348,7 +348,7 @@ def test_github_and_notion_write_a_chart_with_several_series_as_its_data_table_a
     assert _written_without_the_check([xy_chart("line", [4, 6], [1, 2])], target) == written
 
 
-def test_a_stacked_chart_with_several_series_adds_a_total_row_holding_each_category_s_stack() -> None:
+def test_a_stacked_chart_with_several_series_adds_a_total_row_holding_the_stack_of_each_category() -> None:
     assert markdown_of([xy_chart("bar", [4, 6], [1, 2], stacked=True)]) == STACKED_TABLE
 
 
