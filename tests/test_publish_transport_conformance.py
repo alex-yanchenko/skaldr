@@ -275,7 +275,7 @@ TRANSPORTS = [
             _slack,
             SLACK_TARGET,
             writes_into_pages=True,
-            reports_edits=True,
+            reports_edits=False,
             carries_look=False,
             carries_fields=False,
             form_fixture=SLACK_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,

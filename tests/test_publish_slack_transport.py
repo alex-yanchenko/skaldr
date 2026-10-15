@@ -4,7 +4,7 @@ import re
 import pytest
 
 from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
-from skaldr.publish.content import TITLE, ItemContent, section_part
+from skaldr.publish.content import TITLE, ItemContent, differing_parts, section_part
 from skaldr.publish.slack.canvas_markdown import UNKEYED_SECTION, archived_line
 from skaldr.publish.transport import (
     AddSection,
@@ -760,24 +760,22 @@ def test_a_release_deletes_the_blocks_skaldr_published_and_its_stamp_and_keeps_w
     )
 
 
-def test_an_unchanged_canvas_reports_no_edit_from_one_read() -> None:
-    slack = InMemorySlack()
-    created = _created(slack)
-
-    reported = slack.transport().parts_edited_after(CANVAS, created.marker, CONTENT)
-
-    assert (reported, slack.calls()) == ((), ["canvases.getContent markdown"])
-
-
-def test_a_canvas_edited_after_the_marker_reports_the_title_and_section_that_changed() -> None:
+def test_hand_edits_show_in_the_read_and_asking_for_the_edited_parts_reads_nothing_again() -> None:
     slack = InMemorySlack()
     created = _created(slack)
     slack.rename_by_hand(CANVAS, "Garden notes")
     slack.edit_by_hand(CANVAS, "Sow in spring.", "Sow in June.")
+    transport = slack.transport()
 
-    reported = slack.transport().parts_edited_after(CANVAS, created.marker, created.comparable)
+    reported = transport.parts_edited_after(CANVAS, created.marker, created.comparable)
+    asked = slack.calls()
+    read = transport.read_item(CANVAS, created.comparable)
 
-    assert reported == (TITLE, section_part("planting"))
+    assert (reported, asked, differing_parts(created.comparable, read.comparable)) == (
+        (),
+        [],
+        (TITLE, section_part("planting")),
+    )
 
 
 def test_a_canvas_is_linked_at_its_workspace_address_and_the_workspace_is_asked_once() -> None:

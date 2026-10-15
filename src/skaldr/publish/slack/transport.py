@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Final
 
 from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
-from skaldr.publish.content import ItemContent, Part, differing_parts, placed_section
+from skaldr.publish.content import ItemContent, Part, placed_section
 from skaldr.publish.keyed import (
     ReadLayouts,
     comparable_sections,
@@ -262,14 +262,9 @@ class SlackTransport:
         self._read.note_released(item_id)
 
     def parts_edited_after(
-        self, item_id: str, marker: str | None, keyed_like: ItemContent, /
+        self, _item_id: str, _marker: str | None, _published: ItemContent, /
     ) -> tuple[Part, ...]:
-        markdown = self._markdown(item_id)
-        if marker is not None and _digest(markdown) == marker:
-            return ()
-        keyed = keyed_canvas(markdown, self._read.to_read(item_id, keyed_like))
-        published = ItemContent(title=keyed_like.title, sections=self.comparable_form(keyed_like).sections)
-        return differing_parts(published, ItemContent(title=keyed.title, sections=keyed.sections))
+        return ()
 
     def editor_name(self, user_id: str, /) -> str:
         return user_id
