@@ -45,6 +45,7 @@ from skaldr.export.tree import (
     ListEntry,
     ListKind,
     ListNode,
+    LoweredDocument,
     Media,
     Node,
     Paragraph,
@@ -412,6 +413,26 @@ class _CanvasWriter:
 
     def blocks(self, blocks: Sequence[_CanvasBlock]) -> list[str]:
         return joined([lines for _, lines in self.rendered(blocks)])
+
+
+def _kept_apart_from_the_region_before(
+    rendered: list[tuple[_CanvasBlock, list[str]]], last_before: _CanvasBlock | None
+) -> list[tuple[_CanvasBlock, list[str]]]:
+    if rendered and isinstance(rendered[0][0], _List) and isinstance(last_before, _List):
+        return [(_LIST_SEPARATOR_PARAGRAPH, [LIST_SEPARATOR]), *rendered]
+    return rendered
+
+
+def render_slack_regions(document: LoweredDocument) -> tuple[str, ...]:
+    writer = _CanvasWriter()
+    texts: list[str] = []
+    last_block: _CanvasBlock | None = None
+    for region in document.regions:
+        rendered = writer.rendered(_canvas_blocks(region.nodes, "top"))
+        rendered = _kept_apart_from_the_region_before(rendered, last_block)
+        texts.append("\n".join(joined([lines for _, lines in rendered])) + "\n" if rendered else "")
+        last_block = rendered[-1][0] if rendered else last_block
+    return tuple(texts)
 
 
 def render_slack(nodes: Sequence[Node]) -> str:
