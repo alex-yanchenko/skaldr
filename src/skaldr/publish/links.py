@@ -2,13 +2,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from skaldr.errors import PublishError
 from skaldr.publish.applier import StepListener
 from skaldr.publish.drafts import TargetDraft, item_label
+from skaldr.publish.jira.transport import GLOBAL_ID_LIMIT, remote_link_global_id
 from skaldr.publish.plan import ItemRef, published_item
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import PublishedItem, PublishState, save_state
 from skaldr.publish.transport import LinksWrite, PairedLink, RemoteItem, ShownLink, Stamp
 from skaldr.publish_block import TargetBase
+from skaldr.publish_block.notion import LONGEST_PAGE_ID
 
 LinkAction = Literal["link", "unlink"]
 STEP_VERB_WIDTH = 9
@@ -118,6 +121,21 @@ def plan_links(
         if partners or (held is not None and held.links):
             planned.append(linking.item_links(ref, partners))
     return tuple(planned)
+
+
+def refuse_remote_links_jira_cannot_take(prepared: Prepared) -> None:
+    jira_targets = {draft.label for draft in prepared.drafts if draft.target.service() == "jira"}
+    for ref, partners in paired_items(prepared.drafts).items():
+        if ref.target not in jira_targets or not partners:
+            continue
+        stamp = Stamp(prepared.doc_id, ref.section_id)
+        longest = len(remote_link_global_id(stamp, "notion", "0" * LONGEST_PAGE_ID))
+        if longest > GLOBAL_ID_LIMIT:
+            raise PublishError(
+                f"{ref.label}: the remote link to the paired Notion page needs a globalId of up to {longest} "
+                f"characters, over the {GLOBAL_ID_LIMIT} Jira takes; shorten the document's doc_id or the "
+                "section's id"
+            )
 
 
 def link_steps(planned: Sequence[ItemLinks]) -> tuple[LinkStep, ...]:

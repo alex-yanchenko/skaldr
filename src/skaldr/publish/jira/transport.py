@@ -132,12 +132,16 @@ def _projected(remote: JsonValue, written: JsonValue) -> JsonValue:
 
 
 def _link_prefix(stamp: Stamp) -> str:
-    item = [DOCUMENT_ITEM] if stamp.section_id is None else [SECTION_ITEM, stamp.section_id]
-    return GLOBAL_ID_SEPARATOR.join([GLOBAL_ID_PREFIX, stamp.doc_id, *item, ""])
+    item_part = [DOCUMENT_ITEM] if stamp.section_id is None else [SECTION_ITEM, stamp.section_id]
+    return GLOBAL_ID_SEPARATOR.join([GLOBAL_ID_PREFIX, stamp.doc_id, *item_part, ""])
+
+
+def remote_link_global_id(stamp: Stamp, service: Service, item_id: str) -> str:
+    return f"{_link_prefix(stamp)}{service}{GLOBAL_ID_SEPARATOR}{item_id}"
 
 
 def _global_id(item_id: str, stamp: Stamp, link: PairedLink) -> str:
-    global_id = f"{_link_prefix(stamp)}{link.service}{GLOBAL_ID_SEPARATOR}{link.item_id}"
+    global_id = remote_link_global_id(stamp, link.service, link.item_id)
     if len(global_id) > GLOBAL_ID_LIMIT:
         raise WriteRejectedError(
             f"the remote link from {item_id} to {link.service} item {link.item_id} needs a globalId of "

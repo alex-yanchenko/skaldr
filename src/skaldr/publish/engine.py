@@ -15,7 +15,13 @@ from skaldr.publish.content import (
     section_part,
 )
 from skaldr.publish.drafts import ItemDraft, item_label
-from skaldr.publish.links import LinkStep, apply_links, link_steps, plan_links
+from skaldr.publish.links import (
+    LinkStep,
+    apply_links,
+    link_steps,
+    plan_links,
+    refuse_remote_links_jira_cannot_take,
+)
 from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish, published_item, refuse_moved_targets
 from skaldr.publish.prepared import Prepared, Transports, prepare_publish, with_item
 from skaldr.publish.reading import (
@@ -174,6 +180,7 @@ class _Preflight:
 
 
 def _preflight(prepared: Prepared, transports: Transports) -> _Preflight:
+    refuse_remote_links_jira_cannot_take(prepared)
     prepared = prepared.with_state(settle_interrupted_adoptions(prepared, transports))
     refuse_moved_targets(prepared.drafts, prepared.state)
     _refuse_an_interrupted_create(prepared)

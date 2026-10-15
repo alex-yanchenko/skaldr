@@ -5,11 +5,18 @@ from typing import Any
 
 import pytest
 
-from skaldr.errors import ConnectorError
+from skaldr.errors import ConnectorError, PublishError
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main
 from skaldr.publish.drafts import draft_targets
-from skaldr.publish.engine import Applied, ApplyOutcome, apply_publish, dry_run_publish, prepare_publish
+from skaldr.publish.engine import (
+    Applied,
+    ApplyOutcome,
+    DryRun,
+    apply_publish,
+    dry_run_publish,
+    prepare_publish,
+)
 from skaldr.publish.jira import JiraConnector
 from skaldr.publish.links import LinkStep, describe_links, paired_items
 from skaldr.publish.notion.connector import NotionConnector
@@ -56,8 +63,8 @@ def _jira(project: str = "PLAN", **target: Any) -> dict[str, Any]:
     return make_jira_target(where={"project": project, "issue_type": "Task"}, **target)
 
 
-def _publish_block(*targets: dict[str, Any]) -> dict[str, Any]:
-    return {"doc_id": DOC_ID, "targets": list(targets)}
+def _publish_block(*targets: dict[str, Any], doc_id: str = DOC_ID) -> dict[str, Any]:
+    return {"doc_id": doc_id, "targets": list(targets)}
 
 
 BOTH_SPLIT = _publish_block(_notion(split=["tools"]), _jira(split=["tools"]))
@@ -215,6 +222,25 @@ def test_publishing_again_with_every_link_in_place_writes_nothing(tmp_path: Path
     outcome = _publish(path, transport)
 
     assert (outcome, transport.writes()) == (Applied(()), [])
+
+
+def test_a_remote_link_id_longer_than_jira_takes_refuses_the_dry_run_and_the_apply_before_any_write(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    long_doc_id = "garden-" + "a" * 220
+    path = write_garden_report(tmp_path, publish=_publish_block(_notion(), _jira(), doc_id=long_doc_id))
+    prepared = prepare_publish(path, _registry(transport))
+    refusal = (
+        f"{JIRA_LABEL}, document: the remote link to the paired Notion page needs a globalId of up to 287 "
+        "characters, over the 255 Jira takes; shorten the document's doc_id or the section's id"
+    )
+
+    dry_run = dry_run_publish(prepared)
+    with pytest.raises(PublishError, match=f"^{re.escape(refusal)}$"):
+        apply_publish(prepared)
+
+    assert (dry_run, transport.writes()) == (DryRun(prepared.plan, (), refusal), [])
 
 
 def test_a_state_file_that_lost_the_links_in_place_is_corrected_without_writing_them(tmp_path: Path) -> None:

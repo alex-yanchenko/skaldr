@@ -11,6 +11,7 @@ NOTION_HOSTS = ("notion.so", "notion.site", "notion.com")
 DASHLESS_PAGE_ID = re.compile(r"[0-9a-f]{32}")
 DASHED_PAGE_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 TITLED_PAGE_ID = re.compile(r"[^/]+-([0-9a-f]{32})")
+LONGEST_PAGE_ID = len("01234567-89ab-cdef-0123-456789abcdef")
 
 
 def _is_notion_host(host: str) -> bool:
