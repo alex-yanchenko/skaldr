@@ -41,7 +41,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import Grid, InnerGrid, Person, Report, load_report, parse_report
+from skaldr.models import Grid, Person, Report, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -160,27 +160,27 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
     return {**data, "blocks": blocks}
 
 
-def _first_grid_inside_a_grid_cell(report: Report) -> str:
+def _first_toned_cell_of_a_column_layout(report: Report) -> tuple[str, str]:
     return next(
-        f"{path}.cells.{cell_index}.blocks.{index}.{inner.type}"
+        (f"{path}.cells.{cell_index}", cell.tone)
         for path, block in report.located_blocks
-        if isinstance(block, Grid)
+        if isinstance(block, Grid) and len(block.cells) > 1
         for cell_index, cell in enumerate(block.cells)
-        for index, inner in enumerate(cell.blocks)
-        if isinstance(inner, InnerGrid)
+        if cell.tone
     )
 
 
-def test_the_example_is_rejected_for_the_grid_inside_one_of_its_grid_cells(tmp_path: Path) -> None:
+def test_the_example_is_rejected_for_its_first_toned_grid_cell(tmp_path: Path) -> None:
     example = load_report(EXAMPLE)
+    path, tone = _first_toned_cell_of_a_column_layout(example)
 
     with pytest.raises(ExportRejectedError) as raised:
         export_slack(example, tmp_path / "out")
 
     assert vars(raised.value) == _canvas_rejection(
-        "a Slack canvas column layout cannot nest, so it cannot show a grid inside a grid cell",
-        "write the inner grid's cells as cells of the outer grid",
-        f"at {_first_grid_inside_a_grid_cell(example)}",
+        f"a Slack canvas column has no tone, so it cannot show a grid cell with the tone '{tone}'",
+        "drop the tone from the grid cell",
+        f"at {path}, under the heading 'At a glance'",
     )
 
 

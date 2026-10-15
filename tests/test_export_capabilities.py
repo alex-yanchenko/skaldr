@@ -26,6 +26,7 @@ from tests.factories.capability_factory import (
     in_a_panel,
     published_report,
     text_grid,
+    two_cell_grid,
     walkthrough_holding,
 )
 from tests.factories.publish_factory import FakeConnector, FakeTransport
@@ -194,17 +195,35 @@ def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() 
     assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
 
 
+def test_the_first_refusal_reported_is_the_first_in_the_document() -> None:
+    blocks = [*in_a_panel({"type": "divider"}), two_cell_grid(text_grid())]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "slack")
+
+    assert raised.value.where == "at blocks.0.panel.blocks.0.divider"
+
+
+def test_a_refusal_found_on_the_model_names_the_heading_above_it() -> None:
+    blocks = [{"type": "heading", "text": "Layout"}, two_cell_grid(text_grid())]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        _check(blocks, "slack")
+
+    assert raised.value.where == "at blocks.1.grid.cells.1.blocks.0.grid, under the heading 'Layout'"
+
+
 @pytest.mark.parametrize(
     ("target", "refused_at"),
     [
-        pytest.param("adf", "at blocks.1.panel.blocks.0.table", id="adf"),
-        pytest.param("slack", "at blocks.2.walkthrough.steps.0.detail.0.grid", id="slack"),
+        pytest.param("adf", "at blocks.2.panel.blocks.0.table", id="adf"),
+        pytest.param("slack", "at blocks.1.walkthrough.steps.0.detail.0.grid", id="slack"),
     ],
 )
 def test_the_check_of_a_page_built_from_some_regions_looks_only_at_their_blocks(
     target: ExportTarget, refused_at: str
 ) -> None:
-    blocks = [{"type": "text", "body": "Fine."}, *in_a_panel(TABLE), walkthrough_holding(text_grid())]
+    blocks = [{"type": "text", "body": "Fine."}, walkthrough_holding(text_grid()), *in_a_panel(TABLE)]
     report = parse_report(make_report(blocks=blocks))
     lowering = lowering_for(report)
     regions = lower_regions(lowering)
