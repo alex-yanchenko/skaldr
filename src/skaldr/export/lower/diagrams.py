@@ -24,24 +24,6 @@ from skaldr.export.tree import (
     XYChartMark,
 )
 from skaldr.models import Chart, Fan, Flow, FlowStep
-from skaldr.richtext import (
-    AnchorLink,
-    Citation,
-    Code,
-    DateMention,
-    DocumentLink,
-    InlineMath,
-    IssueLink,
-    Link,
-    PersonMention,
-    Placeholder,
-    Plain,
-    Run,
-    ScriptText,
-    Styled,
-    Tinted,
-    visible_text,
-)
 
 SERIES_COLUMN: Final = "Series"
 DONUT_COLUMNS: Final = ("Slice", "Value", "Share")
@@ -49,7 +31,7 @@ TOTAL_LABEL: Final = "Total"
 
 
 def _graph_node(key: str, step: FlowStep, lowering: Lowering, prefix: str = "") -> GraphNode:
-    note = visible_text(lowering.rich(step.note)) if step.note else ""
+    note = lowering.rich(step.note) if step.note else ()
     return GraphNode(key, one_line(prefix + step.label), note, step.tone)
 
 
@@ -63,29 +45,8 @@ def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
     return ListEntry(text, children=children)
 
 
-def _loses_meaning_in_a_plain_label(run: Run) -> bool:
-    match run:
-        case Link() | AnchorLink() | IssueLink() | DocumentLink() | Citation() | InlineMath() | ScriptText():
-            return True
-        case DateMention() | PersonMention():
-            return any(map(_loses_meaning_in_a_plain_label, run.label))
-        case Styled() | Tinted():
-            return any(map(_loses_meaning_in_a_plain_label, run.runs))
-        case Plain() | Code() | Placeholder():
-            return False
-        case _:
-            assert_never(run)
-
-
-def _diagram_cannot_show_all_of(step: FlowStep, lowering: Lowering) -> bool:
-    note_loses_meaning = (
-        any(map(_loses_meaning_in_a_plain_label, lowering.rich(step.note))) if step.note else False
-    )
-    return bool(step.points or step.badges) or note_loses_meaning
-
-
 def _supplement(steps: Sequence[FlowStep], lowering: Lowering) -> tuple[Node, ...]:
-    detailed = [step for step in steps if _diagram_cannot_show_all_of(step, lowering)]
+    detailed = [step for step in steps if step.points or step.badges]
     return (bullets(_step_entry(step, lowering) for step in detailed),) if detailed else ()
 
 

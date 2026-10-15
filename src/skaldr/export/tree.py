@@ -177,7 +177,7 @@ class Tabs:
 class GraphNode:
     key: str
     label: str
-    note: str = ""
+    note: ExportRich = ()
     tone: ToneName | None = None
 
 

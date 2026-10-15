@@ -520,9 +520,11 @@ than ~6 nodes usually reads better as `steps`, or split into two flows. `tone` (
 `neutral·info·success·warning·danger·accent`) accents a node's border + number; use it to mark the
 key stage, not every node. `loop` is for genuine cycles (flag→fix→verify→flag), not linear pipelines.
 
-The GitHub-flavored and Notion exports draw a flow as a Mermaid diagram. The ADF and Slack canvas
-exports cannot draw one, so they refuse a document holding a `flow`; for those targets, write the
-steps as a numbered list.
+The GitHub-flavored and Notion exports draw a flow as a Mermaid diagram, whose labels hold plain text
+only, so they refuse a step whose `note` holds a link, citation, inline math, subscript or
+superscript; keep such a note plain and put the rest in a text block after the flow. The ADF and Slack
+canvas exports cannot draw a diagram, so they refuse a document holding a `flow`; for those targets,
+write the steps as a numbered list.
 
 ## The `fan`
 
@@ -1450,7 +1452,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
-| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points, badges, or note links, citations, inline math, subscripts and superscripts it can't show | the same |
+| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points or badges it can't show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series is a Mermaid xy chart over its data table; a stacked bar chart, or a chart with several series, is the table alone | the same |
 | `callout`, `note`, a toned `grid` cell | a quote led by an icon | a native callout |
 | `panel` | a quote led by its bold title and no icon, as on the page | a native callout |
@@ -1491,6 +1493,7 @@ case, where the page is shared as a URL an agent later has to read back.
 The GitHub-flavored and Notion exports refuse:
 
 - a `range`, since neither can draw a range bar; use a `meter` or a `table`.
+- a `flow` or `fan` step whose `note` holds a link, citation, inline math, subscript or superscript, since a Mermaid label holds plain text only; write the note as plain text and put the rest in a text block after the diagram.
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command (or its `query`, as a fenced block in its language under the runner's name), with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown and become plain text in Notion. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title, led by `meta.icon` when there is one, then a `Cover image` link when `meta.cover` is set. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 

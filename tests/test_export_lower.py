@@ -124,7 +124,10 @@ def test_a_numbered_looping_flow_is_a_top_to_bottom_graph_with_a_dashed_return()
         Diagram(
             Graph(
                 "TB",
-                (GraphNode("s1", "1: Scan", "by aisle", "info"), GraphNode("s2", "2: Fix")),
+                (
+                    GraphNode("s1", "1: Scan", (Plain("by "), Styled("bold", (Plain("aisle"),))), "info"),
+                    GraphNode("s2", "2: Fix"),
+                ),
                 (GraphEdge("s1", "s2"), GraphEdge("s2", "s1", dashed=True)),
             )
         ),
@@ -144,7 +147,11 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
     assert lowered([flow], badges=API_BADGES) == (
         API_LEGEND,
         Diagram(
-            Graph("LR", (GraphNode("s1", "Scan", "first"), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),)),
+            Graph(
+                "LR",
+                (GraphNode("s1", "Scan", (Plain("first"),)), GraphNode("s2", "Fix")),
+                (GraphEdge("s1", "s2"),),
+            ),
             (
                 ListNode(
                     "bullet",
@@ -161,51 +168,28 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
 
 
 @pytest.mark.parametrize(
-    ("note", "visible", "runs"),
+    ("note", "runs"),
     [
         pytest.param(
             "see [doc](https://e.com/d)",
-            "see doc",
             (Plain("see "), Link((Plain("doc"),), "https://e.com/d")),
             id="web-link",
         ),
         pytest.param(
-            "see [count](#count)",
-            "see count",
-            (Plain("see "), AnchorLink((Plain("count"),), "count")),
-            id="anchor",
+            "see [count](#count)", (Plain("see "), AnchorLink((Plain("count"),), "count")), id="anchor"
         ),
-        pytest.param(
-            "per [^sop]", "per [1]", (Plain("per "), Citation("sop", 1, "https://e.com/sop")), id="citation"
-        ),
-        pytest.param(
-            "**[doc](https://e.com/d)**",
-            "doc",
-            (Styled("bold", (Link((Plain("doc"),), "https://e.com/d"),)),),
-            id="link-inside-bold",
-        ),
+        pytest.param("per [^sop]", (Plain("per "), Citation("sop", 1, "https://e.com/sop")), id="citation"),
         pytest.param(
             "per [[^sop]]{tone=info}",
-            "per [1]",
             (Plain("per "), Tinted("info", None, (Citation("sop", 1, "https://e.com/sop"),))),
             id="citation-inside-a-color-span",
         ),
-        pytest.param(
-            "rate $`x_i`$",
-            "rate x_i",
-            (Plain("rate "), InlineMath("x_i")),
-            id="inline-math",
-        ),
-        pytest.param(
-            "about 10^3^",
-            "about 103",
-            (Plain("about 10"), ScriptText("superscript", "3")),
-            id="superscript",
-        ),
+        pytest.param("rate $`x_i`$", (Plain("rate "), InlineMath("x_i")), id="inline-math"),
+        pytest.param("about 10^3^", (Plain("about 10"), ScriptText("superscript", "3")), id="superscript"),
     ],
 )
-def test_a_flow_lists_a_step_whose_note_loses_meaning_in_a_plain_label(
-    note: str, visible: str, runs: Rich
+def test_a_graph_node_keeps_the_runs_of_its_note_for_the_check_and_lists_no_step_for_a_note_alone(
+    note: str, runs: Rich
 ) -> None:
     flow = {"type": "flow", "numbered": False, "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
     references = {"type": "references", "items": [{"key": "sop", "text": "SOP", "url": "https://e.com/sop"}]}
@@ -216,33 +200,9 @@ def test_a_flow_lists_a_step_whose_note_loses_meaning_in_a_plain_label(
         if isinstance(node, Diagram)
     ]
 
-    assert diagrams == [
-        Diagram(
-            Graph("LR", (GraphNode("s1", "Scan", visible), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),)),
-            (ListNode("bullet", (ListEntry((*bold("Scan"), Plain(": "), *runs)),)),),
-        )
-    ]
+    graph = Graph("LR", (GraphNode("s1", "Scan", runs), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),))
 
-
-def test_a_fan_lists_a_spoke_whose_note_holds_inline_math() -> None:
-    fan = {
-        "type": "fan",
-        "direction": "out",
-        "hub": {"label": "Hub"},
-        "spokes": [{"label": "A", "note": "$`a^2`$"}, {"label": "B", "note": "plain"}],
-    }
-
-    assert lowered([fan]) == (
-        Diagram(
-            Graph(
-                "LR",
-                (GraphNode("hub", "Hub"), GraphNode("s1", "A", "a^2"), GraphNode("s2", "B", "plain")),
-                (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
-                "fan",
-            ),
-            (ListNode("bullet", (ListEntry((*bold("A"), Plain(": "), InlineMath("a^2"))),)),),
-        ),
-    )
+    assert diagrams == [Diagram(graph)]
 
 
 def test_a_fan_lists_the_points_and_badges_of_its_hub_before_its_spokes() -> None:

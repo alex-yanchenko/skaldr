@@ -59,6 +59,12 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "range": {"markdown": "reject", "notion": "reject", "adf": "reject", "slack": "reject"},
     "flow diagram": {"adf": "reject", "slack": "reject"},
     "fan diagram": {"adf": "reject", "slack": "reject"},
+    "link, citation or math in a flow or fan step's note": {
+        "markdown": "reject",
+        "notion": "reject",
+        "adf": "reject",
+        "slack": "reject",
+    },
 }
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {

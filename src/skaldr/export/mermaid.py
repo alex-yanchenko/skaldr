@@ -5,6 +5,7 @@ from typing import Final, NamedTuple
 from typing_extensions import assert_never
 
 from skaldr.export.inline import one_line
+from skaldr.export.runs import export_visible_text
 from skaldr.export.tree import Figure, Graph, GraphNode, PieChart, ToneName, XYChart
 
 
@@ -54,7 +55,8 @@ def _mermaid_number(value: float) -> str:
 
 
 def _node_line(node: GraphNode) -> str:
-    label = _mermaid_text(node.label) + (f"<br>{_mermaid_text(node.note)}" if node.note else "")
+    note = export_visible_text(node.note)
+    label = _mermaid_text(node.label) + (f"<br>{_mermaid_text(note)}" if note else "")
     tone_class = f":::{node.tone}" if node.tone else ""
     return f'    {node.key}["{label}"]{tone_class}'
 

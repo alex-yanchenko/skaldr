@@ -4,13 +4,14 @@ import pytest
 
 from skaldr.export.mermaid import MERMAID_FILL, mermaid_fence_lines
 from skaldr.export.tree import Graph, GraphEdge, GraphNode, PieChart, PieSlice, ToneName, XYChart
+from skaldr.richtext import Plain, Styled
 
 
 def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
     graph = Graph(
         "TB",
         (
-            GraphNode("s1", 'Say "hi"', "then\nstop", "warning"),
+            GraphNode("s1", 'Say "hi"', (Plain("then\n"), Styled("bold", (Plain("stop"),))), "warning"),
             GraphNode("s2", "Fix", tone="info"),
             GraphNode("s3", "Plain"),
         ),

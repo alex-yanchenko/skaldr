@@ -171,6 +171,37 @@ FAN: dict[str, Any] = {
 }
 AS_A_NUMBERED_LIST = "write the steps as a numbered list"
 AS_A_LIST = "write the hub and its spokes as a list"
+RICH_NOTE_WHY = (
+    "{target} cannot show a link, citation, math, subscript or superscript in a flow or fan step's note, "
+    "since a diagram label holds plain text only"
+)
+RICH_NOTE_INSTEAD = "write the note as plain text and put the rest in a text block after the diagram"
+REFERENCES: dict[str, Any] = {
+    "type": "references",
+    "items": [{"key": "sop", "text": "SOP", "url": "https://example.com/sop"}],
+}
+RICH_NOTES: dict[str, str] = {
+    "web-link": "see [doc](https://example.com/d)",
+    "anchor": "see [count](#count)",
+    "citation": "per [^sop]",
+    "link-inside-bold": "**[doc](https://example.com/d)**",
+    "citation-inside-a-color-span": "per [[^sop]]{tone=info}",
+    "inline-math": "rate $`x_i`$",
+    "superscript": "about 10^3^",
+    "issue-link": "see [WH-1](jira:WH-1)",
+    "document-link": "see [the plan](doc:cold-room-plan)",
+}
+
+
+def flow_with_a_note(note: str) -> list[dict[str, Any]]:
+    flow = {"type": "flow", "steps": [{"label": "Scan", "note": note}, {"label": "Fix"}]}
+    return [{"type": "heading", "text": "Count"}, flow, REFERENCES]
+
+
+def rich_note_refusal(
+    target: ExportTarget, subject: str, blocks: list[dict[str, Any]], where: str
+) -> RefusedCase:
+    return RefusedCase(target, blocks, RICH_NOTE_WHY.format(target=subject), RICH_NOTE_INSTEAD, where)
 
 
 @dataclass(frozen=True)
@@ -221,12 +252,36 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         AS_A_NUMBERED_LIST,
         "at blocks.0.toggle.blocks.0.flow",
     ),
+    **{
+        f"markdown-flow-note-{name}": rich_note_refusal(
+            "markdown", "GitHub", flow_with_a_note(note), "at blocks.1.flow"
+        )
+        for name, note in RICH_NOTES.items()
+    },
+    "notion-flow-note-web-link": rich_note_refusal(
+        "notion", "Notion", flow_with_a_note(RICH_NOTES["web-link"]), "at blocks.1.flow"
+    ),
+    "notion-fan-hub-note-inline-math": rich_note_refusal(
+        "notion",
+        "Notion",
+        [{**FAN, "hub": {"label": "Count", "note": RICH_NOTES["inline-math"]}}],
+        "at blocks.0.fan",
+    ),
+    "adf-flow-with-a-rich-note-is-refused-as-a-flow": RefusedCase(
+        "adf",
+        flow_with_a_note(RICH_NOTES["web-link"]),
+        "ADF cannot draw a flow diagram",
+        AS_A_NUMBERED_LIST,
+        "at blocks.1.flow",
+    ),
 }
 DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     "markdown-flow": AcceptedCase("markdown", [FLOW]),
     "notion-flow": AcceptedCase("notion", [FLOW]),
     "markdown-fan": AcceptedCase("markdown", [FAN]),
     "notion-fan": AcceptedCase("notion", [FAN]),
+    "markdown-flow-with-a-styled-note": AcceptedCase("markdown", flow_with_a_note("by **aisle** and `bin`")),
+    "notion-flow-with-a-styled-note": AcceptedCase("notion", flow_with_a_note("by *aisle* [now]{tone=info}")),
 }
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]
 DIAGRAM_ACCEPTED_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_ACCEPTED.items()]

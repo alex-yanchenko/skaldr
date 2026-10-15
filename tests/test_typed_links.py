@@ -399,25 +399,15 @@ def test_a_typed_link_in_inline_code_is_written_as_code() -> None:
     assert str(render_richtext("`[x](date:2026-10-01)`")) == "<code>[x](date:2026-10-01)</code>"
 
 
-def test_a_flow_note_reads_typed_links_as_their_labels_and_lists_the_links_a_diagram_loses() -> None:
+def test_a_flow_note_reads_a_mention_and_a_date_as_their_labels() -> None:
     flow = {
         "type": "flow",
         "numbered": False,
-        "steps": [
-            {"label": "Scan", "note": "[Ada](user:ada) by [1 Oct](date:2026-10-01)"},
-            {"label": "Fix", "note": "see [ABC-1](jira:ABC-1) and [plan](doc:plan#st2)"},
-        ],
+        "steps": [{"label": "Scan", "note": "[Ada](user:ada) by [1 Oct](date:2026-10-01)"}, {"label": "Fix"}],
     }
 
     assert markdown_of([flow], meta=PEOPLE_META) == (
-        "```mermaid\n"
-        "flowchart LR\n"
-        '    s1["Scan<br>Ada by 1 Oct"]\n'
-        '    s2["Fix<br>see ABC-1 and plan"]\n'
-        "    s1 --> s2\n"
-        "```\n"
-        "\n"
-        "- **Fix**: see [ABC-1](https://example.atlassian.net/browse/ABC-1) and [plan](plan.md)\n"
+        '```mermaid\nflowchart LR\n    s1["Scan<br>Ada by 1 Oct"]\n    s2["Fix"]\n    s1 --> s2\n```\n'
     )
 
 

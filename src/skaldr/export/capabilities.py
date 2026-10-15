@@ -18,7 +18,12 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
-OccurrenceFeature = Literal["range", "flow diagram", "fan diagram"]
+OccurrenceFeature = Literal[
+    "range",
+    "flow diagram",
+    "fan diagram",
+    "link, citation or math in a flow or fan step's note",
+]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -187,6 +192,12 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     ),
     "fan diagram": _kept_except(
         _refused_by(_DRAWING_NO_DIAGRAM, "draw a fan diagram", "write the hub and its spokes as a list")
+    ),
+    "link, citation or math in a flow or fan step's note": _refused_by(
+        EXPORT_TARGETS,
+        "show a link, citation, math, subscript or superscript in a flow or fan step's note, "
+        "since a diagram label holds plain text only",
+        "write the note as plain text and put the rest in a text block after the diagram",
     ),
 }
 

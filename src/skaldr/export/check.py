@@ -108,6 +108,15 @@ _GRAPH_FEATURES: Final[Mapping[GraphKind, OccurrenceFeature]] = {
     "flow": "flow diagram",
     "fan": "fan diagram",
 }
+_RUNS_A_PLAIN_LABEL_LOSES: Final = (
+    Link,
+    AnchorLink,
+    IssueLink,
+    DocumentLink,
+    Citation,
+    InlineMath,
+    ScriptText,
+)
 
 
 @dataclass(frozen=True)
@@ -239,18 +248,18 @@ def _own_texts(node: Node) -> Iterator[ExportRich]:
             assert_never(node)
 
 
-def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
+def every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
     for run in runs:
+        yield run
         match run:
-            case ScriptText():
-                yield run
             case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
-                yield from _scripts(run.label)
+                yield from every_run_within(run.label)
             case Styled() | Tinted():
-                yield from _scripts(run.runs)
+                yield from every_run_within(run.runs)
             case (
                 Plain()
                 | Code()
+                | ScriptText()
                 | Citation()
                 | Placeholder()
                 | InlineMath()
@@ -266,6 +275,14 @@ def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
                 pass
             case _:
                 assert_never(run)
+
+
+def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
+    return (run for run in every_run_within(runs) if isinstance(run, ScriptText))
+
+
+def _loses_meaning_in_a_plain_label(runs: ExportRich) -> bool:
+    return any(isinstance(run, _RUNS_A_PLAIN_LABEL_LOSES) for run in every_run_within(runs))
 
 
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
@@ -329,6 +346,9 @@ class _TreeWalk:
         match node.figure:
             case Graph():
                 yield self.hit(Occurrence(_GRAPH_FEATURES[node.figure.kind]), node.authored_at)
+                if any(_loses_meaning_in_a_plain_label(graph_node.note) for graph_node in node.figure.nodes):
+                    note_feature = "link, citation or math in a flow or fan step's note"
+                    yield self.hit(Occurrence(note_feature), node.authored_at)
             case PieChart() | XYChart():
                 return
             case _:
