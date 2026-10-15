@@ -1,3 +1,4 @@
+from collections import deque
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from itertools import chain
@@ -113,6 +114,10 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
     Tabs: "set of tabs",
     Diagram: "diagram",
 }
+
+
+DocumentPosition = tuple[tuple[int, int, str], ...]
+LocatedDetails = tuple[str, Details]
 
 
 @dataclass(frozen=True)
@@ -344,15 +349,34 @@ def _fenced_off_from_a_jira_list_item(child: Node) -> Iterator[Node]:
             assert_never(child)
 
 
+def _document_position(path: str) -> DocumentPosition:
+    return tuple((0, int(part), "") if part.isdigit() else (1, 0, part) for part in path.split("."))
+
+
 class _TreeWalk:
-    def __init__(self) -> None:
+    def __init__(self, located: Iterable[LocatedDetails]) -> None:
         self.heading = ""
+        self.located = deque(sorted(located, key=lambda each: _document_position(each[0])))
 
     def note_heading(self, text: ExportRich) -> None:
         self.heading = export_visible_text(text).strip() or self.heading
 
     def hit(self, details: Details, path: str | None) -> FeatureHit:
         return FeatureHit(details, path, self.heading)
+
+    def located_hits_before(self, node: Node) -> Iterator[FeatureHit]:
+        if node.authored_at is None:
+            return
+        position = _document_position(node.authored_at)
+        while self.located and _document_position(self.located[0][0]) <= position:
+            path, details = self.located.popleft()
+            yield self.hit(details, path)
+
+    def document(self, body: Iterable[Node]) -> Iterator[FeatureHit]:
+        yield from self.nodes(body, _Place())
+        while self.located:
+            path, details = self.located.popleft()
+            yield self.hit(details, path)
 
     def nodes(self, nodes: Iterable[Node], place: _Place) -> Iterator[FeatureHit]:
         for node in nodes:
@@ -366,6 +390,7 @@ class _TreeWalk:
                 yield self.hit(details, node.authored_at)
 
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
+        yield from self.located_hits_before(node)
         yield from self.inline_hits(node)
         match node:
             case Heading():
@@ -413,6 +438,7 @@ class _TreeWalk:
     def entry_hits(self, entry: ListEntry, holder: ListNode, place: _Place) -> Iterator[FeatureHit]:
         holds_a_list = False
         for child in entry.children:
+            yield from self.located_hits_before(child)
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
                 yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
@@ -429,20 +455,19 @@ class _TreeWalk:
             yield self.hit(CellCount(cells), node.authored_at)
 
 
-def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator[FeatureHit]:
+def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator[LocatedDetails]:
     for step_index, step in enumerate(walkthrough.steps):
         for index, detail in enumerate(step.detail):
             if isinstance(detail, InnerGrid):
-                where = f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
-                yield FeatureHit(GridInAStep(), where)
+                yield f"{path}.steps.{step_index}.detail.{index}.{detail.type}", GridInAStep()
 
 
-def _text_numbering_hits(path: str, block: models.ListBlock) -> Iterator[FeatureHit]:
+def _text_numbering_hits(path: str, block: models.ListBlock) -> Iterator[LocatedDetails]:
     match block.numbering:
         case "letters":
-            yield FeatureHit(TextNumbering("letters"), path)
+            yield path, TextNumbering("letters")
         case "roman":
-            yield FeatureHit(TextNumbering("roman numerals"), path)
+            yield path, TextNumbering("roman numerals")
         case "decimal" | None:
             return
         case _:
@@ -453,7 +478,7 @@ def _holds_a_list(prose: str) -> bool:
     return any(isinstance(part, ProseList) for part in prose_blocks(prose))
 
 
-def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
+def _model_hits(report: Report, document: LoweredDocument) -> Iterator[LocatedDetails]:
     located = (
         located_block
         for region in document.regions
@@ -466,7 +491,7 @@ def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHi
         if isinstance(block, models.ListBlock):
             yield from _text_numbering_hits(path, block)
         if isinstance(block, models.Quote) and _holds_a_list(block.body):
-            yield FeatureHit(ListInAQuote(), path)
+            yield path, ListInAQuote()
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
@@ -492,5 +517,5 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    tree_hits = _TreeWalk().nodes(document.body, _Place())
-    _raise_the_first_rejection(chain(_model_hits(report, document), tree_hits), target)
+    walk = _TreeWalk(_model_hits(report, document))
+    _raise_the_first_rejection(walk.document(document.body), target)

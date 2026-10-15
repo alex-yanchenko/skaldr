@@ -82,7 +82,13 @@ from tests.factories import (
     notion_of,
     rendered_block_count,
 )
-from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
+from tests.factories.example_factory import (
+    EXAMPLE,
+    FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
+    example_for,
+    golden_of,
+    golden_or_scratch_folder,
+)
 
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
@@ -631,17 +637,14 @@ def test_the_export_fixture_uses_every_block_type() -> None:
     assert _block_types_in(load_report(EXAMPLE).blocks) == authored_block_types()
 
 
-def test_the_example_is_refused_for_notion_for_its_span_with_a_colour_and_a_highlight(tmp_path: Path) -> None:
+def test_the_example_is_refused_for_notion_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
     with pytest.raises(ExportRejectedError) as raised:
         export_notion(load_report(EXAMPLE), tmp_path)
 
-    assert str(raised.value) == (
-        "a Notion text run takes a colour or a highlight, not both, so it cannot show both on 'vendor lots', "
-        "at blocks.8.text; keep either the colour or the highlight on the text"
-    )
+    assert str(raised.value) == FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE["notion"]
 
 
-def test_the_example_reworked_for_notion_exports_to_the_golden_which_skaldr_write_notion_golden_rewrites(
+def test_the_example_reworked_for_notion_exports_to_the_notion_golden(
     tmp_path: Path,
 ) -> None:
     out_dir = golden_or_scratch_folder("notion", tmp_path)

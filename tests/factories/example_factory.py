@@ -5,21 +5,24 @@ from typing import Any, Final
 
 import yaml
 
-from skaldr.export_targets import ExportTarget
+from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from tests.conftest import REPO_ROOT
 
 EXAMPLE: Final = REPO_ROOT / "data" / "example.yaml"
 GOLDEN_FOLDER: Final = REPO_ROOT / "tests" / "golden"
+GOLDEN_REWRITE_VARIABLE_FOR: Final[Mapping[ExportTarget, str]] = {
+    target: f"SKALDR_WRITE_{target.upper()}_GOLDEN" for target in EXPORT_TARGETS
+}
 COLOURED_SPAN: Final = "[behind schedule]{tone=danger}"
 HIGHLIGHTED_SPAN: Final = "[due Friday]{bg=warning}"
 COLOURED_AND_HIGHLIGHTED_SPAN: Final = "[vendor lots]{tone=accent bg=sky}"
 UNDERLINED_TEXT: Final = "++check digit++"
 DOCUMENT_LINK: Final = "[the cold room plan](doc:cold-room-plan#recount)"
 ROMAN_LIST_FROM_4: Final = "    start: 4\n    numbering: roman\n"
-CALLOUT_IN_A_STEP: Final = (
+EXAMPLE_CALLOUT_IN_A_STEP: Final = (
     '          - type: callout\n            tone: warning\n            body: "A residual gap'
 )
-TEXT_IN_A_STEP: Final = '          - type: text\n            body: "A residual gap'
+EXAMPLE_TEXT_IN_A_STEP: Final = '          - type: text\n            body: "A residual gap'
 EXAMPLE_EDITS_FOR: Final[Mapping[ExportTarget, tuple[tuple[str, str], ...]]] = {
     "markdown": (
         (COLOURED_SPAN, "behind schedule"),
@@ -31,7 +34,7 @@ EXAMPLE_EDITS_FOR: Final[Mapping[ExportTarget, tuple[tuple[str, str], ...]]] = {
     ),
     "adf": (
         (ROMAN_LIST_FROM_4, "    start: 4\n"),
-        (CALLOUT_IN_A_STEP, TEXT_IN_A_STEP),
+        (EXAMPLE_CALLOUT_IN_A_STEP, EXAMPLE_TEXT_IN_A_STEP),
     ),
     "slack": (
         (UNDERLINED_TEXT, "check digit"),
@@ -42,14 +45,39 @@ EXAMPLE_EDITS_FOR: Final[Mapping[ExportTarget, tuple[tuple[str, str], ...]]] = {
         (ROMAN_LIST_FROM_4, ""),
     ),
 }
+FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE: Final[Mapping[ExportTarget, str]] = {
+    "markdown": (
+        "GitHub Markdown cannot colour text, so it cannot show the colour of 'behind schedule', "
+        "at blocks.8.text; write the text without the colour or export the document elsewhere"
+    ),
+    "notion": (
+        "a Notion text run takes a colour or a highlight, not both, so it cannot show both on 'vendor lots', "
+        "at blocks.8.text; keep either the colour or the highlight on the text"
+    ),
+    "adf": (
+        "ADF numbers a list only with digits, so it cannot show a list numbered with roman numerals, "
+        "at blocks.31.list; number the list with digits, or export it elsewhere"
+    ),
+    "slack": (
+        "a Slack canvas cannot underline text, so it cannot show the underline on 'check digit', "
+        "at blocks.7.text; write the text without the underline or export the document elsewhere"
+    ),
+}
+
+
+def edited_once(text: str, written: str, accepted: str) -> str:
+    occurrences = text.count(written)
+    if occurrences != 1:
+        raise ValueError(
+            f"data/example.yaml holds {written!r} {occurrences} times, not once; update EXAMPLE_EDITS_FOR"
+        )
+    return text.replace(written, accepted)
 
 
 def example_text_for(target: ExportTarget) -> str:
     text = EXAMPLE.read_text(encoding="utf-8")
     for written, accepted in EXAMPLE_EDITS_FOR[target]:
-        if written not in text:
-            raise ValueError(f"data/example.yaml no longer holds {written!r}; update EXAMPLE_EDITS_FOR")
-        text = text.replace(written, accepted)
+        text = edited_once(text, written, accepted)
     return text
 
 
@@ -62,5 +90,5 @@ def golden_of(target: ExportTarget) -> Path:
 
 
 def golden_or_scratch_folder(target: ExportTarget, scratch: Path) -> Path:
-    rewrites_the_golden = os.environ.get(f"SKALDR_WRITE_{target.upper()}_GOLDEN")
-    return golden_of(target) if rewrites_the_golden else scratch
+    golden_rewrite_requested = bool(os.environ.get(GOLDEN_REWRITE_VARIABLE_FOR[target]))
+    return golden_of(target) if golden_rewrite_requested else scratch

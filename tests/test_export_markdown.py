@@ -77,20 +77,23 @@ from tests.factories import (
     make_toggle,
     markdown_of,
 )
-from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
+from tests.factories.example_factory import (
+    EXAMPLE,
+    FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
+    example_for,
+    golden_of,
+    golden_or_scratch_folder,
+)
 
 
-def test_the_example_is_refused_for_github_for_its_colour_span(tmp_path: Path) -> None:
+def test_the_example_is_refused_for_github_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
     with pytest.raises(ExportRejectedError) as raised:
         export_markdown(load_report(EXAMPLE), tmp_path)
 
-    assert str(raised.value) == (
-        "GitHub Markdown cannot colour text, so it cannot show the colour of 'behind schedule', "
-        "at blocks.8.text; write the text without the colour or export the document elsewhere"
-    )
+    assert str(raised.value) == FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE["markdown"]
 
 
-def test_the_example_reworked_for_github_exports_to_the_golden_which_skaldr_write_markdown_golden_rewrites(
+def test_the_example_reworked_for_github_exports_to_the_markdown_golden(
     tmp_path: Path,
 ) -> None:
     out_dir = golden_or_scratch_folder("markdown", tmp_path)

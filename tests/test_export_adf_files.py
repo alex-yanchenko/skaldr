@@ -9,7 +9,13 @@ from skaldr.export import EXPORT_MANIFEST, ExportResult, export_adf
 from skaldr.export.adf import compact_adf_length
 from skaldr.models import load_report, parse_report
 from tests.factories import folder_texts, make_report, make_toggle, write_report
-from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
+from tests.factories.example_factory import (
+    EXAMPLE,
+    FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
+    example_for,
+    golden_of,
+    golden_or_scratch_folder,
+)
 
 HI_DOCUMENT = {
     "version": 1,
@@ -23,17 +29,14 @@ def export_dir(tmp_path: Path) -> Path:
     return tmp_path / "exported"
 
 
-def test_the_example_is_refused_for_jira_for_its_roman_numbered_list(tmp_path: Path) -> None:
+def test_the_example_is_refused_for_jira_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
     with pytest.raises(ExportRejectedError) as raised:
         export_adf(load_report(EXAMPLE), tmp_path)
 
-    assert str(raised.value) == (
-        "ADF numbers a list only with digits, so it cannot show a list numbered with roman numerals, "
-        "at blocks.31.list; number the list with digits, or export it elsewhere"
-    )
+    assert str(raised.value) == FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE["adf"]
 
 
-def test_the_example_reworked_for_jira_exports_to_the_golden_which_skaldr_write_adf_golden_rewrites(
+def test_the_example_reworked_for_jira_exports_to_the_adf_golden(
     tmp_path: Path,
 ) -> None:
     out_dir = golden_or_scratch_folder("adf", tmp_path)

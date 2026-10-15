@@ -68,7 +68,13 @@ from tests.factories import (
     write_report,
 )
 from tests.factories.capability_factory import LONG_TABLE
-from tests.factories.example_factory import EXAMPLE, example_for, golden_of, golden_or_scratch_folder
+from tests.factories.example_factory import (
+    EXAMPLE,
+    FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
+    example_for,
+    golden_of,
+    golden_or_scratch_folder,
+)
 
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
@@ -126,19 +132,14 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
     return {**data, "blocks": blocks}
 
 
-def test_the_example_is_refused_for_slack_for_its_roman_numbered_list(tmp_path: Path) -> None:
+def test_the_example_is_refused_for_slack_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
     with pytest.raises(ExportRejectedError) as raised:
         export_slack(load_report(EXAMPLE), tmp_path / "out")
 
-    assert vars(raised.value) == _canvas_rejection(
-        "a Slack canvas numbers a list only with digits, "
-        "so it cannot show a list numbered with roman numerals",
-        "number the list with digits, or export it elsewhere",
-        "at blocks.31.list",
-    )
+    assert str(raised.value) == FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE["slack"]
 
 
-def test_the_reworked_example_exports_to_the_slack_golden_which_skaldr_write_slack_golden_rewrites(
+def test_the_example_reworked_for_a_canvas_exports_to_the_slack_golden(
     tmp_path: Path,
 ) -> None:
     out_dir = golden_or_scratch_folder("slack", tmp_path)

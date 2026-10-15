@@ -19,6 +19,8 @@ from tests.factories import make_jira_target, make_report, make_section, write_r
 from tests.factories.capability_factory import (
     ADF_CASES,
     CLEAN_BLOCKS,
+    COLOURED_TEXT,
+    LETTERED_LIST,
     SEEDED_CASES,
     SEEDED_REFUSALS,
     TABLE,
@@ -163,6 +165,13 @@ def test_a_grid_in_a_walkthrough_step_is_named_before_a_block_inside_the_grid() 
         _check([walkthrough_holding(grid)], "slack")
 
     assert raised.value.where == "at blocks.0.walkthrough.steps.0.detail.0.grid"
+
+
+def test_the_first_refusal_reported_is_the_first_in_the_document() -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([*COLOURED_TEXT, *LETTERED_LIST], "slack")
+
+    assert raised.value.where == "at blocks.0.text"
 
 
 @pytest.mark.parametrize(
