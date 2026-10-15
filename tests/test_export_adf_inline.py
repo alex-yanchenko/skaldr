@@ -464,8 +464,15 @@ def test_a_person_mention_takes_the_text_of_a_styled_label() -> None:
     ]
 
 
-def test_a_person_without_a_jira_account_is_the_label_as_plain_text() -> None:
-    assert _written((PersonMention((Plain("Bo"),), "bo", Person()),)) == [_text("Bo")]
+@pytest.mark.parametrize(
+    "person",
+    [
+        pytest.param(Person(), id="no-ids"),
+        pytest.param(Person(slack="U0EXAMPLE2"), id="slack-id-only"),
+    ],
+)
+def test_a_person_without_a_jira_account_is_the_label_as_plain_text(person: Person) -> None:
+    assert _written((PersonMention((Plain("Bo"),), "bo", person),)) == [_text("Bo")]
 
 
 def test_an_issue_link_with_a_url_is_an_inline_card() -> None:

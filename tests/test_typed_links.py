@@ -18,17 +18,24 @@ from skaldr.richtext import (
     visible_text,
 )
 from skaldr.typed_links import issue_key_in_url, issue_url
-from tests.factories import make_report, markdown_of, notion_of
+from tests.factories import make_report, markdown_of, notion_of, slack_of
 
-ADA = Person(notion="user://11111111-2222-3333-4444-555555555555", jira="5b10a2844c20165700ede21g")
+ADA = Person(
+    notion="user://11111111-2222-3333-4444-555555555555", jira="5b10a2844c20165700ede21g", slack="U0EXAMPLE1"
+)
 SITE = "https://example.atlassian.net"
 CONTEXT = RichContext(people={"ada": ADA, "bo": Person()}, jira_site=SITE)
 PEOPLE_META: dict[str, Any] = {
     "title": "Plan",
     "jira_site": SITE,
     "people": {
-        "ada": {"notion": "user://11111111-2222-3333-4444-555555555555", "jira": "5b10a2844c20165700ede21g"},
+        "ada": {
+            "notion": "user://11111111-2222-3333-4444-555555555555",
+            "jira": "5b10a2844c20165700ede21g",
+            "slack": "U0EXAMPLE1",
+        },
         "bo": {},
+        "cy": {"slack": "U0EXAMPLE2"},
     },
 }
 TYPED_BODY_OPENING = (
@@ -223,6 +230,28 @@ def test_a_notion_id_must_be_a_user_uri() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "slack",
+    [
+        pytest.param("u0example1", id="lowercase"),
+        pytest.param("C0EXAMPLE1", id="channel-id"),
+        pytest.param("<@U0EXAMPLE1>", id="message-mention-form"),
+        pytest.param("@ada", id="handle"),
+        pytest.param("U", id="prefix-alone"),
+        pytest.param("U0EXAMPLE1 ", id="trailing-space"),
+    ],
+)
+def test_a_slack_id_must_be_a_member_id(slack: str) -> None:
+    meta = {"title": "T", "people": {"ada": {"slack": slack}}}
+
+    with pytest.raises(ReportError) as error:
+        parse_report(make_report(meta=meta))
+
+    assert str(error.value) == (
+        "invalid content data: meta.people.ada.slack: String should match pattern '^U[0-9A-Z]+$'"
+    )
+
+
 def test_a_jira_site_loses_its_trailing_slash() -> None:
     report = parse_report(make_report(meta={"title": "T", "jira_site": f"{SITE}/"}))
 
@@ -382,17 +411,36 @@ def test_notion_markdown_writes_a_blank_date_label_as_the_date_mention_alone() -
 
 
 def test_notion_markdown_writes_a_person_without_a_notion_id_as_its_label() -> None:
-    assert notion_of(_text_block("[Bo](user:bo)"), meta=PEOPLE_META) == "Bo\n"
+    assert notion_of(_text_block("[Bo](user:bo) and [Cy](user:cy)"), meta=PEOPLE_META) == "Bo and Cy\n"
+
+
+def test_github_markdown_writes_a_person_with_only_a_slack_id_as_its_label() -> None:
+    assert markdown_of(_text_block("[Cy](user:cy)"), meta=PEOPLE_META) == "Cy\n"
+
+
+def test_slack_canvas_writes_a_member_mention_for_a_slack_id_and_the_label_without_one() -> None:
+    body = "[Ada](user:ada), [Bo](user:bo) and [**Cy**](user:cy) own [ABC-123](jira:ABC-123)."
+
+    assert slack_of(_text_block(body), meta=PEOPLE_META) == (
+        "![](@U0EXAMPLE1), Bo and ![](@U0EXAMPLE2) own [ABC-123](https://example.atlassian.net/browse/ABC-123).\n"
+    )
 
 
 def test_emit_json_carries_people_and_the_jira_site_in_the_meta() -> None:
     meta = parse_report(make_report(meta=PEOPLE_META)).model_dump(mode="json")["meta"]
 
-    assert meta["jira_site"] == SITE
-    assert meta["people"] == {
-        "ada": {"notion": "user://11111111-2222-3333-4444-555555555555", "jira": "5b10a2844c20165700ede21g"},
-        "bo": {"notion": None, "jira": None},
-    }
+    assert (meta["jira_site"], meta["people"]) == (
+        SITE,
+        {
+            "ada": {
+                "notion": "user://11111111-2222-3333-4444-555555555555",
+                "jira": "5b10a2844c20165700ede21g",
+                "slack": "U0EXAMPLE1",
+            },
+            "bo": {"notion": None, "jira": None, "slack": None},
+            "cy": {"notion": None, "jira": None, "slack": "U0EXAMPLE2"},
+        },
+    )
 
 
 @pytest.mark.parametrize(

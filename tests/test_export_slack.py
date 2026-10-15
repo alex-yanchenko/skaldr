@@ -1104,6 +1104,16 @@ def test_a_table_of_contents_writes_nothing() -> None:
             PersonMention(make_rich_text("Ada"), "ada", Person()), "Ada", id="person-without-a-slack-id"
         ),
         pytest.param(
+            PersonMention(make_rich_text("Ada"), "ada", Person(slack="U0EXAMPLE1")),
+            "![](@U0EXAMPLE1)",
+            id="person-with-a-slack-id",
+        ),
+        pytest.param(
+            PersonMention(make_rich_text("Ada"), "ada", Person(jira="acct-1")),
+            "Ada",
+            id="person-with-a-jira-id-only",
+        ),
+        pytest.param(
             Link(make_rich_text("x"), "https://example.com/a b"), "[x](https://example.com/a%20b)", id="https"
         ),
         pytest.param(Link(make_rich_text("x"), "http://example.com"), "[x](http://example.com)", id="http"),

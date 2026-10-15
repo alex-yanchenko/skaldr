@@ -56,7 +56,7 @@ from skaldr.export.tree import (
     Toggle,
 )
 from skaldr.export_targets import SLACK_TARGET
-from skaldr.models import MEDIA_KIND_LABELS
+from skaldr.models import MEDIA_KIND_LABELS, Person
 from skaldr.richtext import DateMention, MarkerStyle, Plain, ScriptPosition
 from skaldr.typed_links import date_target_text
 
@@ -112,6 +112,11 @@ class _SlackRuns(CommonMarkRuns):
         if export_visible_text(run.label).strip() == date_target_text(run.start, run.end):
             return self.date_mention("", run.start, run.end)
         return super().date_mention_around(run, written_label)
+
+    def person_mention(self, label: str, _key: str, person: Person, /) -> str:
+        if person.slack is None:
+            return label
+        return f"![](@{person.slack})"
 
     def math(self, expression: str, /) -> str:
         require_the_swap("inline math", "slack")
