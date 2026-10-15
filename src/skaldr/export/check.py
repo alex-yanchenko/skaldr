@@ -1,18 +1,26 @@
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import chain
-from typing import Final, Literal
+from typing import Final
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ExportRejectedError
+from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import (
     CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
+    FEATURE_DETAILS,
     FIRST_LIST_NUMBER,
     PLACEMENTS,
+    CellCount,
+    Container,
+    Details,
     Feature,
     Held,
+    HeldByAListItem,
+    ListStart,
+    NoDetails,
+    Placement,
     Rejection,
 )
 from skaldr.export.lower import assemble_page, lower_regions, lowering_for
@@ -44,9 +52,7 @@ from skaldr.export.tree import (
 from skaldr.export_targets import PUBLISHED_AS, ExportTarget
 from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
 
-Container = Literal["document", "callout", "toggle", "toggle inside a toggle"]
-
-NODE_TERMS: Final[Mapping[type, str]] = {
+_NODE_TERMS: Final[Mapping[type, str]] = {
     Heading: "heading",
     Paragraph: "text",
     ListNode: "list",
@@ -67,15 +73,23 @@ NODE_TERMS: Final[Mapping[type, str]] = {
 @dataclass(frozen=True)
 class FeatureHit:
     feature: Feature
+    details: Details = field(default_factory=NoDetails)
     path: str | None = None
     heading: str = ""
-    details: Mapping[str, str] = field(default_factory=dict[str, str])
+
+    def __post_init__(self) -> None:
+        expected = FEATURE_DETAILS[self.feature]
+        if not isinstance(self.details, expected):
+            raise ExportInvariantError(
+                f"the feature '{self.feature}' takes {expected.__name__} details, "
+                f"not {type(self.details).__name__}"
+            )
 
 
 @dataclass(frozen=True)
 class _Place:
     container: Container = "document"
-    callout_name: str = NODE_TERMS[Callout]
+    callout_name: str = _NODE_TERMS[Callout]
     toggle_names: tuple[str, ...] = ()
 
     def holder(self) -> str:
@@ -88,6 +102,8 @@ class _Place:
                 return f"a {self.toggle_names[-1]} that is itself inside a {self.toggle_names[-2]}"
             case "document":
                 return "the document"
+            case _:
+                assert_never(self.container)
 
     def holder_name(self) -> str:
         match self.container:
@@ -97,6 +113,8 @@ class _Place:
                 return self.toggle_names[-1]
             case "document":
                 return "document"
+            case _:
+                assert_never(self.container)
 
     def in_a_callout(self, name: str) -> "_Place":
         return replace(self, container="callout", callout_name=name)
@@ -112,7 +130,7 @@ class _Place:
 
 def _term(node: Node) -> str:
     named = node.authored_as if isinstance(node, AuthoredNode) else None
-    return named or NODE_TERMS[type(node)]
+    return named or _NODE_TERMS[type(node)]
 
 
 def _held(node: Node) -> Held | None:
@@ -179,8 +197,8 @@ class _TreeWalk:
     def note_heading(self, text: ExportRich) -> None:
         self.heading = export_visible_text(text).strip() or self.heading
 
-    def hit(self, feature: Feature, path: str | None, **details: str) -> FeatureHit:
-        return FeatureHit(feature, path, self.heading, details)
+    def hit(self, feature: Feature, path: str | None, details: Details) -> FeatureHit:
+        return FeatureHit(feature, details, path, self.heading)
 
     def nodes(self, nodes: Iterable[Node], place: _Place) -> Iterator[FeatureHit]:
         for node in nodes:
@@ -217,21 +235,16 @@ class _TreeWalk:
     def placement_hits(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         held = _held(node)
         container = place.container
-        if held is None or container == "document" or container == "toggle":
+        if held is None or container in ("document", "toggle"):
             return
         feature = PLACEMENTS.get((container, held))
         if feature is not None:
-            yield self.hit(
-                feature,
-                node.authored_at,
-                held=_term(node),
-                holder=place.holder(),
-                holder_name=place.holder_name(),
-            )
+            details = Placement(_term(node), place.holder(), place.holder_name())
+            yield self.hit(feature, node.authored_at, details)
 
     def list_hits(self, node: ListNode, place: _Place) -> Iterator[FeatureHit]:
         if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
-            yield self.hit("numbered list starting past 1", node.authored_at, start=str(node.start))
+            yield self.hit("numbered list starting past 1", node.authored_at, ListStart(node.start))
         for entry in node.entries:
             yield from self.entry_hits(entry, node, place)
 
@@ -240,17 +253,17 @@ class _TreeWalk:
         for child in entry.children:
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
-                yield self.hit(_item_feature(child, holder), child.authored_at, held=what)
+                yield self.hit(_item_feature(child, holder), child.authored_at, HeldByAListItem(what))
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
 
     def table_hits(self, node: TableNode) -> Iterator[FeatureHit]:
         cells = table_width(node) * (1 + len(node.rows))
         if cells > CANVAS_TABLE_CELL_LIMIT:
-            yield self.hit("table over 300 cells", node.authored_at, cells=f"{cells:,}")
+            yield self.hit("table over 300 cells", node.authored_at, CellCount(cells))
 
 
-def tree_hits(nodes: Sequence[Node]) -> Iterator[FeatureHit]:
+def _tree_hits(nodes: Sequence[Node]) -> Iterator[FeatureHit]:
     yield from _TreeWalk().nodes(nodes, _Place())
 
 
@@ -259,10 +272,10 @@ def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator
         for index, detail in enumerate(step.detail):
             if isinstance(detail, InnerGrid):
                 where = f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
-                yield FeatureHit("grid inside a walkthrough step", where)
+                yield FeatureHit("grid inside a walkthrough step", path=where)
 
 
-def model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
+def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
     for region in document.regions:
         if not isinstance(region, BlockRegion):
             continue
@@ -278,31 +291,27 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
     return ", ".join(places) or None
 
 
-def _first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> ExportRejectedError | None:
+def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:
     for hit in hits:
         capability = CAPABILITIES[hit.feature][target]
         if isinstance(capability, Rejection):
-            return ExportRejectedError(
+            details = vars(hit.details)
+            raise ExportRejectedError(
                 target,
-                capability.why.format_map(hit.details),
-                capability.instead.format_map(hit.details),
+                capability.why.format_map(details),
+                capability.instead.format_map(details),
                 _where(hit, capability),
             )
-    return None
 
 
 def reject_unshowable_nodes(nodes: Sequence[Node], target: ExportTarget) -> None:
-    rejected = _first_rejection(tree_hits(nodes), target)
-    if rejected is not None:
-        raise rejected
+    _raise_the_first_rejection(_tree_hits(nodes), target)
 
 
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    rejected = _first_rejection(chain(model_hits(report, document), tree_hits(document.body)), target)
-    if rejected is not None:
-        raise rejected
+    _raise_the_first_rejection(chain(_model_hits(report, document), _tree_hits(document.body)), target)
 
 
 def reject_what_the_targets_cannot_show(report: Report, targets: Sequence[ExportTarget]) -> None:

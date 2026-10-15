@@ -1,12 +1,22 @@
+from dataclasses import fields
 from pathlib import Path
-from typing import Any
+from string import Formatter
+from typing import Any, Literal, get_args
 
 import pytest
 
 from skaldr.cli import main
-from skaldr.errors import ExportRejectedError
-from skaldr.export.capabilities import CAPABILITIES, FEATURES, Feature, Verdict, verdict
-from skaldr.export.check import reject_what_the_target_cannot_show
+from skaldr.errors import ExportInvariantError, ExportRejectedError
+from skaldr.export.capabilities import (
+    CAPABILITIES,
+    FEATURE_DETAILS,
+    Capability,
+    Details,
+    Feature,
+    ListStart,
+    Rejection,
+)
+from skaldr.export.check import FeatureHit, reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_page, lower_regions, lower_report, lowering_for
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import parse_report
@@ -26,6 +36,8 @@ from tests.factories.capability_factory import (
 )
 from tests.factories.publish_factory import FakeTransport, fake_registry
 
+Verdict = Literal["keep", "upgrade", "swap", "reject"]
+FEATURES: tuple[Feature, ...] = get_args(Feature)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table inside a callout": {"adf": "reject"},
     "callout inside a callout": {"adf": "reject"},
@@ -38,9 +50,21 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "numbered list starting past 1": {"slack": "reject"},
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
-    "chart with several series or stacked": dict.fromkeys(EXPORT_TARGETS, "swap"),
-    "flow or fan step a diagram label cannot show": {},
 }
+REJECTIONS = [
+    pytest.param(capability, FEATURE_DETAILS[feature], id=f"{target}-{feature}")
+    for feature, cells in CAPABILITIES.items()
+    for target, capability in cells.items()
+    if isinstance(capability, Rejection)
+]
+
+
+def _verdict(capability: Capability) -> Verdict:
+    return "reject" if isinstance(capability, Rejection) else capability
+
+
+def _template_fields(template: str) -> set[str]:
+    return {name for _, name, _, _ in Formatter().parse(template) if name is not None}
 
 
 def _check(blocks: list[dict[str, Any]], target: ExportTarget) -> None:
@@ -55,7 +79,7 @@ def _publish_with_a_fake_jira(data_path: Path, transport: FakeTransport) -> int:
 
 def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_the_seeded_ones() -> None:
     verdicts = {
-        feature: {target: verdict(capability) for target, capability in cells.items()}
+        feature: {target: _verdict(capability) for target, capability in cells.items()}
         for feature, cells in CAPABILITIES.items()
     }
 
@@ -63,6 +87,26 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
         feature: {target: SEEDED_VERDICTS[feature].get(target, "keep") for target in EXPORT_TARGETS}
         for feature in FEATURES
     }
+
+
+def test_every_feature_names_the_details_its_hits_carry() -> None:
+    assert set(FEATURE_DETAILS) == set(FEATURES)
+
+
+@pytest.mark.parametrize(("rejection", "details"), REJECTIONS)
+def test_every_rejection_names_only_details_its_feature_supplies(
+    rejection: Rejection, details: type[Details]
+) -> None:
+    supplied = {detail.name for detail in fields(details)}
+
+    assert _template_fields(rejection.why) | _template_fields(rejection.instead) <= supplied
+
+
+def test_a_hit_carrying_details_its_feature_does_not_take_is_an_internal_error() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        FeatureHit("table over 300 cells", ListStart(3))
+
+    assert str(raised.value) == "the feature 'table over 300 cells' takes CellCount details, not ListStart"
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)

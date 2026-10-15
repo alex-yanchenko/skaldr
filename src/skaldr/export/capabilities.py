@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Final, Literal, get_args
+from typing import Final, Literal
 
 from typing_extensions import assert_never
 
@@ -25,7 +25,6 @@ from skaldr.richtext import (
     Tinted,
 )
 
-Verdict = Literal["keep", "upgrade", "swap", "reject"]
 Feature = Literal[
     "table inside a callout",
     "callout inside a callout",
@@ -38,14 +37,56 @@ Feature = Literal[
     "numbered list starting past 1",
     "table over 300 cells",
     "grid inside a walkthrough step",
-    "chart with several series or stacked",
-    "flow or fan step a diagram label cannot show",
 ]
-FEATURES: Final[tuple[Feature, ...]] = get_args(Feature)
 Holder = Literal["callout", "toggle inside a toggle"]
+Container = Literal["document", "toggle", Holder]
 Held = Literal["table", "callout", "quote", "toggle"]
 FIRST_LIST_NUMBER: Final = 1
 CANVAS_TABLE_CELL_LIMIT: Final = 300
+
+
+@dataclass(frozen=True)
+class Placement:
+    held: str
+    holder: str
+    holder_name: str
+
+
+@dataclass(frozen=True)
+class HeldByAListItem:
+    held: str
+
+
+@dataclass(frozen=True)
+class ListStart:
+    start: int
+
+
+@dataclass(frozen=True)
+class CellCount:
+    cells: int
+    limit: int = CANVAS_TABLE_CELL_LIMIT
+
+
+@dataclass(frozen=True)
+class NoDetails:
+    pass
+
+
+Details = Placement | HeldByAListItem | ListStart | CellCount | NoDetails
+FEATURE_DETAILS: Final[Mapping[Feature, type[Details]]] = {
+    "table inside a callout": Placement,
+    "callout inside a callout": Placement,
+    "quote inside a callout": Placement,
+    "toggle inside a callout": Placement,
+    "table inside a toggle inside a toggle": Placement,
+    "toggle inside a toggle inside a toggle": Placement,
+    "block inside a list item": HeldByAListItem,
+    "block inside a walkthrough step": HeldByAListItem,
+    "numbered list starting past 1": ListStart,
+    "table over 300 cells": CellCount,
+    "grid inside a walkthrough step": NoDetails,
+}
 
 
 @dataclass(frozen=True)
@@ -67,16 +108,9 @@ _CANVAS_LIST_ITEM_WHY: Final = (
 )
 
 
-def verdict(capability: Capability) -> Verdict:
-    return "reject" if isinstance(capability, Rejection) else capability
-
-
-def _everywhere(capability: Capability) -> dict[ExportTarget, Capability]:
-    return dict.fromkeys(EXPORT_TARGETS, capability)
-
-
 def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget, Capability]:
-    return {**_everywhere("keep"), **cells}
+    kept: dict[ExportTarget, Capability] = dict.fromkeys(EXPORT_TARGETS, "keep")
+    return {**kept, **cells}
 
 
 CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
@@ -104,8 +138,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "table over 300 cells": _kept_except(
         {
             "slack": Rejection(
-                f"a table has {{cells}} cells, "
-                f"over the {CANVAS_TABLE_CELL_LIMIT} a Slack canvas table can hold",
+                "a table has {cells:,} cells, over the {limit} a Slack canvas table can hold",
                 "split it into two tables or export it elsewhere",
                 names_the_heading=True,
             )
@@ -120,8 +153,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
-    "chart with several series or stacked": _everywhere("swap"),
-    "flow or fan step a diagram label cannot show": _everywhere("keep"),
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], Feature]] = {
