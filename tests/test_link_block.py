@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ReportError
+from skaldr.export.folds import quote_lines
 from skaldr.export.runs import export_visible_text
 from skaldr.export.tree import LinkCard, Paragraph, Quote
 from skaldr.models import Link, parse_report
@@ -190,7 +191,7 @@ def test_a_card_and_an_embed_are_written_as_the_same_quote(display: str) -> None
 
     assert lowered_as_written_today([block]) == (
         Quote(
-            (((Styled("bold", (LinkRun((Plain("Runbook"),), RUNBOOK),)),)),),
+            (Paragraph((Styled("bold", (LinkRun((Plain("Runbook"),), RUNBOOK),)),)),),
             (Plain("example.com · rev. 7"),),
         ),
     )
@@ -198,7 +199,7 @@ def test_a_card_and_an_embed_are_written_as_the_same_quote(display: str) -> None
 
 def test_an_untitled_card_is_written_as_a_quote_led_by_the_bare_url() -> None:
     assert lowered_as_written_today([link_block()]) == (
-        Quote((((Styled("bold", (LinkRun((Plain("example.com/runbook"),), RUNBOOK),)),)),), ()),
+        Quote((Paragraph((Styled("bold", (LinkRun((Plain("example.com/runbook"),), RUNBOOK),)),)),), ()),
     )
 
 
@@ -206,7 +207,7 @@ def test_the_export_text_of_a_card_names_the_title_and_the_domain() -> None:
     (quote,) = lowered_as_written_today([link_block(title="Runbook")])
     assert isinstance(quote, Quote)
 
-    assert [export_visible_text(line) for line in quote.lines] == ["Runbook"]
+    assert [export_visible_text(line) for line in quote_lines(quote)] == ["Runbook"]
     assert export_visible_text(quote.cite) == "example.com"
 
 

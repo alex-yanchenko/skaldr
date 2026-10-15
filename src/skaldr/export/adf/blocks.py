@@ -42,7 +42,7 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
-from skaldr.export.folds import folded
+from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import plain
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import (
@@ -211,7 +211,7 @@ class _AdfBlocks:
         return block
 
     def quote_blocks(self, node: Quote) -> list[AdfBlock]:
-        paragraphs = [self.paragraph(line) for line in node.lines if line]
+        paragraphs = [self.paragraph(line) for line in quote_lines(node) if line]
         cite = with_mark(tuple(self.inline(node.cite)), AdfEm(type="em"))
         if cite:
             paragraphs.append(AdfParagraph(type="paragraph", content=list(cite)))
@@ -292,7 +292,7 @@ class _AdfBlocks:
         return nested
 
     def cell_paragraph(self, cell: TableCell, bold: bool) -> AdfParagraph:
-        content = self.inline(cell.text)
+        content = self.inline(cell_text(cell))
         if bold:
             content = list(with_mark(tuple(content), AdfStrong(type="strong")))
         return AdfParagraph(type="paragraph", content=content) if content else _empty_paragraph()

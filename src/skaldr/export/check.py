@@ -47,7 +47,7 @@ from skaldr.export.capabilities import (
     TonedCell,
     character_without_a_unicode_form,
 )
-from skaldr.export.folds import folded
+from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import one_line
 from skaldr.export.markup import table_width
 from skaldr.export.runs import (
@@ -222,7 +222,7 @@ def _held(node: GenericNode) -> Held | None:
             return "table"
         case Callout():
             return "callout"
-        case Quote() if any(node.lines) or node.cite:
+        case Quote() if any(quote_lines(node)) or node.cite:
             return "quote"
         case Toggle():
             return "toggle"
@@ -275,12 +275,12 @@ def _own_texts(node: GenericNode) -> Iterator[ExportRich]:
         case Heading() | Paragraph():
             yield node.text
         case TableNode():
-            yield from (cell.text for cell in node.header)
-            yield from (cell.text for row in node.rows for cell in row.cells)
+            yield from map(cell_text, node.header)
+            yield from (cell_text(cell) for row in node.rows for cell in row.cells)
         case Media():
             yield from (node.description, node.caption)
         case Quote():
-            yield from (*node.lines, node.cite)
+            yield from (*quote_lines(node), node.cite)
         case Toggle():
             yield node.title
         case Tabs():

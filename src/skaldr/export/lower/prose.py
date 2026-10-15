@@ -203,7 +203,7 @@ def lower_math(block: models.Math) -> list[Node]:
 
 
 def lower_quote(block: models.Quote, lowering: Lowering) -> list[Node]:
-    return [Quote(lowering.prose_lines(block.body), plain(block.cite) if block.cite else ())]
+    return [Quote(lowering.prose(block.body), plain(block.cite) if block.cite else ())]
 
 
 def lower_image(block: models.Image) -> list[Node]:

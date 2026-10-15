@@ -70,6 +70,7 @@ class ListNode:
 class TableCell:
     text: ExportRich
     tone: ToneName | None = None
+    blocks: "tuple[Node, ...]" = ()
 
 
 @dataclass(frozen=True)
@@ -135,7 +136,7 @@ class Callout:
 
 @dataclass(frozen=True)
 class Quote:
-    lines: tuple[ExportRich, ...]
+    body: "tuple[Node, ...]"
     cite: ExportRich = ()
     authored_as: AuthoredName | None = field(default=None, compare=False)
     authored_at: str | None = field(default=None, compare=False)
@@ -416,6 +417,8 @@ def with_authored_path(node: Node, path: str | None) -> Node:
                 for definition in node.definitions
             )
             return replace(node, definitions=definitions, authored_at=path)
+        case Quote():
+            return replace(node, body=_all_authored_at(node.body, path), authored_at=path)
         case (
             Heading()
             | Paragraph()
@@ -423,7 +426,6 @@ def with_authored_path(node: Node, path: str | None) -> Node:
             | CodeBlock()
             | DisplayMath()
             | Media()
-            | Quote()
             | Divider()
             | TableOfContents()
             | FactStrip()
@@ -449,6 +451,8 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             return node.supplement
         case DefinitionList():
             return tuple(child for definition in node.definitions for child in definition.body)
+        case Quote():
+            return node.body
         case (
             Heading()
             | Paragraph()
@@ -456,7 +460,6 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             | CodeBlock()
             | DisplayMath()
             | Media()
-            | Quote()
             | Divider()
             | TableOfContents()
             | FactStrip()

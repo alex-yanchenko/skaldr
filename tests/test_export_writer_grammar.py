@@ -68,7 +68,12 @@ SAMPLES: Mapping[str, Node] = {
     "code block": CodeBlock("recount", "sh"),
     "math block": DisplayMath("x^2"),
     "callout": Callout("info", (_PARAGRAPH,)),
-    "quote": Quote((plain("Measure twice."),)),
+    "quote": Quote((Paragraph(plain("Measure twice.")),)),
+    "quote holding a list": Quote((ListNode("bullet", (ListEntry(plain("a")),)),)),
+    "table cell holding a list": TableNode(
+        (TableCell(plain("Aisle")),),
+        (TableRow((TableCell((), blocks=(ListNode("bullet", (ListEntry(plain("a")),)),)),)),),
+    ),
     "quote with only a cite": Quote((), plain("Ops")),
     "empty quote": Quote(()),
     "divider": Divider(),

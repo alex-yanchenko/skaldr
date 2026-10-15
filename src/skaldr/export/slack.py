@@ -13,7 +13,7 @@ from skaldr.export.capabilities import (
     TARGET_SUBJECTS,
     in_unicode_script_form,
 )
-from skaldr.export.folds import folded
+from skaldr.export.folds import folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -371,7 +371,7 @@ class _CanvasWriter:
         return [self.runs.link(self.inline(media.caption) or MEDIA_KIND_LABELS[media.kind], url)]
 
     def quote_lines(self, quote: Quote) -> list[str]:
-        parts = [self.block_text(line) for line in quote.lines]
+        parts = [self.block_text(line) for line in quote_lines(quote)]
         if quote.cite:
             parts.append(styled("italic", self.inline(quote.cite)))
         return quoted(joined([[part] for part in parts]))

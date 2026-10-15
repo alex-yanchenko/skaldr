@@ -2,9 +2,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from skaldr.export.folds import folded
+from skaldr.export.folds import cell_text, folded
 from skaldr.export.inline import bold, plain
-from skaldr.export.runs import Chip, StatusMark, TonedLabel
+from skaldr.export.runs import Break, Chip, StatusMark, TonedLabel
 from skaldr.export.tree import (
     Callout,
     Card,
@@ -24,6 +24,9 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
+    TableNode,
+    TableRow,
     Tabs,
     Timeline,
     TimelineEvent,
@@ -41,6 +44,8 @@ _OPEN_TOGGLE_CHILDREN: tuple[GenericNode, ...] = (
     Paragraph(UNDERLINED_OPS),
     ListNode("bullet", (ListEntry(plain("after")),)),
 )
+_NUMBERED_FROM_THREE = ListNode("number", (ListEntry(plain("x")),), start=3)
+_NESTED_BULLETS = ListNode("bullet", (ListEntry(plain("z")),))
 
 Wrap = Callable[[tuple[Node, ...]], tuple[Node, ...]]
 
@@ -153,7 +158,7 @@ FOLD_CASES: Mapping[str, FoldCase] = {
     "link card": fold_case(
         LinkCard("Runbook", RUNBOOK_URL, "card", domain="example.com", caption="Steps"),
         Quote(
-            ((Styled("bold", (Link(plain("Runbook"), RUNBOOK_URL),)),),),
+            (Paragraph((Styled("bold", (Link(plain("Runbook"), RUNBOOK_URL),)),)),),
             plain("example.com · Steps"),
             authored_as="link card",
         ),
@@ -161,7 +166,7 @@ FOLD_CASES: Mapping[str, FoldCase] = {
     "link embed": fold_case(
         LinkCard("example.com/runbook", RUNBOOK_URL, "embed"),
         Quote(
-            ((Styled("bold", (Link(plain("example.com/runbook"), RUNBOOK_URL),)),),),
+            (Paragraph((Styled("bold", (Link(plain("example.com/runbook"), RUNBOOK_URL),)),)),),
             authored_as="link embed",
         ),
     ),
@@ -191,6 +196,48 @@ FOLD_CASES: Mapping[str, FoldCase] = {
                     children=(ListNode("bullet", (ListEntry((Plain("i. "), Plain("c"))),)),),
                 ),
             ),
+        ),
+    ),
+    "quote holding lists": fold_case(
+        Quote(
+            (
+                Paragraph(plain("Said:")),
+                ListNode("bullet", (ListEntry(UNDERLINED_OPS, children=(_NUMBERED_FROM_THREE,)),)),
+                ListNode("bullet", (ListEntry(plain("y"), children=(_NESTED_BULLETS,)),)),
+            ),
+            plain("Ana"),
+        ),
+        Quote(
+            (
+                Paragraph(plain("Said:")),
+                Paragraph((Plain("• "), *UNDERLINED_OPS)),
+                Paragraph((Plain("3. "), Plain("x"))),
+                Paragraph((Plain("• "), Plain("y"))),
+                Paragraph((Plain("◦ "), Plain("z"))),
+            ),
+            plain("Ana"),
+        ),
+    ),
+    "table cell holding a list": fold_case(
+        TableNode(
+            (TableCell(plain("Steps")),),
+            (
+                TableRow(
+                    (
+                        TableCell(
+                            (),
+                            blocks=(
+                                Paragraph(plain("Fix:")),
+                                ListNode("bullet", (ListEntry(UNDERLINED_OPS),)),
+                            ),
+                        ),
+                    )
+                ),
+            ),
+        ),
+        TableNode(
+            (TableCell(plain("Steps")),),
+            (TableRow((TableCell((Plain("Fix:"), Break(), Plain("• "), *UNDERLINED_OPS)),)),),
         ),
     ),
     "letter list": fold_case(
@@ -244,8 +291,15 @@ def _written_today_within(node: GenericNode) -> GenericNode:
             )
         case Diagram():
             return replace(node, supplement=written_today(node.supplement))
+        case TableNode():
+            rows = tuple(replace(row, cells=tuple(map(_cell_written_today, row.cells))) for row in node.rows)
+            return replace(node, header=tuple(map(_cell_written_today, node.header)), rows=rows)
         case _:
             return node
+
+
+def _cell_written_today(cell: TableCell) -> TableCell:
+    return TableCell(cell_text(cell), cell.tone)
 
 
 def lowered_as_written_today(blocks: list[dict[str, Any]], **overrides: Any) -> tuple[GenericNode, ...]:

@@ -1,13 +1,14 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Final
 
 from typing_extensions import assert_never
 
 from skaldr import compute
+from skaldr.errors import ExportInvariantError
 from skaldr.export.capabilities import FIRST_LIST_NUMBER
 from skaldr.export.inline import bold, plain
-from skaldr.export.lower.context import with_bold_label
+from skaldr.export.lower.context import joined_by_breaks, with_bold_label
 from skaldr.export.runs import Chip, ExportRich, StatusMark, export_visible_text
 from skaldr.export.tree import (
     AuthoredName,
@@ -34,6 +35,7 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
     TableNode,
     TableOfContents,
     Tabs,
@@ -49,6 +51,38 @@ LINK_CARD_NAMES: Final[Mapping[LinkCardDisplay, AuthoredName]] = {
     "card": "link card",
     "embed": "link embed",
 }
+TEXT_BULLET: Final = "• "
+NESTED_TEXT_BULLET: Final = "◦ "
+
+
+def _item_marker(node: ListNode, number: int, depth: int) -> str:
+    if node.kind == "number":
+        return f"{number}. "
+    return TEXT_BULLET if depth == 0 else NESTED_TEXT_BULLET
+
+
+def _text_lines(nodes: Iterable[Node], depth: int) -> Iterator[ExportRich]:
+    for node in folded(nodes):
+        match node:
+            case Paragraph():
+                yield node.text
+            case ListNode():
+                for number, entry in enumerate(node.entries, start=node.start):
+                    yield (Plain(_item_marker(node, number, depth)), *entry.text)
+                    yield from _text_lines(entry.children, depth + 1)
+            case _:
+                raise ExportInvariantError(
+                    "a quote or a table cell holds only paragraphs and lists, "
+                    f"not a {type(node).__name__}; the lowering should not have put one there"
+                )
+
+
+def quote_lines(quote: Quote) -> tuple[ExportRich, ...]:
+    return tuple(_text_lines(quote.body, 0))
+
+
+def cell_text(cell: TableCell) -> ExportRich:
+    return joined_by_breaks(_text_lines(cell.blocks, 0)) if cell.blocks else cell.text
 
 
 def _bullets(entries: Iterable[ListEntry], path: str | None) -> ListNode:
@@ -92,7 +126,7 @@ def _link_card_quote(card: LinkCard) -> Quote:
     link = Link(plain(card.title), card.url)
     detail = LINK_CARD_SEPARATOR.join(part for part in (card.domain, card.caption) if part)
     return Quote(
-        ((Styled("bold", (link,)),),),
+        (Paragraph((Styled("bold", (link,)),), authored_at=card.authored_at),),
         plain(detail),
         authored_as=LINK_CARD_NAMES[card.display],
         authored_at=card.authored_at,

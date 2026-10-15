@@ -7,7 +7,7 @@ from typing import Final, Literal, NoReturn
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.folds import folded
+from skaldr.export.folds import folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
@@ -249,7 +249,7 @@ class _MarkdownWriter:
         return [f"{MEDIA_KIND_LABELS[node.kind]}: {self.runs.link(label, url)}"]
 
     def quote_lines(self, node: Quote) -> list[str]:
-        parts = [self.block_text(line) for line in node.lines]
+        parts = [self.block_text(line) for line in quote_lines(node)]
         if node.cite:
             parts.append(styled("italic", self.inline(node.cite)))
         return quoted(joined([[part] for part in parts]))

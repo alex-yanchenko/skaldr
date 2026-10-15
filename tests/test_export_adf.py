@@ -475,7 +475,7 @@ def test_display_math_is_a_latex_code_block() -> None:
 
 
 def test_a_quote_is_a_block_quote_with_one_paragraph_per_line_and_an_italic_cite() -> None:
-    node = Quote((plain("one"), plain("two")), cite=plain("Someone"))
+    node = Quote((Paragraph(plain("one")), Paragraph(plain("two"))), cite=plain("Someone"))
 
     assert _rendered(node) == _doc(
         {

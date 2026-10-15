@@ -10,7 +10,7 @@ from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
-from skaldr.export.folds import folded
+from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -362,7 +362,7 @@ def _plus_after_code_that_notion_cannot_read_as_a_bullet(text: str) -> str:
 
 
 def _table_cell_text(cell: TableCell, *, inside_bold: bool, on_fill: bool = False) -> str:
-    text = notion_inline(cell.text, inside_bold=inside_bold, on_fill=on_fill, in_a_table_cell=True)
+    text = notion_inline(cell_text(cell), inside_bold=inside_bold, on_fill=on_fill, in_a_table_cell=True)
     return escape_block_start(_plus_after_code_that_notion_cannot_read_as_a_bullet(text))
 
 
@@ -378,7 +378,7 @@ def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName 
 
 
 def _row_tone_in_one_cell(cells: Sequence[TableCell], tone: ToneName) -> tuple[TableCell, ...]:
-    filled = next((index for index, cell in enumerate(cells) if holds_a_chip(cell.text)), 0)
+    filled = next((index for index, cell in enumerate(cells) if holds_a_chip(cell_text(cell))), 0)
     return tuple(
         replace(cell, tone=cell.tone or tone) if index == filled else cell for index, cell in enumerate(cells)
     )
@@ -517,7 +517,7 @@ def _media_line(node: Media) -> str:
 
 
 def _quote_line(node: Quote) -> str:
-    body = "<br>".join(_block_text(line) for line in node.lines)
+    body = "<br>".join(_block_text(line) for line in quote_lines(node))
     if node.cite:
         body += "<br>" + styled("italic", notion_inline(node.cite))
     return f"> {body}"

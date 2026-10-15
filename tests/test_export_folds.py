@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable, Mapping, Sequence
 
 import pytest
@@ -6,10 +7,11 @@ from skaldr.errors import ExportInvariantError
 from skaldr.export.adf import adf_json, render_adf
 from skaldr.export.budget import character_budget
 from skaldr.export.check import FeatureHit, feature_hits
+from skaldr.export.folds import cell_text, quote_lines
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import chunk_notion, render_notion, render_notion_regions
 from skaldr.export.slack import render_slack
-from skaldr.export.tree import BlockRegion, LoweredDocument, Node
+from skaldr.export.tree import BlockRegion, CodeBlock, LoweredDocument, Node, Quote, TableCell
 from skaldr.models import parse_report
 from tests.factories import FOLD_CASES, FOLD_CONTEXTS, authored, make_paragraph, make_report
 
@@ -71,6 +73,26 @@ def test_the_export_check_finds_in_a_named_node_what_it_found_in_the_nodes_it_re
     wrap, fold = FOLD_CONTEXTS[context], FOLD_CASES[case]
 
     assert _hits(wrap((authored(fold.named),))) == _hits(wrap(tuple(map(authored, fold.today))))
+
+
+@pytest.mark.parametrize(
+    "fold",
+    [
+        pytest.param(lambda: quote_lines(Quote((CodeBlock("x"),))), id="quote"),
+        pytest.param(lambda: cell_text(TableCell((), blocks=(CodeBlock("x"),))), id="table-cell"),
+    ],
+)
+def test_a_quote_or_a_table_cell_holding_another_block_is_an_internal_error(
+    fold: Callable[[], object],
+) -> None:
+    with pytest.raises(
+        ExportInvariantError,
+        match=re.escape(
+            "a quote or a table cell holds only paragraphs and lists, not a CodeBlock; "
+            "the lowering should not have put one there"
+        ),
+    ):
+        fold()
 
 
 @pytest.mark.parametrize("case", FOLD_CASES)

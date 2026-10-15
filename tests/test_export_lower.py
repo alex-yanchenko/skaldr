@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 
 from skaldr.code_language import code_language
+from skaldr.export.folds import quote_lines
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower import lower_report
 from skaldr.export.lower.context import spaced, with_bold_label
@@ -1518,8 +1519,164 @@ def test_a_quote_and_a_note_keep_their_text() -> None:
     ]
 
     assert lowered(blocks) == (
-        Quote(((Plain("said"),), (Plain("again"),)), (Plain("Ops"),)),
+        Quote((Paragraph((Plain("said"),)), Paragraph((Plain("again"),))), (Plain("Ops"),)),
         Callout("neutral", (Paragraph(bold("Aside")), Paragraph((Plain("x"),)))),
+    )
+
+
+QUOTE_WITH_LISTS = "Said:\n- a\n  - x\n  - y\n- b\n\n3. c\n4. d"
+
+
+def test_a_quote_holds_the_lists_of_its_body_as_list_nodes() -> None:
+    block = {"type": "quote", "body": QUOTE_WITH_LISTS, "cite": "Ops"}
+    nested = ListNode("bullet", (ListEntry((Plain("x"),)), ListEntry((Plain("y"),))))
+
+    assert lowered([block]) == (
+        Quote(
+            (
+                Paragraph((Plain("Said:"),)),
+                ListNode("bullet", (ListEntry((Plain("a"),), children=(nested,)), ListEntry((Plain("b"),)))),
+                ListNode("number", (ListEntry((Plain("c"),)), ListEntry((Plain("d"),))), start=3),
+            ),
+            (Plain("Ops"),),
+        ),
+    )
+
+
+def test_a_quote_with_lists_is_written_as_text_lines_led_by_their_markers() -> None:
+    (quote,) = lowered([{"type": "quote", "body": QUOTE_WITH_LISTS}])
+    assert isinstance(quote, Quote)
+
+    assert quote_lines(quote) == (
+        (Plain("Said:"),),
+        (Plain("• "), Plain("a")),
+        (Plain("◦ "), Plain("x")),
+        (Plain("◦ "), Plain("y")),
+        (Plain("• "), Plain("b")),
+        (Plain("3. "), Plain("c")),
+        (Plain("4. "), Plain("d")),
+    )
+
+
+def test_a_table_cell_holding_a_list_holds_its_prose_as_paragraphs_and_lists() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "Issue"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "title"},
+            {"key": "b", "label": "Steps"},
+        ],
+        rows=[
+            {
+                "a": "Fix:\n- one\n- two",
+                "tag": "API",
+                "b": "- x\n- y",
+                "subrows": [{"label": "s", "value": 2}],
+            },
+            {"a": "Plain", "tag": "", "b": "Count"},
+        ],
+    )
+
+    assert lowered([table], badges=API_BADGES)[1] == TableNode(
+        _cells("Issue", "Steps"),
+        (
+            TableRow(
+                (
+                    TableCell(
+                        (),
+                        blocks=(
+                            Paragraph((Plain("Fix:"),)),
+                            ListNode(
+                                "bullet",
+                                (
+                                    ListEntry((Plain("one"),)),
+                                    ListEntry((Plain("two"), Plain(" "), Chip("api", "blue"))),
+                                ),
+                            ),
+                            Paragraph((Plain("s"), Plain(": 2"))),
+                        ),
+                    ),
+                    TableCell(
+                        (), blocks=(ListNode("bullet", (ListEntry((Plain("x"),)), ListEntry((Plain("y"),)))),)
+                    ),
+                )
+            ),
+            TableRow((TableCell((Plain("Plain"),)), TableCell((Plain("Count"),)))),
+        ),
+    )
+
+
+def test_a_title_cells_badges_follow_a_closing_paragraph_after_its_list() -> None:
+    table = make_table(
+        [{"key": "a", "label": "Issue"}, {"key": "tag", "label": "", "kind": "badge", "placement": "title"}],
+        rows=[{"a": "- one\n- two\n\nEnd", "tag": "API"}],
+    )
+
+    assert lowered([table], badges=API_BADGES)[1] == TableNode(
+        _cells("Issue"),
+        (
+            TableRow(
+                (
+                    TableCell(
+                        (),
+                        blocks=(
+                            ListNode("bullet", (ListEntry((Plain("one"),)), ListEntry((Plain("two"),)))),
+                            Paragraph((Plain("End"), Plain(" "), Chip("api", "blue"))),
+                        ),
+                    ),
+                )
+            ),
+        ),
+    )
+
+
+def test_a_table_cell_holding_a_list_is_written_as_text_lines_joined_by_breaks() -> None:
+    table = make_table(
+        [
+            {"key": "a", "label": "Issue"},
+            {"key": "tag", "label": "", "kind": "badge", "placement": "title"},
+            {"key": "b", "label": "Steps"},
+        ],
+        rows=[
+            {
+                "a": "Fix:\n- one\n- two\n  - x\n  - y",
+                "tag": "API",
+                "b": "",
+                "subrows": [{"label": "s", "value": 2}],
+            }
+        ],
+    )
+
+    assert lowered_as_written_today([table], badges=API_BADGES)[1] == TableNode(
+        _cells("Issue", "Steps"),
+        (
+            TableRow(
+                (
+                    TableCell(
+                        (
+                            Plain("Fix:"),
+                            Break(),
+                            Plain("• "),
+                            Plain("one"),
+                            Break(),
+                            Plain("• "),
+                            Plain("two"),
+                            Break(),
+                            Plain("◦ "),
+                            Plain("x"),
+                            Break(),
+                            Plain("◦ "),
+                            Plain("y"),
+                            Plain(" "),
+                            Chip("api", "blue"),
+                            Break(),
+                            Plain("s"),
+                            Plain(": 2"),
+                        )
+                    ),
+                    TableCell(()),
+                )
+            ),
+        ),
     )
 
 
