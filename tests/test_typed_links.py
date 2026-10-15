@@ -310,6 +310,50 @@ def test_github_markdown_keeps_the_marks_and_escapes_of_a_date_label() -> None:
     )
 
 
+def test_github_markdown_writes_a_blank_date_label_as_an_empty_element() -> None:
+    assert markdown_of(_text_block("on [ ](date:2026-10-01)"), meta=PEOPLE_META) == (
+        'on <time datetime="2026-10-01"> </time>\n'
+    )
+
+
+def test_github_markdown_keeps_the_marks_and_escapes_of_a_date_range_label() -> None:
+    assert markdown_of(_text_block("[**the week** a*b](date:2026-10-05/2026-10-09)"), meta=PEOPLE_META) == (
+        '<span data-range="2026-10-05/2026-10-09">**the week** a\\*b</span>\n'
+    )
+
+
+def test_github_markdown_writes_a_date_chip_in_a_heading_caption_and_a_table_cell() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "when", "label": "When", "kind": "rich"}],
+        "rows": [{"when": "[1 Oct](date:2026-10-01) to [the week](date:2026-10-05/2026-10-09)"}],
+    }
+    heading = {"type": "heading", "text": "Plan", "sub": "due [1 Oct](date:2026-10-01)"}
+
+    assert markdown_of([heading, table], meta=PEOPLE_META) == (
+        "## Plan\n"
+        "\n"
+        '*due <time datetime="2026-10-01">1 Oct</time>*\n'
+        "\n"
+        "| When |\n"
+        "| --- |\n"
+        '| <time datetime="2026-10-01">1 Oct</time> to '
+        '<span data-range="2026-10-05/2026-10-09">the week</span> |\n'
+    )
+
+
+def test_notion_markdown_keeps_the_marks_and_escapes_of_a_date_label() -> None:
+    assert notion_of(_text_block("[**1 Oct** a*b](date:2026-10-01)"), meta=PEOPLE_META) == (
+        '**1 Oct** a\\*b <mention-date start="2026-10-01"/>\n'
+    )
+
+
+def test_notion_markdown_keeps_the_marks_of_a_date_range_label() -> None:
+    assert notion_of(_text_block("[*the* **week**](date:2026-10-05/2026-10-09)"), meta=PEOPLE_META) == (
+        '*the* **week** <mention-date start="2026-10-05" end="2026-10-09"/>\n'
+    )
+
+
 def test_github_markdown_drops_the_section_since_a_github_heading_slug_comes_from_its_title() -> None:
     assert markdown_of(_text_block("[a](doc:plan#st2) [b](doc:plan)"), meta=PEOPLE_META) == (
         "[a](plan.md) [b](plan.md)\n"

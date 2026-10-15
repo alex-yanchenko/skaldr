@@ -443,6 +443,10 @@ def test_a_blank_date_label_is_the_date_node_alone() -> None:
     assert _written((DateMention((Plain(" "),), date(2026, 10, 1), None),)) == [_date_node("1790812800000")]
 
 
+def test_an_empty_date_label_is_the_date_node_alone() -> None:
+    assert _written((DateMention((), date(2026, 10, 1), None),)) == [_date_node("1790812800000")]
+
+
 def test_a_person_with_a_jira_account_is_a_mention_of_that_account() -> None:
     person = Person(jira="5b10a2844c20165700ede21g")
 

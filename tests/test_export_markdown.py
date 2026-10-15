@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,7 @@ from skaldr.models import ToneLiteral, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
+    DateMention,
     Link,
     Placeholder,
     Plain,
@@ -249,6 +251,18 @@ def test_an_inline_run_becomes_markdown(run: ExportRun, written: str) -> None:
     nodes = [Heading(2, (Plain("How we count"),), "method"), Paragraph((run,))]
 
     assert render_markdown(nodes) == f"## How we count\n\n{written}\n"
+
+
+def test_a_date_chip_inside_a_link_label_is_written_inside_the_link() -> None:
+    chip = DateMention((Plain("1 Oct"),), date(2026, 10, 1), None)
+    week = DateMention((Plain("the week"),), date(2026, 10, 5), date(2026, 10, 9))
+
+    link = Link((Plain("due "), chip, Plain(" "), week), "https://e.com")
+
+    assert render_markdown([Paragraph((link,))]) == (
+        '[due <time datetime="2026-10-01">1 Oct</time> '
+        '<span data-range="2026-10-05/2026-10-09">the week</span>](https://e.com)\n'
+    )
 
 
 @pytest.mark.parametrize(
