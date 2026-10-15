@@ -701,6 +701,16 @@ def test_a_toned_card_with_badges_shows_its_dot_unless_a_badge_shares_its_colour
     )
 
 
+def test_a_muted_row_strikes_its_first_text_column_before_an_earlier_rich_column() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "note", "label": "Note", "kind": "rich"}, {"key": "a", "label": "Item"}],
+        "rows": [{"note": "**see**", "a": "old", "tone": "muted"}],
+    }
+
+    assert markdown_of([table]) == "| Note | Item |\n| --- | --- |\n| **see** | ~~old~~ |\n"
+
+
 def test_a_toned_meter_item_without_a_label_shows_no_dot() -> None:
     meter = {"type": "meter", "items": [{"label": "", "value": 3, "max": 4, "tone": "warning"}]}
 
