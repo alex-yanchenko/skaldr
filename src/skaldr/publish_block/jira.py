@@ -5,6 +5,7 @@ from typing_extensions import Self
 
 from skaldr.auth.site import normalise_site
 from skaldr.errors import AuthError
+from skaldr.export_targets import ExportTarget
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields, Location, TargetBase
 from skaldr.services import JiraService
@@ -91,6 +92,10 @@ class JiraTarget(TargetBase):
             if refusal is not None:
                 raise ValueError(refusal)
         return self
+
+    @classmethod
+    def export_target(cls) -> ExportTarget:
+        return "adf"
 
     def where_fields(self) -> JsonFields:
         return self.where.fields

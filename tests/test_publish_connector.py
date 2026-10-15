@@ -51,6 +51,12 @@ def test_a_target_whose_to_names_no_single_service_is_refused(target_type: type[
         target_type.service()
 
 
+def test_each_publish_target_names_the_export_its_connector_renders() -> None:
+    exports = {target_type.service(): target_type.export_target() for target_type in PUBLISH_TARGET_TYPES}
+
+    assert exports == {"notion": "notion", "jira": "adf"}
+
+
 def test_the_export_flavors_are_notion_markdown_adf_and_slack() -> None:
     assert get_args(ExportTarget) == ("notion", "markdown", "adf", "slack")
 

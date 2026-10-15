@@ -49,7 +49,7 @@ from skaldr.export.tree import (
     Toggle,
     nested_nodes,
 )
-from skaldr.export_targets import PUBLISHED_AS, ExportTarget
+from skaldr.export_targets import ExportTarget
 from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
 
 _NODE_TERMS: Final[Mapping[type, str]] = {
@@ -321,7 +321,7 @@ def reject_what_the_targets_cannot_show(report: Report, targets: Sequence[Export
     for publish_target in published:
         chosen = [region for region in regions if publish_target.builds_from(region.section_id)]
         page = assemble_page(chosen, lowering)
-        reject_what_the_target_cannot_show(report, page, PUBLISHED_AS[publish_target.service()])
+        reject_what_the_target_cannot_show(report, page, publish_target.export_target())
     if targets:
         whole = assemble_page(regions, lowering)
         for target in dict.fromkeys(targets):
