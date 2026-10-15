@@ -27,6 +27,7 @@ OccurrenceFeature = Literal[
     "chart with several series or stacked",
     "math block",
     "inline math",
+    "image from a data: URI",
 ]
 Feature = Literal[
     PlacementFeature,
@@ -224,6 +225,22 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     },
     "math block": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, Swap("a code block in latex"))),
     "inline math": _kept_except(dict.fromkeys(_NO_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))),
+    "image from a data: URI": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion cannot show an image from a data: URI", "host the image and give its https address"
+            ),
+            "adf": Rejection(
+                "ADF cannot show an image from a data: URI, "
+                "since Jira embeds only files attached to the issue",
+                "host the image and give its https address",
+            ),
+            "slack": Rejection(
+                "a Slack canvas cannot show an image from a data: URI",
+                "upload the image to Slack and give its permalink",
+            ),
+        }
+    ),
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {

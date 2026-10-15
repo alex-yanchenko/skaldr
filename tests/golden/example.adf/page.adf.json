@@ -3390,26 +3390,6 @@
       "content": [
         {
           "type": "text",
-          "text": "Image: Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts).",
-          "marks": [
-            {
-              "type": "em"
-            },
-            {
-              "type": "textColor",
-              "attrs": {
-                "color": "#6B778C"
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "paragraph",
-      "content": [
-        {
-          "type": "text",
           "text": "Image: "
         },
         {

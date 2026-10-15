@@ -68,6 +68,7 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "chart": {"adf": "swap", "slack": "swap"},
     "math block": {"adf": "swap", "slack": "swap"},
     "inline math": {"adf": "swap", "slack": "swap"},
+    "image from a data: URI": {"notion": "reject", "adf": "reject", "slack": "reject"},
     "chart with several series or stacked": {
         "markdown": "reject",
         "notion": "reject",
@@ -78,9 +79,9 @@ DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
 EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
     "markdown": ["range", "chart"],
-    "notion": ["range", "chart"],
-    "adf": ["range", "flow", "fan"],
-    "slack": ["range", "flow", "fan", "walkthrough"],
+    "notion": ["range", "image", "chart"],
+    "adf": ["range", "flow", "image", "fan"],
+    "slack": ["range", "flow", "image", "fan", "walkthrough"],
 }
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")

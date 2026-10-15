@@ -226,6 +226,9 @@ SEVERAL_SERIES_OR_STACKED: dict[str, dict[str, Any]] = {
 }
 
 
+DATA_IMAGE: dict[str, Any] = {"type": "image", "src": "data:image/png;base64,AA==", "alt": "Aisle 12"}
+WEB_IMAGE: dict[str, Any] = {"type": "image", "src": "https://example.com/aisle.png", "alt": "Aisle 12"}
+HOST_THE_IMAGE = "host the image and give its https address"
 MATH_BLOCKS: list[dict[str, Any]] = [
     {"type": "math", "expression": "x^2 + 1"},
     {"type": "text", "body": "rate $`x_i`$ now"},
@@ -318,6 +321,42 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         for target, subject in MERMAID_TARGETS
         for name, chart in SEVERAL_SERIES_OR_STACKED.items()
     },
+    "notion-data-image": RefusedCase(
+        "notion",
+        [DATA_IMAGE],
+        "Notion cannot show an image from a data: URI",
+        HOST_THE_IMAGE,
+        "at blocks.0.image",
+    ),
+    "adf-data-image": RefusedCase(
+        "adf",
+        [DATA_IMAGE],
+        "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue",
+        HOST_THE_IMAGE,
+        "at blocks.0.image",
+    ),
+    "slack-data-image": RefusedCase(
+        "slack",
+        [DATA_IMAGE],
+        "a Slack canvas cannot show an image from a data: URI",
+        "upload the image to Slack and give its permalink",
+        "at blocks.0.image",
+    ),
+    "notion-data-image-in-a-tab": RefusedCase(
+        "notion",
+        [
+            {
+                "type": "tabs",
+                "tabs": [
+                    {"label": "Photo", "blocks": [DATA_IMAGE]},
+                    {"label": "Notes", "blocks": [{"type": "text", "body": "Overflow bins."}]},
+                ],
+            }
+        ],
+        "Notion cannot show an image from a data: URI",
+        HOST_THE_IMAGE,
+        "at blocks.0.tabs.tabs.0.blocks.0.image",
+    ),
     "adf-flow-with-a-rich-note-is-refused-as-a-flow": RefusedCase(
         "adf",
         flow_with_a_note(RICH_NOTES["web-link"]),
@@ -344,6 +383,8 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
         for name, chart in {**ONE_SERIES_CHARTS, **SEVERAL_SERIES_OR_STACKED}.items()
     },
     **{f"{target}-math": AcceptedCase(target, MATH_BLOCKS) for target in EXPORT_TARGETS},
+    "markdown-data-image": AcceptedCase("markdown", [DATA_IMAGE]),
+    **{f"{target}-web-image": AcceptedCase(target, [WEB_IMAGE]) for target in EXPORT_TARGETS},
 }
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]
 DIAGRAM_ACCEPTED_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_ACCEPTED.items()]

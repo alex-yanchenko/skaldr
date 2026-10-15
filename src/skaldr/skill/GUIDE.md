@@ -352,7 +352,8 @@ show as a picture there: an `image` or `media` block with a URL shows as a card 
 (`Image`, `Video`, `Audio`, `File` or `PDF`), its alt text or caption, and the URL's host, and the
 card links to the URL. An `image` needs `alt`, and a blank `alt` fails the build. A URL must start
 with `http://` or `https://` and may not hold a username or password. A `media` block takes http(s)
-URLs only.
+URLs only. The Notion, ADF and Slack canvas exports refuse an `image` with a `data:` source, since
+none of them can show one; for those targets, host the image and give its https address.
 
 ```yaml
 - type: image
@@ -1479,7 +1480,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | tones on table cells and columns | dropped | cell and column backgrounds |
 | a table column's `tone` and `width` | dropped (a pipe table has no column colour or width) | column colours, and widths in the same proportions as the HTML (including the default share a `number` or `indicator` column takes), in whole pixels that add up to Notion's default page width, 708 px (an assumption, unverified) |
 | tones on flow and fan steps | Mermaid node colours | the same |
-| `image` with a `data:` source | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | the same line, in gray |
+| `image` with a `data:` source | an italic `Image: <caption>` line, with the alt text in place of the caption when there is none; the image itself is left out | refused, since Notion cannot show an image from a `data:` URI; host the image and give its https address |
 | `image` with a URL | a Markdown image `![alt](url)`, with the caption in italics below it | a Markdown image `![caption](url)`, with the alt text in place of the caption when there is none (Notion Markdown has no alt text, so its image text is the caption) |
 | `media` | a link, `Video: [caption](url)`, with the URL as the link text when there is no caption (`Audio`, `File` and `PDF` likewise) | a `<video src="url">caption</video>` tag, or `<audio>`, `<file>` or `<pdf>` (the forms in Notion's enhanced Markdown reference) |
 | `link` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; the export writes no `<iframe>` | `inline` is a Markdown link; a `card` or an `embed` is a quote holding the bold linked title, then the domain and the caption in italics; Notion's `<embed>` tag takes an HTML attachment, not a URL, so the export never writes it |
@@ -1535,6 +1536,7 @@ The ADF export refuses:
 - a `range`, since ADF cannot draw a range bar; use a `meter` or a `table`.
 - a `flow`, since ADF cannot draw a diagram; write the steps as a numbered list.
 - a `fan`, for the same reason; write the hub and its spokes as a list.
+- an `image` with a `data:` source, since Jira embeds only files attached to the issue; host the image and give its https address.
 
 ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry whose detail is a panel, a table, a heading or a block quote ends the list there, the detail follows it, and the list carries on after it (a numbered list from the right number, a checklist as a new task list). When the detail sits in a nested list, the nested list keeps its entries up to that one and every enclosing list ends there too, so the detail and the entries after it continue at the level of the enclosing block, not nested. A block ADF cannot place at all stops the export, and a publish to Jira, before anything is written or sent, with an error naming the block in the document's own terms, what it was inside, its path in the YAML, the nearest heading above it, and what to do instead, for example `ADF cannot place a table inside a panel, at blocks.2.panel.blocks.0.table, under the heading 'Totals'; move the table out of the panel` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle, at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle; move the toggle out of the toggle`. The block, and the panel, grid cell, toggle, collapsed section or part, or set of tabs that refuses it, are named as you wrote them (`ADF cannot place a comparison inside a panel`, `ADF cannot place a toggle inside a toggle that is itself inside a section`), so a `link` card is a link card, a `comparison` is a comparison, and a `note` is a note, even though ADF would write each as a quote, a table or a panel. In a document built by an `index`, the path counts the parts as blocks of the index (`blocks.0.part.blocks.1.toggle`). Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 
@@ -1574,6 +1576,7 @@ The canvas export refuses:
 - a `range`, since a canvas cannot draw a range bar; use a `meter` or a `table`.
 - a `flow`, since a canvas cannot draw a diagram; write the steps as a numbered list.
 - a `fan`, for the same reason; write the hub and its spokes as a list.
+- an `image` with a `data:` source, since a canvas cannot show one; upload the image to Slack and give its permalink.
 
 A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count, its path in the YAML and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A canvas holds at most 1,048,576 characters of Markdown, the limit Slack's `canvases.create` and `canvases.edit` documentation gives as "1 MiB (1,048,576 characters)", so skaldr counts characters, not bytes; a document whose canvas Markdown is longer fails the same way, naming its size in characters, and `skaldr --check --for slack` fails it too, since it writes the canvas in memory to measure it. A walkthrough step is a canvas list item, which holds only text and one nested list, so a `grid` in a step's `detail` fails the export with an error naming its path in the YAML (`blocks.1.walkthrough.steps.1.detail.1.grid`); move the grid out of the step, after the walkthrough. A step's `detail` may hold text and then one list; any other block there, such as a `code`, `callout`, `table`, `image` or `divider`, a second list, or text after the list, fails the same way, naming that block's path (`blocks.1.walkthrough.steps.1.detail.1.code`). A list in a `text`, `callout` or `def_list` body whose item holds two nested lists, such as bullets and then numbers under one item, or a paragraph after its nested list, fails naming the block that holds it (`blocks.3.def_list`); move the second list or the paragraph out of the list.
 

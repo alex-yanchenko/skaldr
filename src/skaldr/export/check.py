@@ -68,7 +68,16 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
-from skaldr.models import AnyBlock, InnerGrid, Range, Report, Walkthrough, walk_located_block
+from skaldr.models import (
+    WEB_URL_SCHEMES,
+    AnyBlock,
+    Image,
+    InnerGrid,
+    Range,
+    Report,
+    Walkthrough,
+    walk_located_block,
+)
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -411,6 +420,8 @@ def _block_hits(path: str, block: AnyBlock) -> Iterator[FeatureHit]:
             yield from _grids_in_walkthrough_steps(path, block)
         case Range():
             yield FeatureHit(Occurrence("range"), path)
+        case Image() if not block.src.startswith(WEB_URL_SCHEMES):
+            yield FeatureHit(Occurrence("image from a data: URI"), path)
         case _:
             return
 
