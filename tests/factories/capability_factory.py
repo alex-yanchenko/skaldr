@@ -5,7 +5,7 @@ import pytest
 
 from skaldr.export.capabilities import Feature
 from skaldr.export_targets import ExportTarget
-from tests.factories.report_factory import make_report, make_tabs, make_toggle
+from tests.factories.report_factory import make_report, make_request, make_tabs, make_toggle
 
 TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "a"}]}
 LONG_TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "v"}] * 300}
@@ -247,6 +247,12 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
     ),
     "slack-tabs-in-a-panel": _in_a_panel_refused_by_a_canvas(
         "toggle inside a callout", make_tabs(), "set of tabs", "adf"
+    ),
+    "slack-request-with-a-verdict-in-a-panel": _in_a_panel_refused_by_a_canvas(
+        "callout inside a callout",
+        make_request(cases=[{"label": "a", "verdict": "fine", "response": {"body": "1"}}]),
+        "request",
+        "adf",
     ),
     "slack-divider-in-a-panel-under-a-heading": RefusedCase(
         "slack",

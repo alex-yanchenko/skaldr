@@ -24,7 +24,6 @@ AuthoredName = Literal[
     "swimlane",
     "request",
     "request step",
-    "request verdict",
 ]
 MediaNodeKind = Literal["image", MediaKind]
 HeadingLevel = Literal[1, 2, 3, 4, 5, 6]

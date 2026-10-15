@@ -61,7 +61,9 @@ def _command_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> 
     return nodes
 
 
-def _case_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> tuple[Node, ...]:
+def _case_nodes(
+    core: RequestLike, case: RequestCase, lowering: Lowering, authored_as: AuthoredName
+) -> tuple[Node, ...]:
     nodes = (
         _query_nodes(core, case, core.query)
         if core.query is not None
@@ -70,16 +72,16 @@ def _case_nodes(core: RequestLike, case: RequestCase, lowering: Lowering) -> tup
     nodes += [_response_caption(core, case), _response_block(case)]
     if case.verdict:
         verdict = Paragraph(with_bold_label("Verdict", lowering.rich(case.verdict)))
-        nodes.append(Callout(compute.case_tone(case), (verdict,), authored_as="request verdict"))
+        nodes.append(Callout(compute.case_tone(case), (verdict,), authored_as=authored_as))
     return tuple(nodes)
 
 
 def _cases(core: RequestLike, lowering: Lowering, authored_as: AuthoredName) -> list[Node]:
     if len(core.cases) == 1:
         case = core.cases[0]
-        return [Paragraph(italic(plain(case.label))), *_case_nodes(core, case, lowering)]
+        return [Paragraph(italic(plain(case.label))), *_case_nodes(core, case, lowering, authored_as)]
     tabs = tuple(
-        Tab(plain(case.label), _case_nodes(core, case, lowering), compute.case_tone(case))
+        Tab(plain(case.label), _case_nodes(core, case, lowering, authored_as), compute.case_tone(case))
         for case in core.cases
     )
     return [Tabs(tabs, authored_as=authored_as)]
