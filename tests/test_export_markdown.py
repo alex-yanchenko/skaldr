@@ -173,7 +173,7 @@ def test_a_flow_keeps_its_mermaid_and_the_detail_mermaid_cannot_show() -> None:
 
 
 def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
-    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"))
 
     assert render_markdown([diagram, Paragraph((Plain("after"),))]) == (
         '```mermaid\nflowchart LR\n    s1["A"]\n```\n\nafter\n'
@@ -794,7 +794,10 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
             id="a-tab-title-already-separates-lists",
         ),
         pytest.param(
-            [Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (make_bullets("p"),)), make_bullets("z")],
+            [
+                Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"), (make_bullets("p"),)),
+                make_bullets("z"),
+            ],
             '```mermaid\nflowchart LR\n    s1["A"]\n```\n\n- p\n\n* z\n',
             id="diagram-ending-with-a-list-then-a-list",
         ),

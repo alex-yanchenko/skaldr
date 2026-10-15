@@ -193,7 +193,7 @@ class Graph:
     direction: Literal["TB", "LR"]
     nodes: tuple[GraphNode, ...]
     edges: tuple[GraphEdge, ...]
-    kind: GraphKind = "flow"
+    kind: GraphKind
 
 
 @dataclass(frozen=True)
@@ -212,7 +212,7 @@ class XYChart:
     mark: XYChartMark
     categories: tuple[str, ...]
     series: tuple[tuple[float, ...], ...]
-    stacked: bool = False
+    stacked: bool
 
 
 Figure = Graph | PieChart | XYChart

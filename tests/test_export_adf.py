@@ -837,7 +837,7 @@ def test_a_flow_or_fan_diagram_the_check_refuses_is_an_internal_error_when_the_w
 def test_a_chart_is_its_data_table_alone() -> None:
     table = TableNode((_cell("Slice"), _cell("Value")), (TableRow((_cell("a"), _cell("1"))),))
     pie = Diagram(PieChart((PieSlice("a", 1),)), (table,))
-    bars = Diagram(XYChart("bar", ("x",), ((1.0,),)), (table,))
+    bars = Diagram(XYChart("bar", ("x",), ((1.0,),), stacked=False), (table,))
 
     expected = _doc(
         _table(

@@ -67,7 +67,7 @@ SAMPLES: Mapping[str, Node] = {
     "grid holding a table": Columns((GridColumn(1, (_TABLE,)), GridColumn(1, (_PARAGRAPH,)))),
     "tabs": Tabs((Tab(plain("One"), (_PARAGRAPH,)),)),
     "empty tabs": Tabs(()),
-    "flow diagram": Diagram(Graph("LR", (GraphNode("s1", "Scan"),), ())),
+    "flow diagram": Diagram(Graph("LR", (GraphNode("s1", "Scan"),), (), "flow")),
     "chart beside its table": Diagram(PieChart((PieSlice("Done", 3),)), (_TABLE,)),
     "table of contents": TableOfContents(()),
 }

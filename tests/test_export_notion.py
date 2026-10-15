@@ -584,7 +584,7 @@ def test_block_nodes_become_notion_blocks() -> None:
         Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
         Toggle((Plain("Shut"),), 2, (Paragraph((Plain("y"),)),)),
         Tabs((Tab((Plain("plain"),), (Paragraph((Plain("z"),)),)),)),
-        Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (Paragraph((Plain("detail"),)),)),
+        Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"), (Paragraph((Plain("detail"),)),)),
     ]
 
     assert render_notion(nodes) == (
@@ -707,7 +707,7 @@ def test_a_notion_tab_carries_the_icon_of_its_case_tone(tone: ToneName | None, o
 
 
 def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:
-    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), ()))
+    diagram = Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"))
 
     assert render_notion([diagram, Paragraph((Plain("after"),))]) == (
         '```mermaid\nflowchart LR\n    s1["A"]\n```\nafter\n'
@@ -1966,7 +1966,9 @@ def test_a_long_header_widens_its_column_as_much_as_long_body_text_does() -> Non
         pytest.param(Callout("info", (_two_column_table(),)), id="callout"),
         pytest.param(Toggle((Plain("t"),), None, (_two_column_table(),)), id="toggle"),
         pytest.param(Tabs((Tab((Plain("t"),), (_two_column_table(),)),)), id="tabs"),
-        pytest.param(Diagram(Graph("LR", (GraphNode("s1", "A"),), ()), (_two_column_table(),)), id="diagram"),
+        pytest.param(
+            Diagram(Graph("LR", (GraphNode("s1", "A"),), (), "flow"), (_two_column_table(),)), id="diagram"
+        ),
     ],
 )
 def test_a_table_nested_in_any_block_is_sized_to_the_full_page(container: Node) -> None:

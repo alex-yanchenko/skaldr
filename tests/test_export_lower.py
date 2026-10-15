@@ -108,7 +108,9 @@ def test_a_flow_step_label_with_a_line_break_stays_one_mermaid_label() -> None:
 
     assert lowered([flow]) == (
         Diagram(
-            Graph("LR", (GraphNode("s1", "one three"), GraphNode("s2", "two")), (GraphEdge("s1", "s2"),))
+            Graph(
+                "LR", (GraphNode("s1", "one three"), GraphNode("s2", "two")), (GraphEdge("s1", "s2"),), "flow"
+            )
         ),
     )
 
@@ -130,6 +132,7 @@ def test_a_numbered_looping_flow_is_a_top_to_bottom_graph_with_a_dashed_return()
                     GraphNode("s2", "2: Fix"),
                 ),
                 (GraphEdge("s1", "s2"), GraphEdge("s2", "s1", dashed=True)),
+                "flow",
             )
         ),
     )
@@ -152,6 +155,7 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
                 "LR",
                 (GraphNode("s1", "Scan", (Plain("first"),)), GraphNode("s2", "Fix")),
                 (GraphEdge("s1", "s2"),),
+                "flow",
             ),
             (
                 ListNode(
@@ -201,7 +205,9 @@ def test_a_graph_node_keeps_the_runs_of_its_note_for_the_check_and_lists_no_step
         if isinstance(node, Diagram)
     ]
 
-    graph = Graph("LR", (GraphNode("s1", "Scan", runs), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),))
+    graph = Graph(
+        "LR", (GraphNode("s1", "Scan", runs), GraphNode("s2", "Fix")), (GraphEdge("s1", "s2"),), "flow"
+    )
 
     assert diagrams == [Diagram(graph)]
 
@@ -347,7 +353,7 @@ def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> No
     assert lowered([line]) == (
         Paragraph(bold("Open")),
         Diagram(
-            XYChart("line", ("Q1", "Q2"), ((1, 2),)),
+            XYChart("line", ("Q1", "Q2"), ((1, 2),), stacked=False),
             (TableNode(_cells("Series", "Q1", "Q2"), (TableRow(_cells("x", "1", "2"), "danger"),)),),
         ),
     )
@@ -363,7 +369,7 @@ def test_an_untitled_single_series_bar_chart_is_a_bar_diagram_over_its_table() -
 
     assert lowered([chart]) == (
         Diagram(
-            XYChart("bar", ("Q1",), ((4,),)),
+            XYChart("bar", ("Q1",), ((4,),), stacked=False),
             (TableNode(_cells("Series", "Q1"), (TableRow(_cells("x", "4")),)),),
         ),
     )

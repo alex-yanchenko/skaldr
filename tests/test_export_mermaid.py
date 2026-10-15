@@ -16,6 +16,7 @@ def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
             GraphNode("s3", "Plain"),
         ),
         (GraphEdge("s1", "s2"), GraphEdge("s3", "s1", dashed=True)),
+        "flow",
     )
 
     assert mermaid_fence_lines(graph) == [
@@ -47,7 +48,7 @@ def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
     ],
 )
 def test_every_tone_has_a_node_class(tone: ToneName, colors: str) -> None:
-    graph = Graph("LR", (GraphNode("s1", "x", tone=tone),), ())
+    graph = Graph("LR", (GraphNode("s1", "x", tone=tone),), (), "flow")
 
     assert mermaid_fence_lines(graph) == [
         "```mermaid",
@@ -74,7 +75,7 @@ def test_every_tone_has_a_mermaid_fill() -> None:
     ],
 )
 def test_a_node_label_keeps_characters_mermaid_would_read_as_syntax(label: str, written: str) -> None:
-    graph = Graph("LR", (GraphNode("s1", label),), ())
+    graph = Graph("LR", (GraphNode("s1", label),), (), "flow")
 
     assert mermaid_fence_lines(graph) == ["```mermaid", "flowchart LR", f'    s1["{written}"]', "```"]
 
@@ -94,7 +95,7 @@ def test_a_pie_quotes_its_labels_and_writes_values_without_an_exponent() -> None
 
 
 def test_an_xy_chart_quotes_its_categories_and_writes_large_values_in_full() -> None:
-    chart = XYChart("line", ('Q "1"', "Q2"), ((1, 2.5), (1e16, 4)))
+    chart = XYChart("line", ('Q "1"', "Q2"), ((1, 2.5), (1e16, 4)), stacked=False)
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",
@@ -107,7 +108,7 @@ def test_an_xy_chart_quotes_its_categories_and_writes_large_values_in_full() -> 
 
 
 def test_an_xy_chart_writes_zero_and_negative_zero_without_a_sign() -> None:
-    chart = XYChart("bar", ("Q1", "Q2", "Q3"), ((0, 0.0, -0.0),))
+    chart = XYChart("bar", ("Q1", "Q2", "Q3"), ((0, 0.0, -0.0),), stacked=False)
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",
