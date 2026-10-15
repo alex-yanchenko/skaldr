@@ -68,13 +68,13 @@ from skaldr.export.tree import (
 )
 from skaldr.export_targets import ExportTarget
 from skaldr.models import (
-    WEB_URL_SCHEMES,
     AnyBlock,
     Image,
     InnerGrid,
     Range,
     Report,
     Walkthrough,
+    is_data_uri,
     walk_located_block,
 )
 from skaldr.richtext import (
@@ -435,7 +435,7 @@ def _block_hits(path: str, block: AnyBlock) -> Iterator[LocatedDetails]:
             yield from _grids_in_walkthrough_steps(path, block)
         case Range():
             yield path, Occurrence("range")
-        case Image() if not block.src.startswith(WEB_URL_SCHEMES):
+        case Image() if is_data_uri(block.src):
             yield path, Occurrence("image from a data: URI")
         case _:
             return

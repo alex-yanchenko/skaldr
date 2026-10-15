@@ -7,8 +7,8 @@ from skaldr.errors import ExportInvariantError
 from skaldr.export.capabilities import TARGET_SUBJECTS, Feature, OccurrenceFeature, swaps
 from skaldr.export.tree import Diagram, Figure, Graph, GraphKind, Media, Node, PieChart, XYChart
 from skaldr.export_targets import ExportTarget
+from skaldr.models import is_data_uri
 
-DATA_URI_SCHEME: Final = "data:"
 GRAPH_FEATURES: Final[Mapping[GraphKind, OccurrenceFeature]] = {
     "flow": "flow diagram",
     "fan": "fan diagram",
@@ -35,7 +35,7 @@ def require_the_swap(feature: Feature, target: ExportTarget) -> None:
 
 
 def web_address_of(media: Media, target: ExportTarget) -> str:
-    if media.url.startswith(DATA_URI_SCHEME):
+    if is_data_uri(media.url):
         raise ExportInvariantError(
             f"{TARGET_SUBJECTS[target]} has no form for 'image from a data: URI'; "
             "the export check should have refused it"

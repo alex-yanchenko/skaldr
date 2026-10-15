@@ -60,6 +60,7 @@ from skaldr.models import (
     WalkthroughStep,
     badge_color_of,
     content_files,
+    is_data_uri,
     load_report,
     parse_report,
     read_text_file,
@@ -583,6 +584,19 @@ def test_an_image_src_that_is_neither_a_data_uri_nor_a_web_url_is_refused(src: s
         "invalid content data: blocks.0.image: "
         "Value error, 'src' must be a data: URI or an http:// or https:// URL"
     )
+
+
+@pytest.mark.parametrize(
+    ("src", "a_data_uri"),
+    [
+        pytest.param("data:image/png;base64,AA==", True, id="data-uri"),
+        pytest.param("https://example.com/data:x.png", False, id="https-holding-data-colon"),
+        pytest.param("http://example.com/aisle.png", False, id="http"),
+        pytest.param("DATA:image/png;base64,AA==", False, id="upper-case-scheme"),
+    ],
+)
+def test_is_data_uri_reads_only_the_scheme_at_the_start(src: str, a_data_uri: bool) -> None:
+    assert is_data_uri(src) is a_data_uri
 
 
 @pytest.mark.parametrize(
