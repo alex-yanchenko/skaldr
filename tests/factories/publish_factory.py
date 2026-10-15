@@ -12,16 +12,20 @@ from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
+from skaldr.publish.state import PublishState
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    ItemLink,
+    LinksWrite,
     NewItem,
     RawSections,
     Release,
     RemoteItem,
     RemoveSection,
     SectionRequest,
+    ShownLink,
     Stamp,
     is_unset,
 )
@@ -39,6 +43,7 @@ DROPPED_AFTER_WRITE = "the connection dropped after the service took the write"
 LOST_WRITE = "the connection dropped before the service saw the write"
 COMMENT_MARKER = re.compile(r'<span discussion-urls="[^"]*">(.*?)</span>')
 SPAN_COLOR = re.compile(r'(<span[^>]*?) color="[^"]*"')
+FAKE_ITEM_ADDRESS = "https://items.example.com/"
 INTRO_KEY = "block 2c7116fc"
 NEW_INTRO_KEY = "block e976d1ce"
 
@@ -99,6 +104,24 @@ def write_garden_report(directory: Path, **overrides: Any) -> Path:
     return write_report(directory, make_garden_report(**overrides))
 
 
+def without_links(state: PublishState) -> PublishState:
+    targets = {
+        label: target.model_copy(
+            update={
+                "document": None
+                if target.document is None
+                else target.document.model_copy(update={"links": ()}),
+                "sections": {
+                    section: item.model_copy(update={"links": ()})
+                    for section, item in target.sections.items()
+                },
+            }
+        )
+        for label, target in state.targets.items()
+    }
+    return state.model_copy(update={"targets": targets})
+
+
 def _without_comment_markers(text: str) -> str:
     return COMMENT_MARKER.sub(r"\1", text)
 
@@ -116,6 +139,7 @@ class FakeItem:
     reported_set_properties: tuple[str, ...] | None = None
     icon: str | None = None
     cover: str | None = None
+    links: tuple[ShownLink, ...] = ()
 
     @property
     def set_properties(self) -> tuple[str, ...]:
@@ -251,7 +275,32 @@ class FakeTransport:
         self.hand_edits.append(HandEdit(item_id, item.revision, part, names))
 
     def writes(self) -> list[tuple[str, ...]]:
-        return [call for call in self.calls if call[0] not in ("read", "edits_since")]
+        return [call for call in self.calls if call[0] not in ("read", "edits_since", "read_links")]
+
+    def link_by_hand(self, item_id: str, links: tuple[ShownLink, ...]) -> None:
+        self.items[item_id].links = links
+
+    def item_link(self, item_id: str, title: str, /) -> ItemLink:
+        return ItemLink(f"{FAKE_ITEM_ADDRESS}{item_id}", title)
+
+    def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
+        self.calls.append(("read_links", item_id))
+        item = self.items.get(item_id)
+        if item is None or item.archived:
+            raise ItemNotFoundError(f"{item_id} is not on the service")
+        return item.links if item.stamp == stamp else ()
+
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        item = self.items[item_id]
+        if item.stamp is not None and item.stamp != request.stamp:
+            raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.named}")
+        if request.changes_nothing:
+            return item.links
+        self._write(("write_links", item_id, *(link.title for link in request.links)))
+        item.stamp = request.stamp
+        item.links = request.links
+        self._drop_the_connection_if_asked()
+        return item.links
 
     def forget_calls(self) -> None:
         self.calls.clear()
@@ -379,6 +428,7 @@ class FakeTransport:
         item.icon = None if request.clears_icon else item.icon
         item.cover = None if request.clears_cover else item.cover
         item.stamp = None
+        item.links = ()
         item.revision = self._bump()
         self._drop_the_connection_if_asked()
 
@@ -456,6 +506,7 @@ class FakeTransport:
             str(item.revision),
             child_ids=item.children,
             set_properties=item.set_properties,
+            links=item.links,
         )
 
 

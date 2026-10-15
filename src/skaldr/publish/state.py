@@ -11,6 +11,7 @@ from pydantic import Field, ValidationError
 from skaldr.errors import PublishError
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish.content import ItemContent, Part, PartKind
+from skaldr.publish.transport import ShownLink
 from skaldr.publish_block.target import JsonFields
 from skaldr.services import Service
 
@@ -45,6 +46,7 @@ class PublishedItem(FrozenModel):
     shown_remote: str | None = None
     writing: InFlightWrite | None = None
     retiring: Retirement | None = None
+    links: tuple[ShownLink, ...] = ()
 
 
 class PublishedTarget(FrozenModel):

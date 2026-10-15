@@ -17,6 +17,7 @@ from skaldr.richtext import (
     parse_rich,
     visible_text,
 )
+from skaldr.typed_links import issue_key_in_url, issue_url
 from tests.factories import make_report, markdown_of, notion_of
 
 ADA = Person(notion="user://11111111-2222-3333-4444-555555555555", jira="5b10a2844c20165700ede21g")
@@ -72,6 +73,30 @@ def test_an_issue_link_has_no_url_when_the_document_names_no_jira_site() -> None
     assert parse_rich("[ABC-123](jira:ABC-123)", RichContext()) == (
         IssueLink((Plain("ABC-123"),), "ABC-123", None),
     )
+
+
+@pytest.mark.parametrize(
+    ("site", "key", "url"),
+    [
+        pytest.param(SITE, "ABC-123", f"{SITE}/browse/ABC-123", id="a-site"),
+        pytest.param(f"{SITE}/", "ABC-123", f"{SITE}/browse/ABC-123", id="a-site-with-a-trailing-slash"),
+        pytest.param(SITE, "ABC 1/2", f"{SITE}/browse/ABC%201%2F2", id="a-key-that-needs-quoting"),
+    ],
+)
+def test_an_issue_url_is_the_site_then_browse_then_the_quoted_key(site: str, key: str, url: str) -> None:
+    assert (issue_url(site, key), issue_key_in_url(url)) == (url, key)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param(f"{SITE}/browse/", id="browse-with-no-key"),
+        pytest.param(f"{SITE}/projects/ABC", id="no-browse-path"),
+        pytest.param("https://example.com/elsewhere", id="another-site"),
+    ],
+)
+def test_an_address_that_browses_no_issue_names_no_issue_key(url: str) -> None:
+    assert issue_key_in_url(url) is None
 
 
 def test_a_typed_link_reads_as_its_label_in_visible_text() -> None:

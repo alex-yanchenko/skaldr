@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
@@ -6,27 +7,31 @@ import pytest
 from skaldr.errors import ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, differing_parts, section_part
 from skaldr.publish.jira.description import description_doc, section_blocks, section_text
-from skaldr.publish.jira.transport import JiraTransport
+from skaldr.publish.jira.transport import STAMP_PROPERTY, JiraTransport
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    ItemLink,
+    LinksWrite,
     NewItem,
     Release,
     RemoteItem,
     RemoveSection,
     ReplaceSection,
     SectionRequest,
+    ShownLink,
     Stamp,
     Transport,
     is_unset,
 )
 from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
 from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target
-from tests.factories.jira_factory import FakeJira
+from tests.factories.jira_factory import SITE, FakeJira
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import DOC_ID, FakeTransport
 
+OTHER_PAGE_ID = "fedcba9876543210fedcba9876543210"
 STAMP = Stamp(DOC_ID, None)
 SECTION_STAMP = Stamp(DOC_ID, "tools")
 CONTENT = ItemContent(
@@ -79,15 +84,38 @@ COVER_URL = "https://example.com/garden.png"
 LOOKING = CONTENT.model_copy(update={"icon": SEEDLING, "cover": COVER_URL})
 
 
+def _issue_link(key: str) -> ShownLink:
+    return ShownLink(service="jira", item_id=key, url=f"{SITE}/browse/{key}", title=key)
+
+
+def _page_link(page_id: str, title: str) -> ShownLink:
+    return ShownLink(service="notion", item_id=page_id, url=f"https://www.notion.so/{page_id}", title=title)
+
+
+ISSUE_LINKS = (_issue_link("DEMO-12"), _issue_link("OPS-3"))
+PAGE_LINKS = (_page_link(NOTION_PAGE_ID, "Garden handbook"), _page_link(OTHER_PAGE_ID, "Kitchen rota"))
+MOVED_ADDRESS = "https://example.com/elsewhere"
+
+
 @dataclass(frozen=True)
 class Instance:
     transport: Transport
     empty_page_id: str | None
     edit_section_by_hand: Callable[[str, str, str], None]
+    count_writes: Callable[[], int]
+    unstamped_item_id: Callable[[], str]
 
 
 def _as_written(text: str) -> str:
     return text
+
+
+def _fake_link(item_id: str, title: str) -> ItemLink:
+    return ItemLink(f"https://items.example.com/{item_id}", title)
+
+
+def _fake_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"{item_id} is not stamped with {stamp.named}"
 
 
 @dataclass(frozen=True)
@@ -99,11 +127,21 @@ class TransportUnderTest:
     carries_look: bool = True
     spell: Callable[[str], str] = field(default=_as_written)
     form_fixture: ItemContent = COMPARABLE_FORM_IDEMPOTENCE_FIXTURE
+    links: tuple[ShownLink, ...] = ISSUE_LINKS
+    expected_link: Callable[[str, str], ItemLink] = field(default=_fake_link)
+    reads_links_with_the_item: bool = True
+    stamp_refusal: Callable[[str, Stamp], str] = field(default=_fake_stamp_refusal)
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
     transport.seed("empty-page", "Blank page", None, fields={"Status": None})
-    return Instance(transport, "empty-page", transport.edit_section_by_hand)
+    return Instance(
+        transport,
+        "empty-page",
+        transport.edit_section_by_hand,
+        lambda: len(transport.writes()),
+        lambda: "empty-page",
+    )
 
 
 def _fake() -> Instance:
@@ -118,7 +156,17 @@ def _notion() -> Instance:
     def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
         notion.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
 
-    return Instance(notion.transport(), empty_page, edit_section_by_hand)
+    return Instance(
+        notion.transport(), empty_page, edit_section_by_hand, lambda: len(notion.writes()), lambda: empty_page
+    )
+
+
+def _notion_link(item_id: str, title: str) -> ItemLink:
+    return ItemLink(f"https://www.notion.so/{item_id.replace('-', '')}", title)
+
+
+def _notion_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"Notion page {item_id} is not stamped with {stamp.named}"
 
 
 def _as_adf(text: str) -> str:
@@ -135,7 +183,23 @@ def _jira() -> Instance:
         blocks = [block for section in sections.values() for block in section_blocks(section)]
         jira.edit_by_hand(item_id, description=description_doc(blocks))
 
-    return Instance(transport, None, edit_section_by_hand)
+    def count_writes() -> int:
+        return len([call for call in jira.calls() if call[0] != "GET"])
+
+    def unstamped_item_id() -> str:
+        created = transport.create_item(NewItem(JIRA_TARGET, STAMP, ItemContent(title="Blank issue")))
+        del jira.issues[created.item_id].properties[STAMP_PROPERTY]
+        return created.item_id
+
+    return Instance(transport, None, edit_section_by_hand, count_writes, unstamped_item_id)
+
+
+def _jira_link(item_id: str, _title: str) -> ItemLink:
+    return ItemLink(f"{SITE}/browse/{item_id}", item_id)
+
+
+def _jira_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"Jira issue {item_id} is not stamped with {stamp.named}"
 
 
 TRANSPORTS = [
@@ -144,7 +208,14 @@ TRANSPORTS = [
         id="fake",
     ),
     pytest.param(
-        TransportUnderTest(_notion, NOTION_TARGET, writes_into_pages=True, reports_edits=False),
+        TransportUnderTest(
+            _notion,
+            NOTION_TARGET,
+            writes_into_pages=True,
+            reports_edits=False,
+            expected_link=_notion_link,
+            stamp_refusal=_notion_stamp_refusal,
+        ),
         id="notion",
     ),
     pytest.param(
@@ -156,6 +227,10 @@ TRANSPORTS = [
             carries_look=False,
             spell=_as_adf,
             form_fixture=JIRA_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,
+            links=PAGE_LINKS,
+            expected_link=_jira_link,
+            reads_links_with_the_item=False,
+            stamp_refusal=_jira_stamp_refusal,
         ),
         id="jira",
     ),
@@ -475,6 +550,154 @@ def test_the_comparable_form_of_a_comparable_form_is_itself(under_test: Transpor
     assert transport.comparable_form(once) == once
 
 
+def _by_item(link: ShownLink) -> str:
+    return link.item_id
+
+
+def test_a_link_to_an_item_names_it_by_the_address_the_service_gives_it(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+
+    link = instance.transport.item_link(created.item_id, CONTENT.title)
+
+    assert link == under_test.expected_link(created.item_id, CONTENT.title)
+
+
+def test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    links = frozenset(under_test.links)
+
+    written = transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+    read = transport.read_links(created.item_id, STAMP)
+    writes_before = instance.count_writes()
+    again = transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links, read))
+
+    assert (frozenset(written), frozenset(read), frozenset(again), instance.count_writes()) == (
+        links,
+        links,
+        links,
+        writes_before,
+    )
+
+
+def test_an_item_read_carries_its_links_or_leaves_them_to_a_links_read(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+
+    read = transport.read_item(created.item_id, _content(under_test))
+
+    carried = None if read.links is None else frozenset(read.links)
+    assert carried == (frozenset(under_test.links) if under_test.reads_links_with_the_item else None)
+
+
+def test_writing_fewer_links_removes_the_others_and_writing_none_removes_every_link(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    first, _ = under_test.links
+
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+    transport.write_links(created.item_id, LinksWrite(STAMP, (first,), under_test.links))
+    fewer = transport.read_links(created.item_id, STAMP)
+    transport.write_links(created.item_id, LinksWrite(STAMP, (), fewer))
+
+    assert (fewer, transport.read_links(created.item_id, STAMP)) == ((first,), ())
+
+
+def test_a_link_whose_address_changed_is_replaced_in_place_and_not_doubled(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    first, second = under_test.links
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+    moved = first.model_copy(update={"url": MOVED_ADDRESS})
+
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links, (moved, second)))
+
+    assert sorted(transport.read_links(created.item_id, STAMP), key=_by_item) == sorted(
+        under_test.links, key=_by_item
+    )
+
+
+def test_links_change_neither_the_content_nor_the_stamp_and_never_count_as_an_edit(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    before = transport.read_item(created.item_id, _content(under_test))
+
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+    after = transport.read_item(created.item_id, _content(under_test))
+
+    assert (
+        (after.comparable, dict(after.raw_sections), after.stamp),
+        transport.parts_edited_after(created.item_id, created.marker, _content(under_test)),
+    ) == ((before.comparable, dict(before.raw_sections), STAMP), ())
+
+
+def test_a_section_write_after_links_keeps_them(under_test: TransportUnderTest) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+    raw = dict(transport.read_item(created.item_id, _content(under_test)).raw_sections)
+
+    transport.write_section(
+        created.item_id,
+        SectionRequest(AddSection("tools", under_test.spell("Spade.\n"), "planting"), raw, STAMP),
+    )
+
+    assert frozenset(transport.read_links(created.item_id, STAMP)) == frozenset(under_test.links)
+
+
+def test_a_links_write_for_another_section_of_the_document_is_rejected_and_changes_nothing(
+    under_test: TransportUnderTest,
+) -> None:
+    instance, created = _created(under_test, SECTION_STAMP)
+    transport = instance.transport
+    refusal = under_test.stamp_refusal(created.item_id, STAMP)
+
+    with pytest.raises(WriteRejectedError, match=f"^{re.escape(refusal)}$"):
+        transport.write_links(created.item_id, LinksWrite(STAMP, under_test.links))
+    assert (
+        transport.read_links(created.item_id, SECTION_STAMP),
+        transport.read_item(created.item_id, _content(under_test)).stamp,
+    ) == ((), SECTION_STAMP)
+
+
+def test_links_are_read_only_for_the_stamp_the_item_carries(under_test: TransportUnderTest) -> None:
+    instance, created = _created(under_test, SECTION_STAMP)
+    transport = instance.transport
+    transport.write_links(created.item_id, LinksWrite(SECTION_STAMP, under_test.links))
+
+    assert transport.read_links(created.item_id, STAMP) == ()
+
+
+def test_a_links_write_to_an_unstamped_item_stamps_it_and_writes_the_links(
+    under_test: TransportUnderTest,
+) -> None:
+    instance = under_test.make()
+    transport = instance.transport
+    item_id = instance.unstamped_item_id()
+
+    written = transport.write_links(item_id, LinksWrite(STAMP, under_test.links))
+
+    shown = frozenset(under_test.links)
+    assert (
+        frozenset(written),
+        frozenset(transport.read_links(item_id, STAMP)),
+        transport.read_item(item_id, ItemContent(title="")).stamp,
+    ) == (shown, shown, STAMP)
+
+
 class ReordersSections(FakeTransport):
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         read = super().read_item(item_id, keyed_like)
@@ -521,6 +744,73 @@ class ClosesEverySectionAgain(FakeTransport):
         formed = super().comparable_form(content)
         closed = {key: text + "\n" for key, text in formed.sections.items()}
         return formed.model_copy(update={"sections": closed})
+
+
+class NamesItemsByTitle(FakeTransport):
+    def item_link(self, _item_id: str, title: str, /) -> ItemLink:
+        return ItemLink(f"https://items.example.com/{title}", title)
+
+
+class ForgetsLinks(FakeTransport):
+    def write_links(self, _item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        return request.links
+
+
+class AddsEachSentLinkBesideTheOthers(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        item = self.items[item_id]
+        item.links = (*(link for link in item.links if link not in request.dropped), *request.sent)
+        item.stamp = request.stamp
+        return item.links
+
+
+class RewritesLinksEachTime(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        self.calls.append(("write_links", item_id))
+        return super().write_links(item_id, request)
+
+
+class KeepsOldLinks(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        kept = tuple(dict.fromkeys([*self.items[item_id].links, *request.links]))
+        self.items[item_id].links = kept
+        return kept
+
+
+class ReportsLinksAsEdits(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        self.report_an_edit_without_changing_content(item_id, section_part("intro"))
+        return super().write_links(item_id, request)
+
+
+class LinksBeforeCheckingTheStamp(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        self.items[item_id].links = request.links
+        return super().write_links(item_id, request)
+
+
+class ReadsItemsWithoutTheirLinks(FakeTransport):
+    def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
+        return replace(super().read_item(item_id, keyed_like), links=())
+
+
+class ReadsLinksOfAnyStamp(FakeTransport):
+    def read_links(self, item_id: str, _stamp: Stamp, /) -> tuple[ShownLink, ...]:
+        return self.items[item_id].links
+
+
+class LinksWithoutStamping(FakeTransport):
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        stamp = self.items[item_id].stamp
+        written = super().write_links(item_id, request)
+        self.items[item_id].stamp = stamp
+        return written
+
+
+class DropsLinksOnSectionWrites(FakeTransport):
+    def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
+        self.items[item_id].links = ()
+        return super().write_section(item_id, request)
 
 
 def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
@@ -571,6 +861,61 @@ def _mutant(transport_type: type[FakeTransport]) -> TransportUnderTest:
             ClosesEverySectionAgain,
             test_the_comparable_form_of_a_comparable_form_is_itself,
             id="comparable-form-not-idempotent",
+        ),
+        pytest.param(
+            NamesItemsByTitle,
+            test_a_link_to_an_item_names_it_by_the_address_the_service_gives_it,
+            id="link-by-title",
+        ),
+        pytest.param(
+            ForgetsLinks,
+            test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
+            id="forgets-links",
+        ),
+        pytest.param(
+            AddsEachSentLinkBesideTheOthers,
+            test_a_link_whose_address_changed_is_replaced_in_place_and_not_doubled,
+            id="doubles-a-moved-link",
+        ),
+        pytest.param(
+            RewritesLinksEachTime,
+            test_links_written_to_an_item_read_back_and_writing_them_again_sends_nothing,
+            id="rewrites-unchanged-links",
+        ),
+        pytest.param(
+            ReadsItemsWithoutTheirLinks,
+            test_an_item_read_carries_its_links_or_leaves_them_to_a_links_read,
+            id="items-read-without-their-links",
+        ),
+        pytest.param(
+            KeepsOldLinks,
+            test_writing_fewer_links_removes_the_others_and_writing_none_removes_every_link,
+            id="keeps-old-links",
+        ),
+        pytest.param(
+            ReportsLinksAsEdits,
+            test_links_change_neither_the_content_nor_the_stamp_and_never_count_as_an_edit,
+            id="links-reported-as-edits",
+        ),
+        pytest.param(
+            DropsLinksOnSectionWrites,
+            test_a_section_write_after_links_keeps_them,
+            id="section-write-drops-links",
+        ),
+        pytest.param(
+            LinksBeforeCheckingTheStamp,
+            test_a_links_write_for_another_section_of_the_document_is_rejected_and_changes_nothing,
+            id="links-before-checking-the-stamp",
+        ),
+        pytest.param(
+            ReadsLinksOfAnyStamp,
+            test_links_are_read_only_for_the_stamp_the_item_carries,
+            id="links-read-for-any-stamp",
+        ),
+        pytest.param(
+            LinksWithoutStamping,
+            test_a_links_write_to_an_unstamped_item_stamps_it_and_writes_the_links,
+            id="links-without-stamping",
         ),
     ],
 )

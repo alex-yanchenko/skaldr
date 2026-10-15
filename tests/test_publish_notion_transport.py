@@ -24,12 +24,14 @@ from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    LinksWrite,
     NewItem,
     Release,
     RemoteItem,
     RemoveSection,
     ReplaceSection,
     SectionRequest,
+    ShownLink,
     Stamp,
 )
 from skaldr.publish_block import JiraTarget, NotionTarget
@@ -143,6 +145,7 @@ def test_a_page_under_a_page_is_created_with_its_sections_and_the_stamp_in_one_r
         marker="2026-10-09T12:03:00+00:00",
         edited_by=BOT_ID,
         edited_at="2026-10-09T12:03:00+00:00",
+        links=(),
     )
 
 
@@ -875,6 +878,54 @@ def test_a_content_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back()
         STAMP,
         f"{WELCOME}{TOOLS}{STAMP_LINE}",
     )
+
+
+ISSUE_LINK = ShownLink(
+    service="jira", item_id="DEMO-12", url="https://example.atlassian.net/browse/DEMO-12", title="DEMO-12"
+)
+LINKED_STAMP_LINE = (
+    "Published with skaldr from document garden-handbook · Jira "
+    '[DEMO-12](https://example.atlassian.net/browse/DEMO-12) {color="gray"}'
+)
+
+
+def test_links_rewrite_the_stamp_line_alone_in_one_request() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+
+    written = transport.write_links(created.item_id, LinksWrite(STAMP, (ISSUE_LINK,)))
+
+    assert (written, _patches(notion), notion.markdown_of(created.item_id)) == (
+        (ISSUE_LINK,),
+        [_update(STAMP_LINE, LINKED_STAMP_LINE)],
+        f"{WELCOME}{PLANTING}{LINKED_STAMP_LINE}",
+    )
+
+
+def test_a_links_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back_with_its_links() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
+
+    transport.write_links(created.item_id, LinksWrite(STAMP, (ISSUE_LINK,)))
+
+    assert (_patches(notion), notion.markdown_of(created.item_id)) == (
+        [_update("Sow in spring.", f"Sow in spring.\n{LINKED_STAMP_LINE}\n")],
+        f"{WELCOME}{PLANTING}{LINKED_STAMP_LINE}",
+    )
+
+
+def test_a_section_write_keeps_the_links_on_the_stamp() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    transport.write_links(created.item_id, LinksWrite(STAMP, (ISSUE_LINK,)))
+    read = transport.read_item(created.item_id, created.comparable)
+
+    transport.write_section(
+        created.item_id, SectionRequest(AddSection("tools", TOOLS, "planting"), read.raw_sections, STAMP)
+    )
+
+    assert notion.markdown_of(created.item_id) == f"{WELCOME}{PLANTING}{TOOLS}{LINKED_STAMP_LINE}"
 
 
 def test_a_fields_write_refused_before_sending_does_not_put_a_deleted_stamp_back() -> None:

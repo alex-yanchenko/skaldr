@@ -15,6 +15,7 @@ from skaldr.publish.content import (
     section_part,
 )
 from skaldr.publish.drafts import ItemDraft, item_label
+from skaldr.publish.links import LinkStep, apply_links, link_steps, plan_links, refuse_overlong_link_ids
 from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish, published_item, refuse_moved_targets
 from skaldr.publish.prepared import Prepared, Transports, prepare_publish, with_item
 from skaldr.publish.reading import (
@@ -173,6 +174,7 @@ class _Preflight:
 
 
 def _preflight(prepared: Prepared, transports: Transports) -> _Preflight:
+    refuse_overlong_link_ids(prepared)
     prepared = prepared.with_state(settle_interrupted_adoptions(prepared, transports))
     refuse_moved_targets(prepared.drafts, prepared.state)
     _refuse_an_interrupted_create(prepared)
@@ -230,7 +232,10 @@ def _applied_with(
     plan = plan_publish(prepared.drafts, prepared.state, prepared.registry, rewritten, missing)
     written_into = read_items_written_into(prepared, plan, transports, preflight.written_into)
     remote = {**written_into, **{reading.item: reading.remote for reading in preflight.readings}}
-    return Applier(prepared, transports, remote, on_step, prepared.state).run(plan)
+    applier = Applier(prepared, transports, remote, on_step, prepared.state)
+    applied = applier.run(plan)
+    linked = apply_links(prepared, applier.state, transports, applier.remote, on_step)
+    return Applied((*applied.steps, *linked))
 
 
 @dataclass(frozen=True)
@@ -238,20 +243,24 @@ class DryRun:
     plan: PublishPlan
     edits: tuple[RemoteEdit, ...]
     refusal: str | None
+    links: tuple[LinkStep, ...] = ()
 
 
 def dry_run_publish(prepared: Prepared) -> DryRun:
     try:
         with Transports(prepared) as transports:
             preflight = _preflight(prepared, transports)
-        _refuse_missing_items(preflight)
+            _refuse_missing_items(preflight)
+            settled = preflight.prepared
+            remote = {reading.item: reading.remote for reading in preflight.readings}
+            planned = () if preflight.edited else plan_links(settled, settled.state, transports, remote)
     except PublishError as exc:
         return DryRun(prepared.plan, (), str(exc))
     if preflight.edited:
         edits = remote_edits(preflight.prepared, preflight.edited)
         return DryRun(prepared.plan, edits, refusal_message(Refused(edits, "edited")))
-    settled = preflight.prepared
-    return DryRun(plan_publish(settled.drafts, settled.state, settled.registry), (), None)
+    plan = plan_publish(settled.drafts, settled.state, settled.registry)
+    return DryRun(plan, (), None, link_steps(planned))
 
 
 def _changes_of_item(

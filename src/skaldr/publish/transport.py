@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol
 
+from skaldr.frozen_model import FrozenModel
 from skaldr.publish.content import ItemContent, Part, is_unset, same_value
 
 __all__ = [
@@ -10,6 +11,9 @@ __all__ = [
     "AddSection",
     "ContentWrite",
     "FieldsWrite",
+    "ItemLink",
+    "LinkedItem",
+    "LinksWrite",
     "NewItem",
     "RawSections",
     "Release",
@@ -18,11 +22,13 @@ __all__ = [
     "ReplaceSection",
     "SectionRequest",
     "SectionWrite",
+    "ShownLink",
     "Stamp",
     "Transport",
     "is_unset",
 ]
 from skaldr.publish_block.target import JsonFields, TargetBase
+from skaldr.services import Service
 
 RawSections = Mapping[str, str]
 NO_SECTIONS: RawSections = MappingProxyType({})
@@ -39,6 +45,47 @@ class Stamp:
         return f"doc_id '{self.doc_id}'{section}"
 
 
+LinkedItem = tuple[Service, str]
+
+
+class ShownLink(FrozenModel):
+    service: Service
+    item_id: str
+    url: str
+    title: str
+
+    @property
+    def linked_item(self) -> LinkedItem:
+        return (self.service, self.item_id)
+
+
+@dataclass(frozen=True)
+class ItemLink:
+    url: str
+    title: str
+
+
+@dataclass(frozen=True)
+class LinksWrite:
+    stamp: Stamp
+    links: tuple[ShownLink, ...]
+    current: tuple[ShownLink, ...] = ()
+
+    @property
+    def sent(self) -> tuple[ShownLink, ...]:
+        held = {link.linked_item: link for link in self.current}
+        return tuple(link for link in self.links if held.get(link.linked_item) != link)
+
+    @property
+    def dropped(self) -> tuple[ShownLink, ...]:
+        kept = {link.linked_item for link in self.links}
+        return tuple(link for link in self.current if link.linked_item not in kept)
+
+    @property
+    def changes_nothing(self) -> bool:
+        return not self.sent and not self.dropped
+
+
 @dataclass(frozen=True)
 class RemoteItem:
     item_id: str
@@ -50,6 +97,7 @@ class RemoteItem:
     edited_at: str | None = None
     child_ids: tuple[str, ...] = ()
     set_properties: tuple[str, ...] = ()
+    links: tuple[ShownLink, ...] | None = None
 
     @property
     def doc_id(self) -> str | None:
@@ -181,5 +229,11 @@ class Transport(Protocol):
     ) -> tuple[Part, ...]: ...
 
     def editor_name(self, user_id: str, /) -> str: ...
+
+    def item_link(self, item_id: str, title: str, /) -> ItemLink: ...
+
+    def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]: ...
+
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]: ...
 
     def close(self) -> None: ...

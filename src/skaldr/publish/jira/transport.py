@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 from typing import TypeVar
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
+from typing_extensions import Self
 
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
@@ -37,12 +38,16 @@ from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    ItemLink,
+    LinkedItem,
+    LinksWrite,
     NewItem,
     RawSections,
     Release,
     RemoteItem,
     RemoveSection,
     SectionRequest,
+    ShownLink,
     Stamp,
 )
 from skaldr.publish_block import JiraTarget, TargetBase
@@ -55,7 +60,14 @@ from skaldr.publish_block.jira import (
     SUMMARY_FIELD,
 )
 from skaldr.publish_block.target import JsonFields
+from skaldr.services import SERVICE_NAMES, Service, service_with_id
+from skaldr.typed_links import issue_url
 
+GLOBAL_ID_PREFIX = "skaldr"
+GLOBAL_ID_SEPARATOR = ":"
+GLOBAL_ID_LIMIT = 255
+DOCUMENT_ITEM = "document"
+SECTION_ITEM = "section"
 STAMP_PROPERTY = "skaldr.stamp"
 LAYOUT_PROPERTY = "skaldr.layout"
 LABEL_PREFIX = "skaldr-"
@@ -73,6 +85,11 @@ class StampValue(BaseModel):
     section_id: str | None = None
     commented: bool = False
     archived: bool = False
+    linked: bool = False
+
+    @classmethod
+    def of(cls, stamp: Stamp) -> Self:
+        return cls(doc_id=stamp.doc_id, section_id=stamp.section_id)
 
     @property
     def stamp(self) -> Stamp | None:
@@ -118,6 +135,43 @@ def _projected(remote: JsonValue, written: JsonValue) -> JsonValue:
             for member in remote
         ]
     return remote
+
+
+def _link_prefix(stamp: Stamp) -> str:
+    item_part = [DOCUMENT_ITEM] if stamp.section_id is None else [SECTION_ITEM, stamp.section_id]
+    return f"{GLOBAL_ID_SEPARATOR.join([GLOBAL_ID_PREFIX, stamp.doc_id, *item_part])}{GLOBAL_ID_SEPARATOR}"
+
+
+def remote_link_global_id(stamp: Stamp, service: Service, item_id: str) -> str:
+    return f"{_link_prefix(stamp)}{service}{GLOBAL_ID_SEPARATOR}{item_id}"
+
+
+def global_id_refusal(stamp: Stamp, service: Service, item_id: str) -> str | None:
+    length = len(remote_link_global_id(stamp, service, item_id))
+    if length <= GLOBAL_ID_LIMIT:
+        return None
+    return (
+        f"the remote link to the paired {SERVICE_NAMES[service]} item needs a globalId of {length} "
+        f"characters, over the {GLOBAL_ID_LIMIT} Jira takes; shorten the document's doc_id or the "
+        "section's id"
+    )
+
+
+def _global_id(item_id: str, stamp: Stamp, link: ShownLink) -> str:
+    refusal = global_id_refusal(stamp, link.service, link.item_id)
+    if refusal is not None:
+        raise WriteRejectedError(f"{item_id}: {refusal}")
+    return remote_link_global_id(stamp, link.service, link.item_id)
+
+
+def _linked_item(global_id: str, prefix: str) -> LinkedItem | None:
+    if not global_id.startswith(prefix):
+        return None
+    named, separator, item_id = global_id.removeprefix(prefix).partition(GLOBAL_ID_SEPARATOR)
+    service = service_with_id(named)
+    if not separator or not item_id or service is None:
+        return None
+    return (service, item_id)
 
 
 def _archive_comment(stamp: StampValue) -> JsonValue:
@@ -228,7 +282,7 @@ class JiraTransport:
         parent = request.parent_id or target.where.parent
         if parent is not None:
             fields[PARENT_FIELD] = {"key": parent}
-        stamp = StampValue(doc_id=request.stamp.doc_id, section_id=request.stamp.section_id)
+        stamp = StampValue.of(request.stamp)
         layout = layout_of(sections)
         created = self._client.create_issue(
             fields, [_property(STAMP_PROPERTY, stamp), _property(LAYOUT_PROPERTY, layout)]
@@ -275,16 +329,17 @@ class JiraTransport:
         current = self._stamp(item_id) or StampValue(doc_id=None)
         if current.archived:
             return
+        if current.linked and current.stamp is not None:
+            self._delete_links(item_id, current.stamp, self.read_links(item_id, current.stamp))
         status = _status(self._client.get_issue(item_id, [STATUS_FIELD]))
         if not status.is_done:
             done = self._done_transition(item_id, status)
             if not current.commented:
                 self._comment_once(item_id, _archive_comment(current))
                 current = current.model_copy(update={"commented": True})
-                self._client.put_property(item_id, STAMP_PROPERTY, current.model_dump(mode="json"))
+                self._put_stamp(item_id, current)
             self._client.transition(item_id, done.id)
-        archived = current.model_copy(update={"archived": True})
-        self._client.put_property(item_id, STAMP_PROPERTY, archived.model_dump(mode="json"))
+        self._put_stamp(item_id, current.model_copy(update={"archived": True}))
 
     def release_item(self, _item_id: str, _request: Release, /) -> None:
         raise ConnectorError(
@@ -315,8 +370,48 @@ class JiraTransport:
     def editor_name(self, display_name: str, /) -> str:
         return display_name
 
+    def item_link(self, item_id: str, _title: str, /) -> ItemLink:
+        return ItemLink(issue_url(self._client.site, item_id), item_id)
+
+    def read_links(self, item_id: str, stamp: Stamp, /) -> tuple[ShownLink, ...]:
+        prefix = _link_prefix(stamp)
+        found: list[ShownLink] = []
+        for link in self._client.remote_links(item_id):
+            linked = _linked_item(link.global_id or "", prefix)
+            if linked is not None:
+                service, linked_id = linked
+                found.append(
+                    ShownLink(
+                        service=service, item_id=linked_id, url=link.linked.url, title=link.linked.title
+                    )
+                )
+        return tuple(found)
+
+    def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
+        stamped = self._stamp(item_id)
+        if stamped is not None and stamped.stamp != request.stamp:
+            raise WriteRejectedError(f"Jira issue {item_id} is not stamped with {request.stamp.named}")
+        sent = {_global_id(item_id, request.stamp, link): link for link in request.sent}
+        holds_links = bool(request.links)
+        marked = stamped or StampValue.of(request.stamp)
+        if stamped is None or (holds_links and not marked.linked):
+            self._put_stamp(item_id, marked.model_copy(update={"linked": marked.linked or holds_links}))
+        self._delete_links(item_id, request.stamp, request.dropped)
+        for global_id, link in sent.items():
+            self._client.upsert_remote_link(item_id, global_id, link.url, link.title)
+        if marked.linked and not holds_links:
+            self._put_stamp(item_id, marked.model_copy(update={"linked": False}))
+        return request.links
+
     def close(self) -> None:
         self._client.close()
+
+    def _put_stamp(self, item_id: str, stamp: StampValue) -> None:
+        self._client.put_property(item_id, STAMP_PROPERTY, stamp.model_dump(mode="json"))
+
+    def _delete_links(self, item_id: str, stamp: Stamp, links: Iterable[ShownLink]) -> None:
+        for link in links:
+            self._client.delete_remote_link(item_id, remote_link_global_id(stamp, link.service, link.item_id))
 
     def _read_back_created(
         self, item_id: str, content: ItemContent, layout: Layout, stamp: StampValue

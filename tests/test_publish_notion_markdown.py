@@ -13,7 +13,7 @@ from skaldr.publish.notion.page_markdown import (
     stamp_line,
     without_comment_markers,
 )
-from skaldr.publish.transport import Stamp
+from skaldr.publish.transport import ShownLink, Stamp
 
 INTRO = "## Welcome\nWelcome to the garden.\n"
 TOOLS = "## Tools\n- Spade.\n- Rake.\n"
@@ -202,6 +202,146 @@ def test_the_stamp_names_the_section_an_item_holds() -> None:
         'Published with skaldr from document garden-handbook, section tools {color="gray"}\n',
         Stamp("garden-handbook", "tools"),
         {"tools": TOOLS},
+    )
+
+
+def _issue(key: str) -> ShownLink:
+    return ShownLink(
+        service="jira", item_id=key, url=f"https://example.atlassian.net/browse/{key}", title=key
+    )
+
+
+DEMO_12 = _issue("DEMO-12")
+OPS_3 = _issue("OPS-3")
+GARDEN_OPS_4 = _issue("GARDEN_OPS-4")
+HANDBOOK_PAGE = ShownLink(
+    service="notion",
+    item_id="0123456789abcdef0123456789abcdef",
+    url="https://www.notion.so/0123456789abcdef0123456789abcdef",
+    title="Handbook",
+)
+
+
+@pytest.mark.parametrize(
+    ("links", "line"),
+    [
+        pytest.param(
+            (),
+            'Published with skaldr from document garden-handbook, section planting {color="gray"}\n',
+            id="no-links",
+        ),
+        pytest.param(
+            (DEMO_12,),
+            "Published with skaldr from document garden-handbook, section planting · Jira "
+            '[DEMO-12](https://example.atlassian.net/browse/DEMO-12) {color="gray"}\n',
+            id="one-issue",
+        ),
+        pytest.param(
+            (DEMO_12, OPS_3),
+            "Published with skaldr from document garden-handbook, section planting · Jira "
+            "[DEMO-12](https://example.atlassian.net/browse/DEMO-12), "
+            '[OPS-3](https://example.atlassian.net/browse/OPS-3) {color="gray"}\n',
+            id="two-issues",
+        ),
+        pytest.param(
+            (GARDEN_OPS_4,),
+            "Published with skaldr from document garden-handbook, section planting · Jira "
+            '[GARDEN\\_OPS-4](https://example.atlassian.net/browse/GARDEN_OPS-4) {color="gray"}\n',
+            id="escaped-title",
+        ),
+        *(
+            pytest.param(
+                (DEMO_12.model_copy(update={"title": title}),),
+                "Published with skaldr from document garden-handbook, section planting · Jira "
+                f'[{written}](https://example.atlassian.net/browse/DEMO-12) {{color="gray"}}\n',
+                id=case,
+            )
+            for case, title, written in [
+                ("brackets", "Beds [north]", "Beds \\[north\\]"),
+                ("a-lone-closing-bracket", "Beds ]", "Beds \\]"),
+                ("a-backslash", "Beds\\north", "Beds\\\\north"),
+                ("a-comma-inside", "Beds, north", "Beds, north"),
+                ("the-group-separator-inside", "Beds · Jira notes", "Beds · Jira notes"),
+                ("a-trailing-comma", "Beds,", "Beds,"),
+                ("a-trailing-space", "Beds ", "Beds "),
+                ("a-trailing-link-separator", "Beds, ", "Beds, "),
+            ]
+        ),
+        pytest.param(
+            (DEMO_12.model_copy(update={"url": "https://example.atlassian.net/browse/DEMO-12?view=a%20b"}),),
+            "Published with skaldr from document garden-handbook, section planting · Jira "
+            '[DEMO-12](https://example.atlassian.net/browse/DEMO-12?view=a%20b) {color="gray"}\n',
+            id="a-percent-encoded-address",
+        ),
+    ],
+)
+def test_the_stamp_names_each_linked_item_and_reads_back_with_its_links(
+    links: tuple[ShownLink, ...], line: str
+) -> None:
+    written = stamp_line(Stamp("garden-handbook", "planting"), links)
+
+    keyed = keyed_page(_page(PLANTING, written), {"planting": PLANTING})
+
+    assert (written, keyed.stamp, keyed.links, keyed.stamp_line, keyed.raw_sections) == (
+        line,
+        Stamp("garden-handbook", "planting"),
+        links,
+        line,
+        {"planting": PLANTING},
+    )
+
+
+def test_the_stamp_groups_its_links_by_service_in_the_order_each_service_first_appears() -> None:
+    written = stamp_line(Stamp("garden-handbook", None), (DEMO_12, HANDBOOK_PAGE, OPS_3))
+
+    keyed = keyed_page(_page(INTRO, written), {"intro": INTRO})
+
+    assert (written, keyed.links) == (
+        "Published with skaldr from document garden-handbook · Jira "
+        "[DEMO-12](https://example.atlassian.net/browse/DEMO-12), "
+        "[OPS-3](https://example.atlassian.net/browse/OPS-3) · Notion "
+        '[Handbook](https://www.notion.so/0123456789abcdef0123456789abcdef) {color="gray"}\n',
+        (DEMO_12, OPS_3, HANDBOOK_PAGE),
+    )
+
+
+def test_a_stamp_written_before_links_existed_reads_with_no_links() -> None:
+    keyed = keyed_page(_page(INTRO, STAMP_LINE), {"intro": INTRO})
+
+    assert (keyed.stamp, keyed.links) == (STAMP, ())
+
+
+def test_a_stamp_line_that_names_no_service_after_the_dot_is_content() -> None:
+    line = 'Published with skaldr from document garden-handbook · see the notes {color="gray"}\n'
+
+    keyed = keyed_page(_page(INTRO, line), {"intro": INTRO})
+
+    assert (keyed.stamp, keyed.links, keyed.raw_sections) == (None, (), {"intro": INTRO + line})
+
+
+def test_text_after_the_service_name_that_holds_no_link_leaves_the_stamp_with_no_links() -> None:
+    line = 'Published with skaldr from document garden-handbook · Jira DEMO-12 {color="gray"}\n'
+
+    keyed = keyed_page(_page(INTRO, line), {"intro": INTRO})
+
+    assert (keyed.stamp, keyed.links, keyed.stamp_line) == (STAMP, (), line)
+
+
+def test_a_stamp_link_whose_address_names_no_item_is_known_by_its_address() -> None:
+    line = (
+        "Published with skaldr from document garden-handbook · Jira "
+        '[DEMO-12](https://example.com/elsewhere) {color="gray"}\n'
+    )
+
+    keyed = keyed_page(_page(INTRO, line), {"intro": INTRO})
+
+    assert keyed.links == (
+        ShownLink(
+            service="jira",
+            item_id="https://example.com/elsewhere",
+            url="https://example.com/elsewhere",
+            title="DEMO-12",
+        ),
     )
 
 

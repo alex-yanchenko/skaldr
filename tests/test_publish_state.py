@@ -17,6 +17,7 @@ from skaldr.publish.state import (
     save_state,
     state_path_for,
 )
+from skaldr.publish.transport import ShownLink
 from tests.factories.publish_factory import DOC_ID, OTHER_DOC_ID, TARGET_LABEL
 
 
@@ -60,6 +61,30 @@ def test_a_saved_state_loads_back_whole(tmp_path: Path) -> None:
     assert (load_state(path, DOC_ID), json.loads(path.read_text(encoding="utf-8"))["version"]) == (
         _state(),
         1,
+    )
+
+
+def test_a_state_file_saved_before_links_loads_with_no_links_and_one_with_links_loads_them(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "garden.skaldr-state.json"
+    issue = ShownLink(
+        service="jira", item_id="DEMO-1", url="https://example.atlassian.net/browse/DEMO-1", title="DEMO-1"
+    )
+    save_state(path, _state())
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    del saved["targets"][TARGET_LABEL]["document"]["links"]
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    before_links = load_state(path, DOC_ID)
+    saved["targets"][TARGET_LABEL]["document"]["links"] = [issue.model_dump(mode="json")]
+    path.write_text(json.dumps(saved), encoding="utf-8")
+
+    with_links = load_state(path, DOC_ID)
+
+    document = _state().targets[TARGET_LABEL].document
+    assert (before_links, with_links.targets[TARGET_LABEL].document) == (
+        _state(),
+        None if document is None else document.model_copy(update={"links": (issue,)}),
     )
 
 

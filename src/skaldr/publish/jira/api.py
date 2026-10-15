@@ -1,6 +1,6 @@
 from typing import Generic, TypeVar
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, RootModel
 
 DONE_CATEGORY = "done"
 Entry = TypeVar("Entry")
@@ -89,3 +89,17 @@ class EntityProperty(JiraModel):
 
 class JiraUser(JiraModel):
     account_id: str = Field(alias="accountId")
+
+
+class RemoteObject(JiraModel):
+    url: str
+    title: str = ""
+
+
+class RemoteLink(JiraModel):
+    global_id: str | None = Field(default=None, alias="globalId")
+    linked: RemoteObject = Field(alias="object")
+
+
+class RemoteLinks(RootModel[tuple[RemoteLink, ...]]):
+    model_config = ConfigDict(frozen=True)

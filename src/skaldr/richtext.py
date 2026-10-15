@@ -37,6 +37,7 @@ from skaldr.typed_links import (
     date_target,
     document_target,
     issue_key,
+    issue_url,
     person_key,
 )
 
@@ -220,7 +221,7 @@ def _typed_link_run(url: str, label: Rich, rules: RichContext) -> Run | None:
         return PersonMention(label, key, rules.people[key])
     if url.startswith(JIRA_SCHEME):
         key = issue_key(url)
-        return IssueLink(label, key, f"{rules.jira_site}/browse/{key}" if rules.jira_site else None)
+        return IssueLink(label, key, issue_url(rules.jira_site, key) if rules.jira_site else None)
     if url.startswith(DOC_SCHEME):
         return _document_run(document_target(url), label, rules)
     return None
