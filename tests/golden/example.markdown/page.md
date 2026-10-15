@@ -54,7 +54,7 @@ Every bin label now ends in a <ins>check digit</ins>. The cold room logged H<sub
 
 Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
 
-The recount runs 10 to 14 Jul, is led by Ada Park, is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows [the cold room plan](cold-room-plan.md).
+The recount runs <span data-range="2026-07-10/2026-07-14">10 to 14 Jul</span>, is led by Ada Park, is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows [the cold room plan](cold-room-plan.md).
 
 ### Count pipeline
 

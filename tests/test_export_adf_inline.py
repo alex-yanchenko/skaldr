@@ -406,18 +406,45 @@ def _date_node(timestamp: str) -> dict[str, object]:
     return {"type": "date", "attrs": {"timestamp": timestamp}}
 
 
-def test_a_date_mention_is_a_date_node_at_utc_midnight_in_epoch_milliseconds() -> None:
-    assert _written((DateMention((Plain("1 Oct"),), date(2026, 10, 1), None),)) == [
-        _date_node("1790812800000")
+def test_a_date_mention_is_its_label_then_a_date_node_at_utc_midnight_in_epoch_milliseconds() -> None:
+    assert _written((Plain("by "), DateMention((Plain("1 Oct"),), date(2026, 10, 1), None))) == [
+        _text("by 1 Oct "),
+        _date_node("1790812800000"),
     ]
 
 
-def test_a_date_range_is_the_start_date_to_the_end_date() -> None:
+def test_a_date_range_is_its_label_then_the_start_date_to_the_end_date() -> None:
     assert _written((DateMention((Plain("the week"),), date(2026, 10, 5), date(2026, 10, 9)),)) == [
+        _text("the week "),
         _date_node("1791158400000"),
         _text(" to "),
         _date_node("1791504000000"),
     ]
+
+
+def test_a_date_label_keeps_its_marks_and_the_space_before_the_date_node_carries_none() -> None:
+    runs = (DateMention((Styled("bold", (Plain("1 Oct"),)),), date(2026, 10, 1), None),)
+
+    assert _written(runs) == [_text("1 Oct", STRONG), _text(" "), _date_node("1790812800000")]
+
+
+def test_a_date_label_that_is_an_issue_card_alone_is_kept() -> None:
+    links = IssueLinks(SITE, frozenset({"PLAN"}))
+    runs = (DateMention((Plain("PLAN-12"),), date(2026, 10, 1), None),)
+
+    assert _written(runs, links) == [
+        {"type": "inlineCard", "attrs": {"url": f"{SITE}/browse/PLAN-12"}},
+        _text(" "),
+        _date_node("1790812800000"),
+    ]
+
+
+def test_a_blank_date_label_is_the_date_node_alone() -> None:
+    assert _written((DateMention((Plain(" "),), date(2026, 10, 1), None),)) == [_date_node("1790812800000")]
+
+
+def test_an_empty_date_label_is_the_date_node_alone() -> None:
+    assert _written((DateMention((), date(2026, 10, 1), None),)) == [_date_node("1790812800000")]
 
 
 def test_a_person_with_a_jira_account_is_a_mention_of_that_account() -> None:
