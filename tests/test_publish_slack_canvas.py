@@ -3,14 +3,15 @@ import pytest
 from skaldr.publish.slack.canvas_markdown import (
     UNKEYED_SECTION,
     CanvasBlock,
+    HtmlSection,
     archived_line,
     canvas_blocks,
     canvas_markdown_of,
     canvas_stamp_line,
     comparable_block,
     comparable_text,
+    html_sections,
     keyed_canvas,
-    section_ids,
 )
 from skaldr.publish.transport import ShownLink, Stamp
 
@@ -328,24 +329,66 @@ def test_the_archived_line_names_the_document() -> None:
 
 
 @pytest.mark.parametrize(
-    ("html", "ids"),
+    ("html", "sections"),
     [
         pytest.param(
             "<h1 id='temp:C:1'>Garden</h1><p id='temp:C:2'>Welcome <b>all</b>.</p><hr id='temp:C:3'>"
-            "<ul id='temp:C:4'><li id='temp:C:5'>Spade</li></ul>",
-            ("temp:C:1", "temp:C:2", "temp:C:3", "temp:C:4"),
+            "<ul id='temp:C:4'><li id='temp:C:5'>Spade</li><li id='temp:C:6'>Rake &amp; hoe</li></ul>",
+            (
+                HtmlSection("temp:C:1", ("garden",)),
+                HtmlSection("temp:C:2", ("welcome", "all")),
+                HtmlSection("temp:C:3", ()),
+                HtmlSection("temp:C:4", ("spade", "rake", "hoe")),
+            ),
             id="top-level-elements",
         ),
         pytest.param(
-            "<html><head><title>x</title><meta charset='utf-8'></head><body><p id='a'>x</p><br/>"
+            "<html><head><title>x</title><meta charset='utf-8'></head><body><p id='a'>Bed</p><br/>"
             "<img id='b' src='x.png'/></body></html>",
-            ("a", None, "b"),
+            (HtmlSection("a", ("bed",)), HtmlSection(None, ()), HtmlSection("b", ())),
             id="document-wrapper-and-void-elements",
         ),
         pytest.param("", (), id="empty"),
     ],
 )
-def test_each_top_level_element_of_the_html_gives_its_section_id(
-    html: str, ids: tuple[str | None, ...]
+def test_each_top_level_element_of_the_html_gives_its_section_id_and_words(
+    html: str, sections: tuple[HtmlSection, ...]
 ) -> None:
-    assert section_ids(html) == ids
+    assert html_sections(html) == sections
+
+
+@pytest.mark.parametrize(
+    ("words", "block", "shown"),
+    [
+        pytest.param(("sow", "in", "spring"), "Sow in spring.", True, id="paragraph"),
+        pytest.param(("planting",), "## Planting", True, id="heading"),
+        pytest.param(("spade", "rake"), "* Spade.\n* Rake.", True, id="list-markers"),
+        pytest.param(("spade", "rake"), "1. Spade.\n2. Rake.", True, id="numbered-list"),
+        pytest.param(("spade", "rake"), "- [x] Spade.\n- [ ] Rake.", True, id="checklist-marks"),
+        pytest.param(("run", "again"), "```bash\nrun again\n```", True, id="fence-language"),
+        pytest.param(
+            ("bed", "crop", "north", "beans"),
+            "|Bed|Crop|\n|  ---  |  ---  |\n|North|Beans|",
+            True,
+            id="table",
+        ),
+        pytest.param(
+            ("see", "demo", "12"),
+            "See [DEMO-12](https://example.atlassian.net/browse/DEMO-12)",
+            True,
+            id="link-text",
+        ),
+        pytest.param(("ask", "rowan", "first"), "Ask <@U0EXAMPLE1> first", True, id="mention-shown-by-name"),
+        pytest.param(("ask", "first"), "Ask ![](@U0EXAMPLE1) first", True, id="mention-as-sent"),
+        pytest.param(("bring", "gloves"), "Bring gloves :gloves:", True, id="emoji-shown-as-a-picture"),
+        pytest.param((), "&nbsp;", True, id="list-separator"),
+        pytest.param(("note",), "::: {.callout}\nNote\n:::", True, id="callout"),
+        pytest.param(("planting",), "Sow in spring.", False, id="another-block"),
+        pytest.param(("sow", "in"), "Sow in spring.", False, id="words-missing"),
+        pytest.param(("spring", "in", "sow"), "Sow in spring.", False, id="words-out-of-order"),
+    ],
+)
+def test_an_html_section_shows_a_block_when_it_holds_the_blocks_words_in_order(
+    words: tuple[str, ...], block: str, shown: bool
+) -> None:
+    assert HtmlSection("temp:C:1", words).shows(block) is shown

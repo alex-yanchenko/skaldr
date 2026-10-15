@@ -557,6 +557,38 @@ def test_a_section_list_that_stops_matching_halfway_says_the_canvas_is_partly_wr
     )
 
 
+def test_a_section_list_whose_text_does_not_match_the_markdown_stops_before_any_write() -> None:
+    slack = InMemorySlack(html_shows_blocks_out_of_order_after=0)
+    created = _created(slack)
+    raw = dict(created.raw_sections)
+
+    with pytest.raises(WriteRejectedError) as raised:
+        slack.transport().write_section(CANVAS, _removing_tools(raw))
+
+    assert (str(raised.value), _edits(slack)) == (
+        f"Slack shows section {_section(CANVAS, 0, 3)} of canvas {CANVAS} with other text than block 3 of "
+        "its Markdown, so skaldr cannot tell which to change; nothing was written",
+        [],
+    )
+
+
+def test_a_section_list_whose_text_stops_matching_halfway_says_the_canvas_is_partly_written() -> None:
+    slack = InMemorySlack(html_shows_blocks_out_of_order_after=1)
+    created = _created(slack)
+    raw = dict(created.raw_sections)
+
+    with pytest.raises(ConnectorError) as raised:
+        slack.transport().write_section(CANVAS, _removing_tools(raw))
+
+    assert (type(raised.value), str(raised.value), len(_edits(slack))) == (
+        ConnectorError,
+        f"Slack shows section {_section(CANVAS, 1, 2)} of canvas {CANVAS} with other text than block 2 of "
+        "its Markdown, so skaldr cannot tell which to change; the canvas is partly written, so publish again "
+        "to finish",
+        1,
+    )
+
+
 def test_a_section_write_puts_a_missing_stamp_back_at_the_end() -> None:
     slack = InMemorySlack()
     canvas_id = slack.add_canvas(TITLE_TEXT, "Welcome to the garden.\n")

@@ -118,11 +118,10 @@ class StoredCanvas:
     def markdown(self) -> str:
         return "\n\n".join([f"# {self.title}", *map(_shown, self.blocks)]) + "\n"
 
-    def html(self, canvas_id: str, *, omits_the_last: bool = False) -> str:
+    def html(self, canvas_id: str, *, omits_the_last: bool = False, out_of_order: bool = False) -> str:
         title_id, *block_ids = self.ids(canvas_id)
-        elements = [
-            _element(section_id, block) for section_id, block in zip(block_ids, self.blocks, strict=True)
-        ]
+        blocks = list(reversed(self.blocks)) if out_of_order else self.blocks
+        elements = [_element(section_id, block) for section_id, block in zip(block_ids, blocks, strict=True)]
         shown = elements[:-1] if omits_the_last else elements
         return f"<h1 id='{title_id}'>{html.escape(self.title)}</h1>{''.join(shown)}"
 
@@ -166,6 +165,7 @@ class InMemorySlack:
     slept: list[float] = field(default_factory=list[float])
     failures: list[_Failure] = field(default_factory=list[_Failure])
     html_lists_one_section_less_after: int | None = None
+    html_shows_blocks_out_of_order_after: int | None = None
     retry_after_next: str | None = None
     made: int = 0
     html_reads: int = 0
@@ -270,8 +270,13 @@ class InMemorySlack:
 
     def _html(self, canvas_id: str, canvas: StoredCanvas) -> str:
         omits = self.html_lists_one_section_less_after
+        reorders = self.html_shows_blocks_out_of_order_after
         self.html_reads += 1
-        return canvas.html(canvas_id, omits_the_last=omits is not None and self.html_reads > omits)
+        return canvas.html(
+            canvas_id,
+            omits_the_last=omits is not None and self.html_reads > omits,
+            out_of_order=reorders is not None and self.html_reads > reorders,
+        )
 
     def _edit(self, canvas_id: str, canvas: StoredCanvas, changes: list[dict[str, Any]]) -> httpx2.Response:
         if len(changes) != 1:

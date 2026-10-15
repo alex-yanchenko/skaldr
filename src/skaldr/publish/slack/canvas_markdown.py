@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Final, Literal
 
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
 from typing_extensions import override
 
 from skaldr.export.slack import CANVAS_ESCAPES, CANVAS_FENCE, LIST_SEPARATOR
@@ -35,6 +37,12 @@ VOID_ELEMENTS: Final = frozenset(
 )
 DOCUMENT_ELEMENTS: Final = frozenset({"html", "body"})
 HEAD_ELEMENT: Final = "head"
+WORD: Final = re.compile(r"\w+")
+SLACK_ONLY_MARKUP: Final = re.compile(r"<[@#!][^>]*>|:[a-z0-9_+-]+:|\[[ xX]\]")
+CODE_TOKENS: Final = frozenset({"fence", "code_block"})
+TEXT: Final = "text"
+CODE_INLINE: Final = "code_inline"
+BLOCK_MARKDOWN: Final = MarkdownIt("commonmark").enable("table")
 
 BlockRole = Literal["title", "published", "added", "blank", "stamp", "below"]
 
@@ -257,34 +265,79 @@ def keyed_canvas(markdown: str, layout: Mapping[str, str]) -> KeyedCanvas:
     )
 
 
-class _TopLevelIds(HTMLParser):
+def _words(text: str) -> tuple[str, ...]:
+    return tuple(word.casefold() for word in WORD.findall(text))
+
+
+def _shown_text(token: Token) -> str:
+    if token.type in CODE_TOKENS:
+        return token.content
+    return " ".join(
+        child.content if child.type == CODE_INLINE else SLACK_ONLY_MARKUP.sub(" ", child.content)
+        for child in token.children or []
+        if child.type in (TEXT, CODE_INLINE)
+    )
+
+
+def _block_words(block: str) -> tuple[str, ...]:
+    kept = "\n".join(line for line in block.split("\n") if not line.strip().startswith(CANVAS_FENCE))
+    return _words(" ".join(_shown_text(token) for token in BLOCK_MARKDOWN.parse(kept)))
+
+
+@dataclass(frozen=True)
+class HtmlSection:
+    section_id: str | None
+    words: tuple[str, ...]
+
+    def shows(self, block: str) -> bool:
+        shown = iter(self.words)
+        return all(word in shown for word in _block_words(block))
+
+
+@dataclass
+class _OpenSection:
+    section_id: str | None
+    text: list[str] = field(default_factory=list[str])
+
+
+class _TopLevelSections(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.depth = 0
-        self.ids: list[str | None] = []
+        self.sections: list[_OpenSection] = []
+        self.collecting = False
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in DOCUMENT_ELEMENTS:
             return
         if self.depth == 0 and tag != HEAD_ELEMENT:
-            self.ids.append(dict(attrs).get("id"))
+            self.sections.append(_OpenSection(dict(attrs).get("id")))
+            self.collecting = tag not in VOID_ELEMENTS
         if tag not in VOID_ELEMENTS:
             self.depth += 1
 
     @override
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag not in DOCUMENT_ELEMENTS and self.depth == 0:
-            self.ids.append(dict(attrs).get("id"))
+            self.sections.append(_OpenSection(dict(attrs).get("id")))
 
     @override
     def handle_endtag(self, tag: str) -> None:
         if tag not in DOCUMENT_ELEMENTS and tag not in VOID_ELEMENTS:
             self.depth = max(0, self.depth - 1)
+            self.collecting = self.collecting and self.depth > 0
+
+    @override
+    def handle_data(self, data: str) -> None:
+        if self.collecting:
+            self.sections[-1].text.append(data)
 
 
-def section_ids(html: str) -> tuple[str | None, ...]:
-    parser = _TopLevelIds()
+def html_sections(html: str) -> tuple[HtmlSection, ...]:
+    parser = _TopLevelSections()
     parser.feed(html)
     parser.close()
-    return tuple(parser.ids)
+    return tuple(
+        HtmlSection(section.section_id, _words(" ".join(section.text))) for section in parser.sections
+    )
