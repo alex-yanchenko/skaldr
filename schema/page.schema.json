@@ -3532,6 +3532,20 @@
           "default": null,
           "description": "The person's Jira account id, for the Jira writer. Not read when rendering.",
           "title": "Jira"
+        },
+        "slack": {
+          "anyOf": [
+            {
+              "pattern": "^U[0-9A-Z]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The person's Slack member id, such as U0EXAMPLE1. The Slack canvas export writes a `[Ada](user:ada)` link as a mention of this member; without it the link is its label.",
+          "title": "Slack"
         }
       },
       "title": "Person",

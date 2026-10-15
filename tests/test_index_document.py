@@ -678,6 +678,13 @@ def test_the_same_person_declared_the_same_way_in_two_parts_merges(tmp_path: Pat
     [
         pytest.param({}, {"ada": {"jira": "acct-2"}}, "one.yaml", "two.yaml", id="two-parts"),
         pytest.param({"ada": {"jira": "acct-2"}}, {}, "index.yaml", "one.yaml", id="index-and-part"),
+        pytest.param(
+            {},
+            {"ada": {"jira": "acct-1", "slack": "U0EXAMPLE2"}},
+            "one.yaml",
+            "two.yaml",
+            id="slack-id-differs",
+        ),
     ],
 )
 def test_one_person_key_declared_differently_in_two_files_names_both_files(
@@ -694,7 +701,7 @@ def test_one_person_key_declared_differently_in_two_files_names_both_files(
 
     assert _refusal(index) == (
         f"person 'ada' is declared differently in {tmp_path / first} and {tmp_path / second}; "
-        "an index merges every part's people, so give it one Notion and Jira id or rename one key"
+        "an index merges every part's people, so give it one Notion, Jira and Slack id or rename one key"
     )
 
 

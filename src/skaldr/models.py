@@ -311,6 +311,7 @@ class Badge(FrozenModel):
 
 PERSON_KEY_PATTERN = REFERENCE_KEY_PATTERN
 NOTION_USER_PATTERN = r"^user://[0-9A-Fa-f-]+$"
+SLACK_MEMBER_PATTERN = r"^U[0-9A-Z]+$"
 JIRA_SITE_SCHEME = "https://"
 
 
@@ -327,6 +328,12 @@ class Person(FrozenModel):
     jira: str | None = Field(
         default=None,
         description="The person's Jira account id, for the Jira writer. Not read when rendering.",
+    )
+    slack: str | None = Field(
+        default=None,
+        pattern=SLACK_MEMBER_PATTERN,
+        description="The person's Slack member id, such as U0EXAMPLE1. The Slack canvas export writes a "
+        "`[Ada](user:ada)` link as a mention of this member; without it the link is its label.",
     )
 
 
@@ -3638,7 +3645,8 @@ def _merged_people(declared: Sequence[tuple[Path, Mapping[str, Person]]]) -> dic
             if key in merged and merged[key] != person:
                 raise ReportError(
                     f"person {key!r} is declared differently in {declared_in[key]} and {path}; "
-                    "an index merges every part's people, so give it one Notion and Jira id or rename one key"
+                    "an index merges every part's people, so give it one Notion, Jira and Slack id "
+                    "or rename one key"
                 )
             merged.setdefault(key, person)
             declared_in.setdefault(key, path)
