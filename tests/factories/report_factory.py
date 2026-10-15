@@ -21,6 +21,9 @@ def make_index_report(parts: list[str], **overrides: Any) -> dict[str, Any]:
 
 NOTION_PAGE_URL = "https://www.notion.so/Team-Plans-0123456789abcdef0123456789abcdef"
 NOTION_PAGE_ID = "0123456789abcdef0123456789abcdef"
+SLACK_CONVERSATION_ID = "C0EXAMPLE1"
+SLACK_CANVAS_ID = "F0EXAMPLE1"
+SLACK_TEAM_ID = "T0EXAMPLE1"
 
 
 def make_section(section_id: str, **overrides: Any) -> dict[str, Any]:
@@ -35,6 +38,10 @@ def make_section(section_id: str, **overrides: Any) -> dict[str, Any]:
 
 def make_notion_target(**overrides: Any) -> dict[str, Any]:
     return {"to": "notion", "where": {"parent_page": NOTION_PAGE_URL}, **overrides}
+
+
+def make_slack_target(**overrides: Any) -> dict[str, Any]:
+    return {"to": "slack", "where": {"conversation": SLACK_CONVERSATION_ID}, **overrides}
 
 
 def make_jira_target(**overrides: Any) -> dict[str, Any]:

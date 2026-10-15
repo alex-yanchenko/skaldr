@@ -361,8 +361,8 @@ def test_an_unreadable_index_after_the_oauth_exchange_revokes_the_token_it_canno
 
     assert (str(raised.value), [summarise(request) for request in seen], keychain.entries) == (
         "The keychain index that lists the skaldr sign-ins is unreadable; remove the keychain entry named "
-        "index under skaldr, then name each Jira site or Notion workspace to find its sign-in again. "
-        "The token Notion issued has been revoked.",
+        "index under skaldr, then name each Jira site, Notion workspace or Slack workspace to find its "
+        "sign-in again. The token Notion issued has been revoked.",
         [revoke_request_for("new-access")],
         {("skaldr", "index"): "not json"},
     )

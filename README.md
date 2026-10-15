@@ -85,9 +85,9 @@ A block a target cannot show the way the page does is refused before anything is
 
 There are no styling flags: everything is in the content file.
 
-## Sign in to Notion and Jira
+## Sign in to Notion, Jira and Slack
 
-`skaldr auth` signs you in to Notion and Jira, checks the credentials, and stores them. `skaldr publish` sends a document to the Notion pages and Jira issues its `publish` block names (see Publishing in `skaldr --guide`). `skaldr auth` needs the `publish` extra. The Homebrew formula includes the extra and runs on Apple silicon and Linux. Elsewhere, install the extra with uv or pipx:
+`skaldr auth` signs you in to Notion, Jira and Slack, checks the credentials, and stores them. `skaldr publish` sends a document to the Notion pages, Jira issues and Slack canvases its `publish` block names (see Publishing in `skaldr --guide`). `skaldr auth` needs the `publish` extra. The Homebrew formula includes the extra and runs on Apple silicon and Linux. Elsewhere, install the extra with uv or pipx:
 
 ```bash
 uv tool install 'skaldr[publish]'   # or: pipx install 'skaldr[publish]'
@@ -98,6 +98,7 @@ On an Intel Mac, add `--no-build-package cryptography` to the uv command, or `--
 ```bash
 skaldr auth notion                  # OAuth in your browser, through your own Notion connection
 skaldr auth jira                    # your Atlassian account email and an API token
+skaldr auth slack                   # the user token of your own Slack app
 skaldr auth status                  # every sign-in, who it is as, and where the credentials live
 skaldr auth logout notion           # revoke the Notion token and remove it (removed even if Notion refuses)
 skaldr auth logout jira             # remove the Jira token; revoke it on Atlassian's API tokens page
@@ -111,9 +112,11 @@ skaldr keeps one sign-in per Jira site and one per Notion workspace, so signing 
 
 **Jira.** Create an API token at https://id.atlassian.com/manage-profile/security/api-tokens. `skaldr auth jira` asks for your site (`https://<site>.atlassian.net`), your account email and the token, and checks them against Jira's `/rest/api/3/myself` before saving anything. The site must be a Jira Cloud host ending in `.atlassian.net`. A pasted page URL is cut back to its site, and a site that carries a user name, password, query, fragment, backslash or a port other than 443 is refused, so the token only ever goes to the host you named. `JIRA_SITE` is held to the same rules. Use a token created without scopes: a scoped token only works against `api.atlassian.com`. Atlassian tokens expire after at most a year, so when Jira starts refusing it, create a new one and sign in again.
 
+**Slack.** Slack has no personal token outside an app, so you create your own app once. At https://api.slack.com/apps create an app for your workspace, add the user token scopes `canvases:read`, `canvases:write` and `chat:write` under OAuth & Permissions, install it, and copy its User OAuth Token, which starts with `xoxp-`. `skaldr auth slack` asks for that token (read without echo), checks it with Slack's `auth.test` and saves it under the workspace's id; a bot token (`xoxb-`) is refused, because skaldr publishes as you. `skaldr auth logout slack` removes the token from the keychain; revoke it in your app's OAuth & Permissions page.
+
 Secrets go to the system keychain (macOS Keychain, Windows Credential Locker, or the Secret Service on Linux) and never to a file, a log or a command-line argument. skaldr refuses the `keyrings.alt` backends, because they store secrets where skaldr cannot vouch for them, and `keyring.backends.null` and `keyring.backends.fail`, which store nothing. That includes a subclass of one of them and one that sits in keyring's chain of backends. The refusal names the backend so you can choose a secure one with `PYTHON_KEYRING_BACKEND` or keyring's `keyringrc.cfg`. Before a sign-in asks for anything or opens the browser, skaldr checks the backend and reads and parses its own index entry once, which catches a refused, locked or unreadable keychain before Notion issues a token. A keychain that reads but then refuses the write is only found when saving. If the save fails for any reason, an interrupted keychain prompt included, skaldr revokes the token Notion just issued and says so, and if the revoke fails too, it tells you to remove the connection in Notion yourself.
 
-For CI or a secrets manager, environment variables take precedence over the keychain: `NOTION_ACCESS_TOKEN` (with `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET` as an optional pair: one without the other is refused), or `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` together. For credentials from the environment, `skaldr auth status` names the variables and the Jira site, never the account email, so its output can go to a build log.
+For CI or a secrets manager, environment variables take precedence over the keychain: `NOTION_ACCESS_TOKEN` (with `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET` as an optional pair: one without the other is refused), or `JIRA_SITE`, `JIRA_EMAIL` and `JIRA_API_TOKEN` together, or `SLACK_USER_TOKEN`. For credentials from the environment, `skaldr auth status` names the variables and the Jira site, never the account email, so its output can go to a build log.
 
 ## The content file
 

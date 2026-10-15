@@ -1709,7 +1709,7 @@ def test_remote_links_skaldr_did_not_write_for_this_item_are_neither_read_nor_re
         None,
         f"skaldr:kitchen-rota:document:notion:{ROTA_PAGE_ID}",
         f"skaldr:garden-handbook:section:tools:notion:{ROTA_PAGE_ID}",
-        f"skaldr:garden-handbook:document:slack:{ROTA_PAGE_ID}",
+        f"skaldr:garden-handbook:document:confluence:{ROTA_PAGE_ID}",
         "skaldr:garden-handbook:document:notion:",
         "skaldr:garden-handbook:document:notion",
     ]

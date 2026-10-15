@@ -3300,7 +3300,8 @@ class Report(FrozenModel):
     blocks: list[PageBlock] = Field(default_factory=list[PageBlock], min_length=1)
     publish: Publish | None = Field(
         default=None,
-        description="Where the document publishes (Notion pages, Jira issues). Omitted from the source "
+        description="Where the document publishes (Notion pages, Jira issues, Slack canvases). Omitted from "
+        "the source "
         "embedded in a rendered page. Not yet accepted on an index document.",
     )
 

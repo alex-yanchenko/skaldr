@@ -25,11 +25,13 @@ from skaldr.publish.transport import (
     Transport,
     is_unset,
 )
-from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
-from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target
+from skaldr.publish_block import JiraTarget, NotionTarget, SlackTarget, TargetBase
+from skaldr.publish_block.target import JsonFields
+from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target, make_slack_target
 from tests.factories.jira_factory import SITE, FakeJira
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
 from tests.factories.publish_factory import DOC_ID, FakeTransport
+from tests.factories.slack_factory import TEAM_ID, WORKSPACE_URL, InMemorySlack
 
 OTHER_PAGE_ID = "fedcba9876543210fedcba9876543210"
 STAMP = Stamp(DOC_ID, None)
@@ -76,7 +78,16 @@ JIRA_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE = ItemContent(
     },
     fields={"Area": "Shed", "labels": ["soil", "seeds"]},
 )
+SLACK_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE = ItemContent(
+    title="Garden handbook",
+    sections={
+        "intro": "- Sow in spring.\n\n&nbsp;\n\n- [x] Water daily.\n",
+        "beds": "| Bed | Crop |\n| --- | :---: |\n| North | ![](@U0EXAMPLE1) |\n",
+        "spacer": "&nbsp;\n",
+    },
+)
 NOTION_TARGET = NotionTarget.model_validate(make_notion_target())
+SLACK_TARGET = SlackTarget.model_validate(make_slack_target())
 JIRA_TARGET = JiraTarget.model_validate(make_jira_target())
 SEEDLING = "🌱"
 SUNFLOWER = "🌻"
@@ -125,6 +136,7 @@ class TransportUnderTest:
     writes_into_pages: bool
     reports_edits: bool
     carries_look: bool = True
+    carries_fields: bool = True
     spell: Callable[[str], str] = field(default=_as_written)
     form_fixture: ItemContent = COMPARABLE_FORM_IDEMPOTENCE_FIXTURE
     links: tuple[ShownLink, ...] = ISSUE_LINKS
@@ -202,6 +214,30 @@ def _jira_stamp_refusal(item_id: str, stamp: Stamp) -> str:
     return f"Jira issue {item_id} is not stamped with {stamp.named}"
 
 
+def _slack() -> Instance:
+    slack = InMemorySlack()
+    empty_canvas = slack.add_canvas("Blank page")
+
+    def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
+        slack.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
+
+    return Instance(
+        slack.transport(),
+        empty_canvas,
+        edit_section_by_hand,
+        lambda: len(slack.writes()),
+        lambda: slack.add_canvas("Blank canvas", "Welcome.\n"),
+    )
+
+
+def _slack_link(item_id: str, title: str) -> ItemLink:
+    return ItemLink(f"{WORKSPACE_URL}docs/{TEAM_ID}/{item_id}", title)
+
+
+def _slack_stamp_refusal(item_id: str, stamp: Stamp) -> str:
+    return f"Slack canvas {item_id} is not stamped with {stamp.named}"
+
+
 TRANSPORTS = [
     pytest.param(
         TransportUnderTest(_fake, NOTION_TARGET, writes_into_pages=True, reports_edits=True),
@@ -234,6 +270,20 @@ TRANSPORTS = [
         ),
         id="jira",
     ),
+    pytest.param(
+        TransportUnderTest(
+            _slack,
+            SLACK_TARGET,
+            writes_into_pages=True,
+            reports_edits=True,
+            carries_look=False,
+            carries_fields=False,
+            form_fixture=SLACK_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,
+            expected_link=_slack_link,
+            stamp_refusal=_slack_stamp_refusal,
+        ),
+        id="slack",
+    ),
 ]
 
 
@@ -245,7 +295,8 @@ def under_test(request: pytest.FixtureRequest) -> TransportUnderTest:
 
 def _content(under_test: TransportUnderTest) -> ItemContent:
     sections = {key: under_test.spell(text) for key, text in CONTENT.sections.items()}
-    return CONTENT.model_copy(update={"sections": sections})
+    fields = CONTENT.fields if under_test.carries_fields else {}
+    return CONTENT.model_copy(update={"sections": sections, "fields": fields})
 
 
 def _spelled(under_test: TransportUnderTest, sections: dict[str, str]) -> dict[str, str]:
@@ -320,7 +371,7 @@ def test_a_release_clears_the_sections_the_named_fields_and_the_stamp_and_can_be
 
     assert (_sections(released), released.comparable.fields.get("Owner"), released.stamp) == (
         [],
-        "Rowan",
+        _content(under_test).fields.get("Owner"),
         None,
     )
     assert is_unset(released.comparable.fields.get("Area"))
@@ -410,18 +461,17 @@ def test_a_fields_write_sets_what_changed_and_leaves_a_cleared_field_unset_or_ab
 ) -> None:
     instance, created = _created(under_test)
     transport = instance.transport
+    fields: JsonFields = {"Area": "Orchard"} if under_test.carries_fields else {}
 
     transport.write_fields(
         created.item_id,
-        FieldsWrite(
-            "Garden guide", {"Area": "Orchard"}, CONTENT.title, {"Area": "Shed", "Owner": "Rowan"}, STAMP
-        ),
+        FieldsWrite("Garden guide", fields, CONTENT.title, _content(under_test).fields, STAMP),
     )
     read = transport.read_item(created.item_id, _content(under_test))
 
     assert (read.comparable.title, read.comparable.fields.get("Area"), read.stamp) == (
         "Garden guide",
-        "Orchard",
+        fields.get("Area"),
         STAMP,
     )
     assert is_unset(read.comparable.fields.get("Owner"))
@@ -435,7 +485,8 @@ def test_a_fields_write_for_another_section_of_the_document_is_rejected_and_chan
 
     with pytest.raises(WriteRejectedError):
         transport.write_fields(
-            created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, CONTENT.fields, STAMP)
+            created.item_id,
+            FieldsWrite("Garden guide", {}, CONTENT.title, _content(under_test).fields, STAMP),
         )
     read = transport.read_item(created.item_id, _content(under_test))
 
@@ -533,12 +584,13 @@ def test_creating_into_an_empty_page_sets_its_title_and_the_requested_fields_and
         NewItem(under_test.target, STAMP, _content(under_test), into_id=page_id, into_raw_sections=raw)
     )
     read = transport.read_item(page_id, _content(under_test))
+    fields: JsonFields = {"Status": None, **CONTENT.fields} if under_test.carries_fields else {}
 
     assert (created.item_id, _sections(read), read.comparable.title, read.comparable.fields, read.stamp) == (
         page_id,
         _expected_sections(transport, dict(_content(under_test).sections)),
         CONTENT.title,
-        {"Status": None, **CONTENT.fields},
+        fields,
         STAMP,
     )
 

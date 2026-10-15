@@ -17,12 +17,17 @@ from skaldr.auth.notion import (
     save_notion_replacing_the_old_sign_in,
     sign_in_to_notion,
 )
+from skaldr.auth.slack import SLACK_APPS_PAGE, SLACK_USER_SCOPES, verify_slack_token
 from skaldr.auth.store import (
+    SLACK_USER_TOKEN_PREFIX,
+    SLACK_USER_TOKEN_VARIABLE,
     JiraCredentials,
     NotionCredentials,
+    SlackCredentials,
     StoredEntry,
     find_jira,
     find_notion,
+    find_slack,
     forget,
     jira_from_environment,
     normalise_site,
@@ -30,8 +35,11 @@ from skaldr.auth.store import (
     notion_from_environment,
     refuse_an_unusable_keychain,
     save_jira,
+    save_slack,
+    slack_from_environment,
     stored_jira_sign_ins,
     stored_notion_sign_ins,
+    stored_slack_sign_ins,
 )
 from skaldr.errors import AuthError
 from skaldr.services import Service
@@ -56,12 +64,16 @@ def main(
             _sign_in_to_notion(args.port, transport, open_browser)
         elif args.command == "jira":
             _sign_in_to_jira(transport)
+        elif args.command == "slack":
+            _sign_in_to_slack(transport)
         elif args.command == "status":
             return _print_status()
         elif args.command == "logout" and args.service == "notion":
             _log_out_of_notion(args.selector, transport)
         elif args.command == "logout" and args.service == "jira":
             _log_out_of_jira(args.selector)
+        elif args.command == "logout" and args.service == "slack":
+            _log_out_of_slack(args.selector)
         else:
             raise AssertionError(f"skaldr auth has no handler for {args.command!r}")
     except AuthError as exc:
@@ -76,8 +88,8 @@ def main(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="skaldr auth",
-        description="Sign skaldr in to Notion and Jira. Credentials go to the system keychain; the "
-        "NOTION_* and JIRA_* environment variables override it.",
+        description="Sign skaldr in to Notion, Jira and Slack. Credentials go to the system keychain; the "
+        "NOTION_*, JIRA_* and SLACK_USER_TOKEN environment variables override it.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     notion = commands.add_parser("notion", help="sign in to Notion through your own OAuth public connection")
@@ -88,6 +100,7 @@ def _parser() -> argparse.ArgumentParser:
         help=f"the port in the redirect URI you registered with Notion (default {DEFAULT_CALLBACK_PORT})",
     )
     commands.add_parser("jira", help="sign in to Jira Cloud with your account email and an API token")
+    commands.add_parser("slack", help="sign in to Slack with the user token of your own Slack app")
     commands.add_parser("status", help="list every sign-in, who it is as, and where the credentials live")
     logout = commands.add_parser(
         "logout", help="remove one sign-in from the keychain, revoking the Notion token first"
@@ -96,7 +109,8 @@ def _parser() -> argparse.ArgumentParser:
     logout.add_argument(
         "selector",
         nargs="?",
-        help="the Jira site, or the Notion workspace id or name; needed only when several are signed in",
+        help="the Jira site, or the Notion or Slack workspace id or name; needed only when several are "
+        "signed in",
     )
     return parser
 
@@ -162,8 +176,29 @@ def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
     print(f"{signed_in}. Saved to the keychain.")
 
 
+def _sign_in_to_slack(transport: httpx2.BaseTransport | None) -> None:
+    refuse_an_unusable_keychain()
+    print(
+        f"Create a Slack app once at {SLACK_APPS_PAGE}, give it the user token scopes "
+        f"{', '.join(SLACK_USER_SCOPES)}, install it to your workspace, and copy its User OAuth Token"
+    )
+    access_token = _required(
+        getpass(f"Slack user token ({SLACK_USER_TOKEN_PREFIX}...): "), "A Slack user token is required"
+    )
+    credentials = verify_slack_token(access_token, transport=transport)
+    save_slack(credentials)
+    workspace = _team_name(credentials) or _UNNAMED_WORKSPACE
+    user_name = printable_only(credentials.user_name or "")
+    as_user = f" as {user_name}" if user_name else ""
+    print(f"Signed in to Slack workspace {workspace}{as_user}. Saved to the keychain.")
+
+
 def _print_status() -> int:
-    sections = (("notion", _notion_status_lines), ("jira", _jira_status_lines))
+    sections = (
+        ("notion", _notion_status_lines),
+        ("jira", _jira_status_lines),
+        ("slack", _slack_status_lines),
+    )
     exit_code = 0
     for service, describe in sections:
         try:
@@ -241,6 +276,21 @@ def _log_out_of_jira(site: str | None) -> None:
     print(f"Signed out of Jira: removed from the keychain. Revoke the API token itself at {API_TOKENS_PAGE}")
 
 
+def _log_out_of_slack(workspace: str | None) -> None:
+    entry = find_slack(workspace)
+    if entry is None:
+        where = "" if workspace is None else f" workspace {printable_only(workspace)}"
+        print(f"Not signed in to Slack{where}.")
+        return
+    if not forget(entry):
+        print("A newer Slack sign-in was stored in the meantime and was kept.")
+        return
+    print(
+        "Signed out of Slack: removed from the keychain. Revoke the token itself in your Slack app at "
+        f"{SLACK_APPS_PAGE}, under OAuth & Permissions"
+    )
+
+
 def _status_lines(
     environment: Callable[[], str | None],
     stored: Callable[[], list[_StatusLine]],
@@ -291,6 +341,32 @@ def _jira_status_lines() -> list[_StatusLine]:
         lambda: [_describe_stored_jira(entry) for entry in stored_jira_sign_ins()],
         "not signed in (run `skaldr auth jira`)",
     )
+
+
+def _slack_status_lines() -> list[_StatusLine]:
+    def environment() -> str | None:
+        if slack_from_environment() is None:
+            return None
+        return f"user token from {SLACK_USER_TOKEN_VARIABLE} (environment)"
+
+    return _status_lines(
+        environment,
+        lambda: [_describe_stored_slack(entry) for entry in stored_slack_sign_ins()],
+        "not signed in (run `skaldr auth slack`)",
+    )
+
+
+def _describe_stored_slack(entry: StoredEntry[SlackCredentials]) -> _StatusLine:
+    if entry.credentials is None:
+        return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
+    workspace = _team_name(entry.credentials) or _UNNAMED_WORKSPACE
+    user_name = printable_only(entry.credentials.user_name or "")
+    as_user = f" as {user_name}" if user_name else ""
+    return _StatusLine(f"signed in to workspace {workspace} (id {entry.identifier}){as_user} (keychain)")
+
+
+def _team_name(credentials: SlackCredentials) -> str | None:
+    return printable_only(credentials.team_name or "") or None
 
 
 def _describe_stored_notion(entry: StoredEntry[NotionCredentials]) -> _StatusLine:

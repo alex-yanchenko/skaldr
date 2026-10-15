@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -51,6 +52,11 @@ _JIRA_SITE = "JIRA_SITE"
 _JIRA_EMAIL = "JIRA_EMAIL"
 _JIRA_API_TOKEN = "JIRA_API_TOKEN"
 JIRA_ENVIRONMENT = (_JIRA_SITE, _JIRA_EMAIL, _JIRA_API_TOKEN)
+SLACK_USER_TOKEN_VARIABLE = "SLACK_USER_TOKEN"
+SLACK_ENVIRONMENT = (SLACK_USER_TOKEN_VARIABLE,)
+SLACK_USER_TOKEN_PREFIX = "xoxp-"
+SLACK_TEAM_ID = re.compile(r"T[A-Z0-9]{2,}")
+_SERVICES_EVERY_INDEX_LISTS: tuple[Service, ...] = ("jira", "notion")
 _INSECURE_KEYRING_MODULES = ("keyrings.alt", "keyring.backends.null", "keyring.backends.fail")
 
 
@@ -86,7 +92,32 @@ class JiraCredentials(BaseModel):
         return origin
 
 
-CredentialsT = TypeVar("CredentialsT", NotionCredentials, JiraCredentials)
+def slack_token_refusal() -> str:
+    return (
+        f"skaldr signs in to Slack with a user token, which starts with {SLACK_USER_TOKEN_PREFIX}; copy the "
+        "User OAuth Token from your Slack app's OAuth & Permissions page"
+    )
+
+
+class SlackCredentials(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    access_token: str = Field(repr=False)
+    team_id: str | None = None
+    team_name: str | None = None
+    user_id: str | None = None
+    user_name: str | None = None
+    url: str | None = None
+
+    @field_validator("access_token")
+    @classmethod
+    def _is_a_user_token(cls, access_token: str) -> str:
+        if not access_token.startswith(SLACK_USER_TOKEN_PREFIX):
+            raise PydanticCustomError("user_token", "{refusal}", {"refusal": slack_token_refusal()})
+        return access_token
+
+
+CredentialsT = TypeVar("CredentialsT", NotionCredentials, JiraCredentials, SlackCredentials)
 
 
 @dataclass(frozen=True)
@@ -128,6 +159,12 @@ _NOTION = _Kind[NotionCredentials](
     ),
     False,
 )
+_SLACK = _Kind[SlackCredentials](
+    "slack",
+    SlackCredentials,
+    lambda credentials: credentials.team_id or _UNIDENTIFIED_WORKSPACE,
+    False,
+)
 
 
 @dataclass(frozen=True)
@@ -161,12 +198,14 @@ class StoredEntry(Generic[CredentialsT]):
         )
 
 
-AnyStoredEntry = StoredEntry[JiraCredentials] | StoredEntry[NotionCredentials]
+AnyStoredEntry = StoredEntry[JiraCredentials] | StoredEntry[NotionCredentials] | StoredEntry[SlackCredentials]
 
 
 def _a_sign_in_writes_an_entry_named(service: Service, identifier: str) -> bool:
     if service == "jira":
         return https_origin(identifier) == identifier
+    if service == "slack":
+        return SLACK_TEAM_ID.fullmatch(identifier) is not None
     return _is_uuid(identifier) and _canonical_workspace_selector(identifier) == identifier
 
 
@@ -207,6 +246,72 @@ def stored_jira_sign_ins() -> list[StoredEntry[JiraCredentials]]:
 
 def stored_notion_sign_ins() -> list[StoredEntry[NotionCredentials]]:
     return _in_the_keychain(lambda: _entries(_NOTION))
+
+
+def save_slack(credentials: SlackCredentials) -> None:
+    if credentials.team_id is None:
+        raise AuthError("A Slack sign-in without a workspace id cannot be saved")
+    _save(_SLACK, credentials)
+
+
+def stored_slack_sign_ins() -> list[StoredEntry[SlackCredentials]]:
+    return _in_the_keychain(lambda: _entries(_SLACK))
+
+
+def find_slack(workspace: str | None = None) -> StoredEntry[SlackCredentials] | None:
+    found = _the_only_match(
+        stored_slack_sign_ins(), workspace, _is_slack_workspace, "Slack workspaces", describe_slack_workspace
+    )
+    if found is None and workspace is not None and SLACK_TEAM_ID.fullmatch(workspace):
+        return _in_the_keychain(lambda: _entry_named(_SLACK, workspace))
+    return found
+
+
+def load_slack(workspace: str | None = None) -> SignIn[SlackCredentials] | None:
+    from_environment = slack_from_environment() if workspace is None else None
+    if from_environment is not None:
+        return SignIn(from_environment, "environment")
+    return _signed_in(find_slack(workspace))
+
+
+def require_slack_for_a_target(workspace: str | None) -> SignIn[SlackCredentials]:
+    try:
+        sign_in = load_slack(workspace)
+    except SeveralSignInsError as exc:
+        raise AuthError(f"{exc} with `workspace` in the target's `where`") from exc
+    if sign_in is not None:
+        return sign_in
+    signed_in = stored_slack_sign_ins()
+    if workspace is None or not signed_in:
+        where = "" if workspace is None else f" workspace {printable_only(workspace)}"
+        raise AuthError(f"Not signed in to Slack{where}; run `skaldr auth slack`")
+    raise AuthError(
+        f"No Slack sign-in matches workspace `{printable_only(workspace)}`; signed in to "
+        f"{', '.join(map(describe_slack_workspace, signed_in))}"
+    )
+
+
+def slack_from_environment() -> SlackCredentials | None:
+    access_token = _environment(SLACK_USER_TOKEN_VARIABLE)
+    if access_token is None:
+        return None
+    if not access_token.startswith(SLACK_USER_TOKEN_PREFIX):
+        raise AuthError(f"{SLACK_USER_TOKEN_VARIABLE}: {slack_token_refusal()}")
+    return SlackCredentials(access_token=access_token)
+
+
+def describe_slack_workspace(entry: StoredEntry[SlackCredentials]) -> str:
+    name = "" if entry.credentials is None else printable_only(entry.credentials.team_name or "")
+    if not name:
+        return entry.identifier or _UNREADABLE_LEGACY_ENTRY
+    return name if entry.identifier is None else f"{name} ({entry.identifier})"
+
+
+def _is_slack_workspace(entry: StoredEntry[SlackCredentials], selector: str) -> bool:
+    if entry.identifier == selector or (selector == LEGACY_SELECTOR and entry.identifier is None):
+        return True
+    shown = "" if entry.credentials is None else printable_only(entry.credentials.team_name or "")
+    return shown != "" and shown == printable_only(selector)
 
 
 class JiraLookup(NamedTuple):
@@ -424,29 +529,42 @@ def _delete(username: str) -> None:
 def _read_index() -> dict[Service, list[str]]:
     stored = _get(KEYCHAIN_INDEX_USERNAME)
     if stored is None:
-        return {"jira": [], "notion": []}
+        return {"jira": [], "notion": [], "slack": []}
     with CaughtWithoutChaining(ValidationError):
         listed = _INDEX_SHAPE.validate_json(stored)
-        return {"jira": listed.get("jira", []), "notion": listed.get("notion", [])}
+        return {
+            "jira": listed.get("jira", []),
+            "notion": listed.get("notion", []),
+            "slack": listed.get("slack", []),
+        }
     raise AuthError(
         "The keychain index that lists the skaldr sign-ins is unreadable; remove the keychain entry "
-        f"named {KEYCHAIN_INDEX_USERNAME} under {KEYCHAIN_SERVICE}, then name each Jira site or Notion "
-        "workspace to find its sign-in again"
+        f"named {KEYCHAIN_INDEX_USERNAME} under {KEYCHAIN_SERVICE}, then name each Jira site, Notion "
+        "workspace or Slack workspace to find its sign-in again"
     )
+
+
+def _write_index(index: dict[Service, list[str]]) -> None:
+    written = {
+        service: usernames
+        for service, usernames in index.items()
+        if usernames or service in _SERVICES_EVERY_INDEX_LISTS
+    }
+    _set(KEYCHAIN_INDEX_USERNAME, json.dumps(written))
 
 
 def _list(service: Service, username: str) -> None:
     index = _read_index()
     if username not in index[service]:
         index[service].append(username)
-        _set(KEYCHAIN_INDEX_USERNAME, json.dumps(index))
+        _write_index(index)
 
 
 def _unlist(service: Service, username: str) -> None:
     index = _read_index()
     if username in index[service]:
         index[service].remove(username)
-        _set(KEYCHAIN_INDEX_USERNAME, json.dumps(index))
+        _write_index(index)
 
 
 def _parse(stored: str, model: type[CredentialsT]) -> CredentialsT | None:

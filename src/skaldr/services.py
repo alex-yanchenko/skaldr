@@ -2,9 +2,10 @@ from typing import Final, Literal, get_args
 
 NotionService = Literal["notion"]
 JiraService = Literal["jira"]
-Service = Literal[NotionService, JiraService]
+SlackService = Literal["slack"]
+Service = Literal[NotionService, JiraService, SlackService]
 SERVICES: Final[tuple[Service, ...]] = get_args(Service)
-SERVICE_NAMES: Final[dict[Service, str]] = {"notion": "Notion", "jira": "Jira"}
+SERVICE_NAMES: Final[dict[Service, str]] = {"notion": "Notion", "jira": "Jira", "slack": "Slack"}
 SERVICES_BY_NAME: Final[dict[str, Service]] = {name: service for service, name in SERVICE_NAMES.items()}
 
 
