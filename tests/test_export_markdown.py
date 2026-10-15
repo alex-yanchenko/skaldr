@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 import pytest
 from markdown_it import MarkdownIt
@@ -65,9 +65,11 @@ from skaldr.richtext import (
     parse_rich,
 )
 from tests.factories import (
+    API_AND_RISK_BADGES,
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
     REFUSED_IN_THE_EXAMPLE,
+    TEXT_X_BLOCK,
     accepted_example,
     folder_texts,
     in_a_grid_cell,
@@ -487,7 +489,7 @@ def test_a_table_is_a_pipe_table_with_pipes_escaped_in_text_and_code() -> None:
     )
 
 
-def test_a_table_pads_short_rows_and_leads_a_toned_row_and_cell_with_their_dots() -> None:
+def test_a_table_pads_short_rows_and_dots_its_tones() -> None:
     table = TableNode(
         (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
         (
@@ -566,7 +568,7 @@ def _number_and_title(title: ExportRich, title_tone: ToneName | None = None) -> 
         ),
     ],
 )
-def test_a_row_tone_marks_the_title_cell_and_a_cell_tone_its_own_cell(row: TableRow, written: str) -> None:
+def test_a_row_tone_marks_the_title_cell_and_a_cell_tone_its_cell(row: TableRow, written: str) -> None:
     table = TableNode((TableCell((Plain("N"),)), TableCell((Plain("Item"),))), (row,), title_column=1)
 
     assert render_markdown([table]) == f"| N | Item |\n| --- | --- |\n{written}\n"
@@ -585,11 +587,11 @@ def test_a_row_tone_marks_the_title_cell_and_a_cell_tone_its_own_cell(row: Table
         pytest.param("sky", "🔵", id="sky"),
     ],
 )
-def test_a_chip_is_the_dot_of_its_colour_before_its_bold_label(color: BadgeColorLiteral, dot: str) -> None:
+def test_a_chip_is_its_color_dot_and_bold_label(color: BadgeColorLiteral, dot: str) -> None:
     assert render_markdown([Paragraph((Chip("High", color),))]) == f"{dot} **High**\n"
 
 
-def test_a_comparison_leads_each_verdict_with_the_dot_its_polarity_gives_and_a_toned_cell_too() -> None:
+def test_a_comparison_dots_verdicts_by_polarity_and_cells_by_tone() -> None:
     comparison = {
         "type": "comparison",
         "options": ["A", "B"],
@@ -622,8 +624,7 @@ def test_a_matrix_cell_fill_is_its_dot_before_its_label_or_the_dot_alone() -> No
     )
 
 
-def test_a_table_strikes_a_muted_title_dots_a_danger_title_and_leaves_a_tint_to_its_badge() -> None:
-    badges = {**API_BADGES, "RISK": {"label": "risk", "tone": "red", "legend": False}}
+def test_a_table_shows_row_tones_on_the_title_and_drops_a_tint() -> None:
     table = {
         "type": "table",
         "columns": [
@@ -640,7 +641,7 @@ def test_a_table_strikes_a_muted_title_dots_a_danger_title_and_leaves_a_tint_to_
         ],
     }
 
-    assert markdown_of([table], badges=badges) == (
+    assert markdown_of([table], badges=API_AND_RISK_BADGES) == (
         "**Legend: badges used on this page**\n\n"
         "- 🔵 **api** the API\n\n"
         "| N | Item | Risk | Tag |\n"
@@ -651,14 +652,11 @@ def test_a_table_strikes_a_muted_title_dots_a_danger_title_and_leaves_a_tint_to_
     )
 
 
-TEXT_X: Final = {"type": "text", "body": "x"}
-
-
-def test_a_toned_meter_card_and_walkthrough_step_lead_their_labels_with_their_dots() -> None:
+def test_a_toned_item_label_is_preceded_by_its_dot() -> None:
     blocks = [
         {"type": "meter", "items": [{"label": "Disk", "value": 3, "max": 4, "tone": "warning"}]},
         {"type": "cards", "items": [{"label": "Errors", "value": "3", "tone": "danger"}]},
-        {"type": "walkthrough", "steps": [{"label": "Stop", "tone": "danger", "detail": [TEXT_X]}]},
+        {"type": "walkthrough", "steps": [{"label": "Stop", "tone": "danger", "detail": [TEXT_X_BLOCK]}]},
     ]
 
     assert markdown_of(blocks) == (
@@ -672,17 +670,17 @@ def test_a_toned_meter_card_and_walkthrough_step_lead_their_labels_with_their_do
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "badges": ["API"]},
             "* 🔴 **Err**: 3 🔵 **api**\n",
-            id="a-tone-unlike-the-badge-colour-keeps-its-dot",
+            id="a-tone-unlike-the-badge-color-keeps-its-dot",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "info", "badges": ["API"]},
             "* **Err**: 3 🔵 **api**\n",
-            id="a-tone-like-the-badge-colour-leaves-the-dot-to-the-badge",
+            id="a-tone-like-the-badge-color-leaves-the-dot-to-the-badge",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "info", "badges": ["RISK", "API"]},
             "* **Err**: 3 🔴 **risk** 🔵 **api**\n",
-            id="a-tone-like-any-badge-colour-leaves-the-dot-to-that-badge",
+            id="a-tone-like-any-badge-color-leaves-the-dot-to-that-badge",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "badges": ["API"]},
@@ -691,17 +689,13 @@ def test_a_toned_meter_card_and_walkthrough_step_lead_their_labels_with_their_do
         ),
     ],
 )
-def test_a_toned_card_with_badges_shows_its_dot_unless_a_badge_shares_its_colour(
-    card: dict[str, Any], written: str
-) -> None:
-    badges = {**API_BADGES, "RISK": {"label": "risk", "tone": "red", "legend": False}}
-
-    assert markdown_of([{"type": "cards", "items": [card]}], badges=badges) == (
+def test_a_card_dot_gives_way_to_a_badge_of_its_color(card: dict[str, Any], written: str) -> None:
+    assert markdown_of([{"type": "cards", "items": [card]}], badges=API_AND_RISK_BADGES) == (
         "**Legend: badges used on this page**\n\n- 🔵 **api** the API\n\n" + written
     )
 
 
-def test_a_muted_row_strikes_its_first_text_column_before_an_earlier_rich_column() -> None:
+def test_a_muted_row_strikes_the_first_text_column() -> None:
     table = {
         "type": "table",
         "columns": [{"key": "note", "label": "Note", "kind": "rich"}, {"key": "a", "label": "Item"}],
@@ -752,6 +746,51 @@ def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the
     assert markdown_of([swimlane]) == (
         "| Lane | Plan<br>*wk 1* |\n| --- | --- |\n| **Ops (2)** | **1** Draft (2) |\n| **Total** | **2** |\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("chart", "written"),
+    [
+        pytest.param(
+            {
+                "type": "chart",
+                "variant": "donut",
+                "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1.5}],
+            },
+            '```mermaid\npie\n    "A" : 3\n    "B" : 1.5\n```\n\n'
+            "| Slice | Value | Share |\n| --- | --- | --- |\n| A | 3 | 67% |\n| B | 1.5 | 33% |\n"
+            "| **Total** | **4.5** |  |\n",
+            id="donut-slice",
+        ),
+        pytest.param(
+            {
+                "type": "chart",
+                "variant": "line",
+                "categories": ["Q1", "Q2"],
+                "series": [{"label": "x", "tone": "danger", "values": [1, 2]}],
+            },
+            '```mermaid\nxychart-beta\n    x-axis ["Q1", "Q2"]\n    line [1, 2]\n```\n\n'
+            "| Series | Q1 | Q2 |\n| --- | --- | --- |\n| x | 1 | 2 |\n",
+            id="line-series",
+        ),
+    ],
+)
+def test_a_toned_chart_row_in_its_data_table_shows_no_dot(chart: dict[str, Any], written: str) -> None:
+    assert markdown_of([chart]) == written
+
+
+def test_a_swimlane_group_color_shows_no_dot() -> None:
+    swimlane = {
+        "type": "swimlane",
+        "lanes": ["Ops"],
+        "columns": [{"name": "Plan"}],
+        "groups": [{"name": "Q1", "color": "red", "columns": ["Plan"]}],
+        "steps": [
+            {"lane": "Ops", "col": "Plan", "n": "1", "label": "Draft", "group": "Q1", "state": "blocked"}
+        ],
+    }
+
+    assert markdown_of([swimlane]) == "| Lane | Plan<br>Q1 |\n| --- | --- |\n| **Ops** | ⛔ **1** Draft |\n"
 
 
 def test_a_grid_becomes_its_cells_in_order() -> None:

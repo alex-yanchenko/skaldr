@@ -58,7 +58,8 @@ from skaldr.richtext import (
     Tinted,
 )
 from tests.factories import (
-    API_BADGES,
+    API_AND_RISK_BADGES,
+    TEXT_X_BLOCK,
     accepted_example,
     folder_texts,
     make_bullets,
@@ -581,7 +582,7 @@ def test_a_block_authored_on_its_own_in_a_list_item_is_rejected_as_a_step_detail
     )
 
 
-def test_a_table_is_a_pipe_table_with_tones_as_dots_no_widths_pipes_escaped_and_lines_joined() -> None:
+def test_a_canvas_table_dots_tones_drops_widths_escapes_pipes_and_joins_lines() -> None:
     table = TableNode(
         (make_table_cell("Item"), make_table_cell("Note")),
         (
@@ -611,8 +612,7 @@ def test_a_table_is_a_pipe_table_with_tones_as_dots_no_widths_pipes_escaped_and_
     )
 
 
-def test_tones_on_a_canvas_are_the_dots_github_writes() -> None:
-    badges = {**API_BADGES, "RISK": {"label": "risk", "tone": "red", "legend": False}}
+def test_tones_on_a_canvas_are_dots() -> None:
     blocks = [
         {"type": "badge_row", "items": [{"key": "API"}, {"label": "Done", "tone": "green"}]},
         {
@@ -643,11 +643,11 @@ def test_tones_on_a_canvas_are_the_dots_github_writes() -> None:
         {"type": "meter", "items": [{"label": "Disk", "value": 3, "max": 4, "tone": "warning"}]},
         {
             "type": "walkthrough",
-            "steps": [{"label": "Stop", "tone": "danger", "detail": [{"type": "text", "body": "x"}]}],
+            "steps": [{"label": "Stop", "tone": "danger", "detail": [TEXT_X_BLOCK]}],
         },
     ]
 
-    assert slack_of(blocks, badges=badges) == (
+    assert slack_of(blocks, badges=API_AND_RISK_BADGES) == (
         "🔵 **api** 🟢 **Done**\n\n"
         "|  | A | B |\n| --- | --- | --- |\n| **Logs** | 🟢 ✓ | 🟡 high |\n\n"
         "|  | Fill | Both |\n| --- | --- | --- |\n| **Build** | 🔴 risk | 🟢 ok |\n\n"
