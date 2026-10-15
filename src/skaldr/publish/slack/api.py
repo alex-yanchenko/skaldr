@@ -105,7 +105,10 @@ def _worth_retrying(call: _Call) -> Callable[[httpx2.Response], bool]:
 
 
 def _dropped_read(call: _Call) -> Callable[[BaseException], bool]:
-    return lambda error: not call.writes and isinstance(error, httpx2.TransportError)
+    def dropped(error: BaseException) -> bool:
+        return not call.writes and isinstance(error, httpx2.TransportError)
+
+    return dropped
 
 
 def _last_answer(state: RetryCallState) -> httpx2.Response:
@@ -117,12 +120,13 @@ def _last_answer(state: RetryCallState) -> httpx2.Response:
 
 def _wait(state: RetryCallState) -> float:
     outcome = state.outcome
-    response = None if outcome is None or outcome.failed else outcome.result()
-    told = _retry_after_seconds(response) if isinstance(response, httpx2.Response) else None
+    if outcome is None or outcome.failed:
+        return _BACKOFF(state)
+    told = _retry_after_seconds(outcome.result())
     return told if told is not None else _BACKOFF(state)
 
 
-def _refused(call: _Call) -> type[ConnectorError]:
+def _refusal_class(call: _Call) -> type[ConnectorError]:
     return WriteRejectedError if call.writes else ConnectorError
 
 
@@ -134,13 +138,13 @@ def _slack_refusal(call: _Call, body: SlackResponse, attempts: int) -> Connector
         )
     if code in REJECTED_SIGN_IN_ERRORS:
         rotating = f". {SLACK_ROTATING_TOKENS}" if code == TOKEN_EXPIRED else ""
-        return _refused(call)(
+        return _refusal_class(call)(
             f"Slack rejected the sign-in when asked to {call.to_do} ({code}); run `skaldr auth slack` with a "
             f"new user token{rotating}"
         )
     if code == MISSING_SCOPE:
         scope = printable_only(body.needed or "")
-        return _refused(call)(
+        return _refusal_class(call)(
             f"Slack could not {call.to_do}: the user token lacks the scope {scope}; add it to your Slack app "
             "under OAuth & Permissions, reinstall the app, and run `skaldr auth slack` again"
         )
@@ -161,25 +165,25 @@ def _slack_refusal(call: _Call, body: SlackResponse, attempts: int) -> Connector
             f"Slack could not {call.to_do}: a workspace on Slack's free plan cannot edit a standalone canvas "
             f"({code})"
         )
-    return _refused(call)(f"Slack refused to {call.to_do} ({code})")
+    return _refusal_class(call)(f"Slack refused to {call.to_do} ({code})")
 
 
 def _failure(call: _Call, response: httpx2.Response, attempts: int) -> ConnectorError | None:
     wait = _asks_for_too_long_a_wait(response)
     if wait is not None:
-        return _refused(call)(
+        return _refusal_class(call)(
             f"Slack asked skaldr to wait {wait:g} seconds before it may {call.to_do}, longer than the "
             f"{LONGEST_RETRY_AFTER_SECONDS:g} seconds skaldr waits; publish again later"
         )
     if _is_rate_limited(response):
-        return _refused(call)(
+        return _refusal_class(call)(
             f"Slack kept refusing to {call.to_do} as too many requests after {attempts} attempts; publish "
             "again in a minute"
         )
     if response.is_server_error:
         return ConnectorError(f"Slack answered HTTP {response.status_code} when asked to {call.to_do}")
     if response.status_code != HTTPStatus.OK:
-        return _refused(call)(f"Slack answered HTTP {response.status_code} when asked to {call.to_do}")
+        return _refusal_class(call)(f"Slack answered HTTP {response.status_code} when asked to {call.to_do}")
     try:
         body = SlackResponse.model_validate_json(response.content)
     except ValidationError:

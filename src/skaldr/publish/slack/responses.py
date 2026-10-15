@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class SlackResponse(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    model_config = ConfigDict(frozen=True)
 
     ok: bool
     error: str | None = None

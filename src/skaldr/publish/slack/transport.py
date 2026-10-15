@@ -157,10 +157,10 @@ class SlackTransport:
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
         return comparable_sections(content, comparable_text)
 
-    def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
+    def read_item(self, item_id: str, published: ItemContent, /) -> RemoteItem:
         markdown = self._markdown(item_id)
-        self._read.note_the_read(item_id, keyed_like)
-        return self._remote(item_id, markdown, self._read.to_read(item_id, keyed_like))
+        self._read.note_the_read(item_id, published)
+        return self._remote(item_id, markdown, self._read.to_read(item_id, published))
 
     def create_item(self, request: NewItem, /) -> RemoteItem:
         content = request.content

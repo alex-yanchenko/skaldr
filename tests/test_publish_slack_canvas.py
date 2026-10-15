@@ -100,7 +100,7 @@ def test_a_canvas_splits_into_the_blocks_slack_keeps_apart(markdown: str, blocks
         pytest.param("Sow.   ", "Sow.", id="trailing-spaces"),
         pytest.param("&nbsp;", "", id="list-separator-as-sent"),
         pytest.param(" ", "", id="list-separator-as-stored"),
-        pytest.param(" ", "", id="no-break-space"),  # noqa: RUF001
+        pytest.param("\xa0", "", id="no-break-space"),
         pytest.param("one\n \ntwo", "one\ntwo", id="space-line-inside-a-paragraph"),
         pytest.param(
             "```text\n- keep  \n![](@U0EXAMPLE1)\n```", "```text\n- keep  \n![](@U0EXAMPLE1)\n```", id="code"
