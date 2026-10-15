@@ -7,6 +7,7 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import (
+    CANVAS_LAYOUT_COLUMN_LIMIT,
     CANVAS_TABLE_CELL_LIMIT,
     FIRST_LIST_NUMBER,
     UNICODE_SCRIPT_FORMS,
@@ -53,7 +54,6 @@ from skaldr.export.tree import (
     TableOfContents,
     Tabs,
     Toggle,
-    nested_nodes,
 )
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import MEDIA_KIND_LABELS
@@ -62,7 +62,6 @@ from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
 DEEPEST_CANVAS_HEADING: Final = 3
-MOST_LAYOUT_COLUMNS: Final = 3
 CANVAS_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~"})
 CANVAS_FENCE: Final = ":::"
 CALLOUT_OPEN: Final = "::: {.callout}"
@@ -168,8 +167,6 @@ _CanvasBlock = (
     | _Layout
 )
 _LIST_SEPARATOR_PARAGRAPH: Final = Paragraph((Plain(LIST_SEPARATOR),))
-_MOVED_OUT_OF_A_CALLOUT: Final = (TableNode, _CanvasCallout, Divider, _Layout)
-_KEPT_OUT_OF_A_LAYOUT: Final = (TableNode, _CanvasCallout)
 
 
 def _with_paragraph(text: ExportRich, paragraph: ExportRich) -> ExportRich:
@@ -204,20 +201,49 @@ def _canvas_list(node: ListNode) -> _List:
     return _List(node.kind, tuple(_canvas_item(entry) for entry in node.entries))
 
 
+def _a_canvas_callout_cannot_hold(node: Node) -> bool:
+    match node:
+        case TableNode() | Callout() | Toggle() | Divider() | Columns():
+            return True
+        case Tabs():
+            return bool(node.tabs)
+        case Media():
+            return node.kind == "image"
+        case _:
+            return False
+
+
+def _the_place_cannot_hold(node: Node, place: Place) -> bool:
+    match place:
+        case "callout":
+            return _a_canvas_callout_cannot_hold(node)
+        case "column":
+            return isinstance(node, TableNode | Callout | Divider | Columns)
+        case "top":
+            return False
+        case _:
+            assert_never(place)
+
+
+def _require_the_place_holds(node: Node, place: Place) -> None:
+    if _the_place_cannot_hold(node, place):
+        raise ExportInvariantError(
+            f"a Slack canvas {place} has no place for a {type(node).__name__}; "
+            "the export check should have refused it"
+        )
+
+
 def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
-    inside: list[_CanvasBlock] = []
-    outside: list[_CanvasBlock] = []
-    for block in _canvas_blocks(node.children, "callout"):
-        (outside if isinstance(block, _MOVED_OUT_OF_A_CALLOUT) else inside).append(block)
-    return [_CanvasCallout(callout_icon(node), tuple(inside)), *outside]
+    return [_CanvasCallout(callout_icon(node), tuple(_canvas_blocks(node.children, "callout")))]
 
 
-def _canvas_columns(node: Columns, place: Place) -> list[_CanvasBlock]:
-    if place != "column" and len(node.columns) <= MOST_LAYOUT_COLUMNS:
-        columns = tuple(tuple(_canvas_blocks(column.children, "column")) for column in node.columns)
-        if not any(isinstance(block, _KEPT_OUT_OF_A_LAYOUT) for column in columns for block in column):
-            return [_Layout(columns)]
-    return _canvas_blocks(nested_nodes(node), place)
+def _canvas_columns(node: Columns) -> list[_CanvasBlock]:
+    if len(node.columns) > CANVAS_LAYOUT_COLUMN_LIMIT:
+        raise ExportInvariantError(
+            f"a Slack canvas layout holds at most {CANVAS_LAYOUT_COLUMN_LIMIT} columns, not "
+            f"{len(node.columns)}; the export check should have refused it"
+        )
+    return [_Layout(tuple(tuple(_canvas_blocks(column.children, "column")) for column in node.columns))]
 
 
 def _toggle_title(node: Toggle) -> list[_CanvasBlock]:
@@ -235,6 +261,7 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
 
 
 def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
+    _require_the_place_holds(node, place)
     match node:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
             return [node]
@@ -243,13 +270,13 @@ def _canvas_block(node: Node, place: Place) -> list[_CanvasBlock]:
         case Callout():
             return _canvas_callout(node)
         case Divider():
-            return [] if place == "column" else [node]
+            return [node]
         case Toggle():
             return [*_toggle_title(node), *_canvas_blocks(node.children, place)]
         case Tabs():
             return _canvas_tabs(node, place)
         case Columns():
-            return _canvas_columns(node, place)
+            return _canvas_columns(node)
         case Diagram():
             return [_Mermaid(node.figure), *_canvas_blocks(node.supplement, place)]
         case TableOfContents():
@@ -357,7 +384,7 @@ class _CanvasWriter:
         body = joined([lines for _, lines in rendered])
         if callout.icon is None:
             return [CALLOUT_OPEN, *body, CANVAS_FENCE]
-        if rendered and isinstance(rendered[0][0], Paragraph | _Title):
+        if rendered and isinstance(rendered[0][0], Paragraph):
             body[0] = f"{callout.icon} {body[0]}"
         else:
             body = [callout.icon, *spaced(body)]

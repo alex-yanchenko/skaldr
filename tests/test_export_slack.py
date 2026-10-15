@@ -41,7 +41,7 @@ from skaldr.export.tree import (
     TocEntry,
     Toggle,
 )
-from skaldr.models import Person, Report, Walkthrough, load_report, parse_report
+from skaldr.models import Grid, InnerGrid, Person, Report, load_report, parse_report
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -78,6 +78,8 @@ EXAMPLE = REPO_ROOT / "data" / "example.yaml"
 SLACK_GOLDEN = REPO_ROOT / "tests" / "golden" / "example.slack"
 WRITE_SLACK_GOLDEN = "SKALDR_WRITE_SLACK_GOLDEN"
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
+CANVAS_COLUMN_REFUSED_TYPES = ("callout", "note", "table", "divider")
+SIXTHS = 6
 CANVAS_LIMIT_CODE_LENGTH = 1_048_567
 MERMAID_ONE_NODE = '```mermaid\nflowchart LR\n    s1["A"]\n```'
 ONE_NODE_GRAPH = Graph("LR", (GraphNode("s1", "A"),), ())
@@ -119,10 +121,35 @@ def _step_detail_reworked_for_a_canvas(detail: dict[str, Any]) -> dict[str, Any]
     return {"type": "text", "body": detail["body"]} if detail["type"] == "callout" else detail
 
 
+def _cells_reworked_for_a_canvas(cell: dict[str, Any]) -> list[dict[str, Any]]:
+    kept = [inner for inner in cell["blocks"] if inner["type"] not in (*CANVAS_COLUMN_REFUSED_TYPES, "grid")]
+    inner_cells = [
+        inner_cell for inner in cell["blocks"] if inner["type"] == "grid" for inner_cell in inner["cells"]
+    ]
+    return [
+        {"blocks": blocks} for blocks in ([kept] if kept else []) + [each["blocks"] for each in inner_cells]
+    ]
+
+
+def _grid_reworked_for_a_canvas(grid: dict[str, Any]) -> list[dict[str, Any]]:
+    moved_out = [
+        inner
+        for cell in grid["cells"]
+        for inner in cell["blocks"]
+        if inner["type"] in CANVAS_COLUMN_REFUSED_TYPES
+    ]
+    cells = [reworked for cell in grid["cells"] for reworked in _cells_reworked_for_a_canvas(cell)]
+    span = SIXTHS // len(cells)
+    return [*moved_out, {"type": "grid", "cells": [cell | {"span": span} for cell in cells]}]
+
+
 def _example_reworked_for_a_canvas() -> dict[str, Any]:
     data = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
     blocks: list[dict[str, Any]] = []
     for block in data["blocks"]:
+        if block["type"] == "grid":
+            blocks += _grid_reworked_for_a_canvas(block)
+            continue
         blocks.append(block)
         if block["type"] != "walkthrough":
             continue
@@ -133,27 +160,27 @@ def _example_reworked_for_a_canvas() -> dict[str, Any]:
     return {**data, "blocks": blocks}
 
 
-def _first_step_detail_a_canvas_list_item_cannot_hold(report: Report) -> str:
+def _first_grid_inside_a_grid_cell(report: Report) -> str:
     return next(
-        f"{path}.steps.{step_index}.detail.{index}.{detail.type}"
+        f"{path}.cells.{cell_index}.blocks.{index}.{inner.type}"
         for path, block in report.located_blocks
-        if isinstance(block, Walkthrough)
-        for step_index, step in enumerate(block.steps)
-        for index, detail in enumerate(step.detail)
-        if detail.type not in CANVAS_STEP_DETAIL_TYPES
+        if isinstance(block, Grid)
+        for cell_index, cell in enumerate(block.cells)
+        for index, inner in enumerate(cell.blocks)
+        if isinstance(inner, InnerGrid)
     )
 
 
-def test_the_example_is_rejected_for_the_code_block_in_its_walkthrough(tmp_path: Path) -> None:
+def test_the_example_is_rejected_for_the_grid_inside_one_of_its_grid_cells(tmp_path: Path) -> None:
     example = load_report(EXAMPLE)
 
     with pytest.raises(ExportRejectedError) as raised:
         export_slack(example, tmp_path / "out")
 
     assert vars(raised.value) == _canvas_rejection(
-        _list_item_why("a code block"),
-        OUT_OF_THE_STEP,
-        f"at {_first_step_detail_a_canvas_list_item_cannot_hold(example)}",
+        "a Slack canvas column layout cannot nest, so it cannot show a grid inside a grid cell",
+        "write the inner grid's cells as cells of the outer grid",
+        f"at {_first_grid_inside_a_grid_cell(example)}",
     )
 
 
@@ -695,14 +722,9 @@ def test_media_is_an_image_or_a_link_labelled_with_its_caption_or_kind(node: Med
         ),
         pytest.param(Callout("info", ()), "::: {.callout}\n💡\n:::\n", id="empty"),
         pytest.param(
-            Callout("info", (Toggle(make_rich_text("T"), None, (make_paragraph("x"),)),)),
-            "::: {.callout}\n💡 **T**\n\nx\n:::\n",
-            id="led-by-a-toggle-title",
-        ),
-        pytest.param(
-            Callout("info", (Tabs((Tab(make_rich_text("T"), (make_paragraph("x"),)),)),)),
-            "::: {.callout}\n💡 **T**\n\nx\n:::\n",
-            id="led-by-a-tab-title",
+            Callout("info", (Quote((make_rich_text("said"),)), CodeBlock("x", "sh"))),
+            "::: {.callout}\n💡\n\n> said\n\n```sh\nx\n```\n:::\n",
+            id="led-by-a-quote-then-code",
         ),
     ],
 )
@@ -718,36 +740,43 @@ def test_a_panel_is_a_fenced_callout_with_no_icon_as_on_the_page() -> None:
     assert slack_of([panel]) == "::: {.callout}\n**Card**\n\ninside\n:::\n"
 
 
-def test_a_table_callout_divider_or_column_layout_inside_a_callout_moves_after_it() -> None:
-    columns = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (make_paragraph("right"),))))
-    inner = Callout("danger", (make_paragraph("inner"),))
-    node = Callout(
-        "info",
-        (make_paragraph("lead"), _key_value_table(), inner, Divider(), columns, make_paragraph("tail")),
+def _two_paragraph_columns() -> Columns:
+    return Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (make_paragraph("right"),))))
+
+
+@pytest.mark.parametrize(
+    ("held", "kind"),
+    [
+        pytest.param(_key_value_table(), "TableNode", id="table"),
+        pytest.param(Callout("danger", (make_paragraph("inner"),)), "Callout", id="callout"),
+        pytest.param(Toggle(make_rich_text("T"), None, (make_paragraph("x"),)), "Toggle", id="toggle"),
+        pytest.param(Tabs((Tab(make_rich_text("T"), (make_paragraph("x"),)),)), "Tabs", id="tabs"),
+        pytest.param(Divider(), "Divider", id="divider"),
+        pytest.param(_two_paragraph_columns(), "Columns", id="columns"),
+        pytest.param(Media("image", "https://example.com/a.png"), "Media", id="image"),
+    ],
+)
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_callout_cannot_hold(
+    held: Node, kind: str
+) -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Callout("info", (make_paragraph("lead"), held))])
+
+    assert str(raised.value) == (
+        f"a Slack canvas callout has no place for a {kind}; the export check should have refused it"
     )
 
-    assert render_slack([node]) == (
-        "::: {.callout}\n💡 lead\n\ntail\n:::\n\n"
-        "| k |\n| --- |\n| v |\n\n"
-        "::: {.callout}\n🛑 inner\n:::\n\n"
-        "---\n\n"
-        "::: {.layout}\n::: {.column}\nleft\n:::\n::: {.column}\nright\n:::\n:::\n"
-    )
+
+def test_a_video_inside_a_callout_is_its_link() -> None:
+    node = Callout("info", (Media("video", "https://example.com/v.mp4"),))
+
+    assert render_slack([node]) == "::: {.callout}\n💡\n\n[Video](https://example.com/v.mp4)\n:::\n"
 
 
 def test_a_table_in_a_list_item_in_a_callout_is_rejected() -> None:
     node = Callout("info", (make_bullets(make_list_entry("a", _key_value_table())),))
 
     assert vars(refusal_of([node], "slack")) == _canvas_rejection(_list_item_why("a table"), OUT_OF_THE_LIST)
-
-
-def test_a_callout_inside_a_callout_inside_a_callout_comes_out_flat_in_order() -> None:
-    innermost = Callout("danger", (make_paragraph("c"),))
-    middle = Callout("warning", (make_paragraph("b"), innermost))
-
-    assert render_slack([Callout("info", (make_paragraph("a"), middle))]) == (
-        "::: {.callout}\n💡 a\n:::\n\n::: {.callout}\n⚠️ b\n:::\n\n::: {.callout}\n🛑 c\n:::\n"
-    )
 
 
 def test_a_quote_is_quoted_lines_with_the_cite_on_its_own_italic_line() -> None:
@@ -785,10 +814,10 @@ def test_a_toggle_is_its_heading_or_bold_title_then_its_children(node: Toggle, t
     assert render_slack([node]) == text
 
 
-def test_up_to_three_columns_are_a_column_layout_without_dividers() -> None:
+def test_up_to_three_columns_are_a_column_layout() -> None:
     node = Columns(
         (
-            GridColumn(40, (make_paragraph("left"), Divider())),
+            GridColumn(40, (Heading(3, make_rich_text("Left")), make_paragraph("left"))),
             GridColumn(30, (make_bullets(make_list_entry("a")),)),
             GridColumn(30, (Toggle(make_rich_text("T"), None, (make_paragraph("x"),)),)),
         )
@@ -796,40 +825,46 @@ def test_up_to_three_columns_are_a_column_layout_without_dividers() -> None:
 
     assert render_slack([node]) == (
         "::: {.layout}\n"
-        "::: {.column}\nleft\n:::\n"
+        "::: {.column}\n### Left\n\nleft\n:::\n"
         "::: {.column}\n* a\n:::\n"
         "::: {.column}\n**T**\n\nx\n:::\n"
         ":::\n"
     )
 
 
-def test_more_than_three_columns_are_their_children_one_after_another() -> None:
-    node = Columns(tuple(GridColumn(25, (make_paragraph(name), Divider())) for name in "abcd"))
+def test_the_canvas_writer_alone_raises_an_internal_error_for_more_than_three_columns() -> None:
+    node = Columns(tuple(GridColumn(25, (make_paragraph(name),)) for name in "abcd"))
 
-    assert render_slack([node]) == "a\n\n---\n\nb\n\n---\n\nc\n\n---\n\nd\n\n---\n"
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([node])
+
+    assert str(raised.value) == (
+        "a Slack canvas layout holds at most 3 columns, not 4; the export check should have refused it"
+    )
 
 
 @pytest.mark.parametrize(
-    ("held", "text"),
+    ("held", "kind"),
     [
-        pytest.param(_key_value_table(), "| k |\n| --- |\n| v |", id="table"),
-        pytest.param(Callout("info", (make_paragraph("c"),)), "::: {.callout}\n💡 c\n:::", id="callout"),
+        pytest.param(_key_value_table(), "TableNode", id="table"),
+        pytest.param(Callout("info", (make_paragraph("c"),)), "Callout", id="callout"),
+        pytest.param(Divider(), "Divider", id="divider"),
+        pytest.param(_two_paragraph_columns(), "Columns", id="columns"),
+        pytest.param(
+            Toggle(make_rich_text("T"), None, (_key_value_table(),)), "TableNode", id="table-in-a-toggle"
+        ),
     ],
 )
-def test_columns_holding_a_table_or_callout_are_their_children_one_after_another(
-    held: Node, text: str
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_column_cannot_hold(
+    held: Node, kind: str
 ) -> None:
-    node = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (held, Divider()))))
+    node = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (held,))))
 
-    assert render_slack([node]) == f"left\n\n{text}\n\n---\n"
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([node])
 
-
-def test_columns_inside_a_column_are_their_children_one_after_another_inside_the_layout() -> None:
-    inner = Columns((GridColumn(50, (make_paragraph("x"),)), GridColumn(50, (make_paragraph("y"),))))
-    node = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (inner,))))
-
-    assert render_slack([node]) == (
-        "::: {.layout}\n::: {.column}\nleft\n:::\n::: {.column}\nx\n\ny\n:::\n:::\n"
+    assert str(raised.value) == (
+        f"a Slack canvas column has no place for a {kind}; the export check should have refused it"
     )
 
 

@@ -34,10 +34,10 @@ Verdict = Literal["keep", "reject"]
 FEATURES: tuple[Feature, ...] = get_args(Feature)
 DETAILS_KINDS: tuple[type[Details], ...] = get_args(Details)
 SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
-    "table inside a callout": {"adf": "reject"},
-    "callout inside a callout": {"adf": "reject"},
+    "table inside a callout": {"adf": "reject", "slack": "reject"},
+    "callout inside a callout": {"adf": "reject", "slack": "reject"},
     "quote inside a callout": {"adf": "reject"},
-    "toggle inside a callout": {"adf": "reject"},
+    "toggle inside a callout": {"adf": "reject", "slack": "reject"},
     "table inside a toggle inside a toggle": {"adf": "reject"},
     "toggle inside a toggle inside a toggle": {"adf": "reject"},
     "block inside a list item": {"slack": "reject"},
@@ -46,12 +46,23 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
     "subscript or superscript with no Unicode form": {"slack": "reject"},
+    "image inside a callout": {"slack": "reject"},
+    "divider inside a callout": {"slack": "reject"},
+    "grid inside a callout": {"slack": "reject"},
+    "grid with more than three cells": {"slack": "reject"},
+    "table inside a grid cell": {"adf": "reject", "slack": "reject"},
+    "callout inside a grid cell": {"slack": "reject"},
+    "divider inside a grid cell": {"slack": "reject"},
+    "toned grid cell": {"slack": "reject"},
+    "grid inside a grid cell": {"slack": "reject"},
+    "divider inside a list item": {"adf": "reject"},
+    "divider inside a walkthrough step": {"adf": "reject"},
 }
 KEPT_BY_THE_OTHER_TARGETS = [
     pytest.param(case, other, id=f"{name}-kept-by-{other}")
     for name, case in SEEDED_REFUSALS.items()
     for other in EXPORT_TARGETS
-    if other != case.target
+    if other != case.target and other not in case.also_refused_by
 ]
 
 

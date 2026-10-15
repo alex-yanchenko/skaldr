@@ -162,7 +162,7 @@ def test_a_toned_grid_cell_holding_another_toned_cell_names_both_a_grid_cell() -
     outer = make_grid([make_cell(6, [inner]) | {"tone": "warning"}])
 
     assert str(refusal_of(lowered([outer]), "adf")) == (
-        "ADF cannot place a grid cell inside a grid cell, at blocks.0.grid.cells.0.blocks.0.grid; "
+        "ADF cannot place a grid cell inside a grid cell, at blocks.0.grid.cells.0.blocks.0.grid.cells.0; "
         "move the grid cell out of the grid cell"
     )
 

@@ -18,6 +18,17 @@ ListStartFeature = Literal["numbered list starting past 1"]
 CellCountFeature = Literal["table over 300 cells"]
 GridInAStepFeature = Literal["grid inside a walkthrough step"]
 ScriptFormFeature = Literal["subscript or superscript with no Unicode form"]
+CalloutPlacementFeature = Literal[
+    "image inside a callout", "divider inside a callout", "grid inside a callout"
+]
+AnyPlacementFeature = Literal[PlacementFeature, CalloutPlacementFeature]
+GridCellFeature = Literal[
+    "table inside a grid cell", "callout inside a grid cell", "divider inside a grid cell"
+]
+GridCellsFeature = Literal["grid with more than three cells"]
+TonedCellFeature = Literal["toned grid cell"]
+GridInAGridCellFeature = Literal["grid inside a grid cell"]
+DividerInAListFeature = Literal["divider inside a list item", "divider inside a walkthrough step"]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -25,12 +36,19 @@ Feature = Literal[
     CellCountFeature,
     GridInAStepFeature,
     ScriptFormFeature,
+    CalloutPlacementFeature,
+    GridCellFeature,
+    GridCellsFeature,
+    TonedCellFeature,
+    GridInAGridCellFeature,
+    DividerInAListFeature,
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
-Held = Literal["table", "callout", "quote", "toggle"]
+Held = Literal["table", "callout", "quote", "toggle", "image", "divider", "grid"]
 FIRST_LIST_NUMBER: Final = 1
 CANVAS_TABLE_CELL_LIMIT: Final = 300
+CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
     "superscript": str.maketrans(
         "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
@@ -45,7 +63,7 @@ UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
 
 @dataclass(frozen=True)
 class Placement:
-    feature: PlacementFeature
+    feature: AnyPlacementFeature
     held: str
     holder: str
     holder_name: str
@@ -83,7 +101,48 @@ class ScriptForm:
     feature: ScriptFormFeature = field(default="subscript or superscript with no Unicode form", init=False)
 
 
-Details = Placement | HeldByAListItem | ListStart | CellCount | GridInAStep | ScriptForm
+@dataclass(frozen=True)
+class HeldByAGridCell:
+    feature: GridCellFeature
+    held: str
+
+
+@dataclass(frozen=True)
+class GridCells:
+    cells: int
+    limit: int = CANVAS_LAYOUT_COLUMN_LIMIT
+    feature: GridCellsFeature = field(default="grid with more than three cells", init=False)
+
+
+@dataclass(frozen=True)
+class TonedCell:
+    tone: str
+    feature: TonedCellFeature = field(default="toned grid cell", init=False)
+
+
+@dataclass(frozen=True)
+class GridInAGridCell:
+    feature: GridInAGridCellFeature = field(default="grid inside a grid cell", init=False)
+
+
+@dataclass(frozen=True)
+class DividerInAList:
+    feature: DividerInAListFeature
+
+
+Details = (
+    Placement
+    | HeldByAListItem
+    | ListStart
+    | CellCount
+    | GridInAStep
+    | ScriptForm
+    | HeldByAGridCell
+    | GridCells
+    | TonedCell
+    | GridInAGridCell
+    | DividerInAList
+)
 
 
 @dataclass(frozen=True)
@@ -110,11 +169,26 @@ def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget,
     return {**kept, **cells}
 
 
+_CANVAS_CALLOUT_CANNOT_HOLD: Final = Rejection(
+    "a Slack canvas callout holds only text, lists, quotes and code blocks, "
+    "so it cannot show the {held} inside {holder}",
+    "move the {held} out of the {holder_name}",
+    names_the_heading=True,
+)
+_CANVAS_COLUMN_CANNOT_HOLD: Final = Rejection(
+    "a Slack canvas column holds no table, callout or divider, "
+    "so it cannot show the {held} inside a grid cell",
+    "move the {held} out of the grid",
+    names_the_heading=True,
+)
+
 CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
-    "table inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
-    "callout inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
+    "table inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
+    "callout inside a callout": _kept_except(
+        {"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}
+    ),
     "quote inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
-    "toggle inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
+    "toggle inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "table inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "toggle inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "block inside a list item": _kept_except(
@@ -159,15 +233,85 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "image inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
+    "divider inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
+    "grid inside a callout": _kept_except({"slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
+    "grid with more than three cells": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas column layout holds at most {limit} columns, so it cannot show a grid of "
+                "{cells} cells",
+                "split the grid into grids of at most {limit} cells",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "table inside a grid cell": _kept_except(
+        {
+            "adf": Rejection(
+                "ADF cannot place a {held} inside a grid cell",
+                "move the {held} out of the grid",
+                names_the_heading=True,
+            ),
+            "slack": _CANVAS_COLUMN_CANNOT_HOLD,
+        }
+    ),
+    "callout inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
+    "divider inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
+    "toned grid cell": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas column has no tone, so it cannot show a grid cell with the tone '{tone}'",
+                "drop the tone from the grid cell",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "grid inside a grid cell": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas column layout cannot nest, so it cannot show a grid inside a grid cell",
+                "write the inner grid's cells as cells of the outer grid",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "divider inside a list item": _kept_except(
+        {
+            "adf": Rejection(
+                "ADF cannot place a divider inside a list item",
+                "move the divider out of the list, after the list",
+                names_the_heading=True,
+            )
+        }
+    ),
+    "divider inside a walkthrough step": _kept_except(
+        {
+            "adf": Rejection(
+                "ADF cannot place a divider inside a walkthrough step, "
+                "since Jira writes a step as a list item",
+                "move the divider out of the step, after the walkthrough",
+                names_the_heading=True,
+            )
+        }
+    ),
 }
 
-PLACEMENTS: Final[Mapping[tuple[Holder, Held], PlacementFeature]] = {
+PLACEMENTS: Final[Mapping[tuple[Holder, Held], AnyPlacementFeature]] = {
     ("callout", "table"): "table inside a callout",
     ("callout", "callout"): "callout inside a callout",
     ("callout", "quote"): "quote inside a callout",
     ("callout", "toggle"): "toggle inside a callout",
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
+    ("callout", "image"): "image inside a callout",
+    ("callout", "divider"): "divider inside a callout",
+    ("callout", "grid"): "grid inside a callout",
+}
+GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
+    "table": "table inside a grid cell",
+    "callout": "callout inside a grid cell",
+    "divider": "divider inside a grid cell",
 }
 
 

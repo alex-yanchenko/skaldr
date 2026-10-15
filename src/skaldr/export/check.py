@@ -7,21 +7,29 @@ from typing_extensions import Self, assert_never
 
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
+    CANVAS_LAYOUT_COLUMN_LIMIT,
     CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
     FIRST_LIST_NUMBER,
+    GRID_CELL_FEATURES,
     PLACEMENTS,
     CellCount,
     Container,
     Details,
+    DividerInAList,
+    DividerInAListFeature,
+    GridCells,
+    GridInAGridCell,
     GridInAStep,
     Held,
+    HeldByAGridCell,
     HeldByAListItem,
     ListItemFeature,
     ListStart,
     Placement,
     Rejection,
     ScriptForm,
+    TonedCell,
     character_without_a_unicode_form,
 )
 from skaldr.export.markup import table_width
@@ -62,7 +70,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
-from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
+from skaldr.models import Grid, InnerGrid, Report, Walkthrough, walk_located_block
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -96,6 +104,11 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
     Tabs: "set of tabs",
     Diagram: "diagram",
 }
+_DIVIDER_FEATURES: Final[Mapping[ListItemFeature, DividerInAListFeature]] = {
+    "block inside a list item": "divider inside a list item",
+    "block inside a walkthrough step": "divider inside a walkthrough step",
+}
+_TONED_CELL: Final = "grid cell"
 
 
 @dataclass(frozen=True)
@@ -110,6 +123,7 @@ class _Place:
     container: Container = "document"
     callout_name: str = _NODE_TERMS[Callout]
     toggle_names: tuple[str, ...] = ()
+    in_a_grid_cell: bool = False
 
     def holder(self) -> str:
         match self.container:
@@ -146,8 +160,17 @@ class _Place:
             toggle_names=(*self.toggle_names, name),
         )
 
+    def in_a_column(self) -> Self:
+        return replace(self, in_a_grid_cell=True)
+
+
+def _is_an_image(node: Node) -> bool:
+    return isinstance(node, Media) and node.kind == "image"
+
 
 def _term(node: Node) -> str:
+    if _is_an_image(node):
+        return "image"
     named = node.authored_as if isinstance(node, AuthoredNode) else None
     return named or _NODE_TERMS[type(node)]
 
@@ -164,6 +187,12 @@ def _held(node: Node) -> Held | None:
             return "toggle"
         case Tabs() if node.tabs:
             return "toggle"
+        case Media() if _is_an_image(node):
+            return "image"
+        case Divider():
+            return "divider"
+        case Columns():
+            return "grid"
         case _:
             return None
 
@@ -283,6 +312,8 @@ class _TreeWalk:
 
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
         yield from self.script_hits(node)
+        if place.in_a_grid_cell:
+            yield from self.grid_cell_hits(node)
         match node:
             case Heading():
                 self.note_heading(node.text)
@@ -300,7 +331,11 @@ class _TreeWalk:
                 inside = place.in_a_toggle(_term(node))
                 for tab in node.tabs:
                     yield from self.nodes(tab.children, inside)
-            case Columns() | Diagram():
+            case Columns():
+                if len(node.columns) > CANVAS_LAYOUT_COLUMN_LIMIT:
+                    yield self.hit(GridCells(len(node.columns)), node.authored_at)
+                yield from self.nodes(nested_nodes(node), place.in_a_column())
+            case Diagram():
                 yield from self.nodes(nested_nodes(node), place)
             case (
                 Paragraph() | CodeBlock() | DisplayMath() | Media() | Quote() | Divider() | TableOfContents()
@@ -320,6 +355,17 @@ class _TreeWalk:
             details = Placement(feature, _term(node), place.holder(), place.holder_name())
             yield self.hit(details, node.authored_at)
 
+    def grid_cell_hits(self, node: Node) -> Iterator[FeatureHit]:
+        if isinstance(node, Callout) and node.authored_as == _TONED_CELL:
+            yield self.hit(TonedCell(node.tone), node.authored_at)
+            return
+        held = _held(node)
+        feature = GRID_CELL_FEATURES.get(held) if held is not None else None
+        if held == "grid":
+            yield self.hit(GridInAGridCell(), node.authored_at)
+        elif feature is not None:
+            yield self.hit(HeldByAGridCell(feature, _term(node)), node.authored_at)
+
     def list_hits(self, node: ListNode, place: _Place) -> Iterator[FeatureHit]:
         if node.kind == "number" and node.start != FIRST_LIST_NUMBER:
             yield self.hit(ListStart(node.start), node.authored_at)
@@ -332,6 +378,9 @@ class _TreeWalk:
             what = _what_a_list_item_cannot_hold(child, holds_a_list)
             if what is not None:
                 yield self.hit(HeldByAListItem(_item_feature(child, holder), what), child.authored_at)
+            if isinstance(child, Divider):
+                divider = DividerInAList(_DIVIDER_FEATURES[_item_feature(child, holder)])
+                yield self.hit(divider, child.authored_at)
             holds_a_list = holds_a_list or isinstance(child, ListNode)
             yield from self.node(child, place)
 
@@ -349,6 +398,13 @@ def _grids_in_walkthrough_steps(path: str, walkthrough: Walkthrough) -> Iterator
                 yield FeatureHit(GridInAStep(), where)
 
 
+def _grids_in_grid_cells(path: str, grid: Grid) -> Iterator[FeatureHit]:
+    for cell_index, cell in enumerate(grid.cells):
+        for index, inner in enumerate(cell.blocks):
+            if isinstance(inner, InnerGrid):
+                yield FeatureHit(GridInAGridCell(), f"{path}.cells.{cell_index}.blocks.{index}.{inner.type}")
+
+
 def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
     located = (
         located_block
@@ -359,6 +415,8 @@ def _model_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHi
     for path, block in located:
         if isinstance(block, Walkthrough):
             yield from _grids_in_walkthrough_steps(path, block)
+        if isinstance(block, Grid):
+            yield from _grids_in_grid_cells(path, block)
 
 
 def _where(hit: FeatureHit, rejection: Rejection) -> str | None:

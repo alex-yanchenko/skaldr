@@ -309,11 +309,21 @@ def _toggle(block: models.Toggle | models.InnerToggle, lowering: Lowering, depth
     return [Paragraph(bold(block.title)), *children]
 
 
+def _cell_nodes(
+    cell: models.GridCell | models.InnerGridCell, cell_path: str | None, lowering: Lowering, depth: int
+) -> tuple[Node, ...]:
+    children = tuple(_lower_blocks(cell.blocks, lowering, depth))
+    if not cell.tone:
+        return children
+    return (Callout(cell.tone, children, authored_as="grid cell", authored_at=cell_path),)
+
+
 def _grid(block: models.Grid | models.InnerGrid, lowering: Lowering, depth: int) -> list[Node]:
-    cell_nodes: list[tuple[Node, ...]] = []
-    for cell in block.cells:
-        children: tuple[Node, ...] = tuple(_lower_blocks(cell.blocks, lowering, depth))
-        cell_nodes.append((Callout(cell.tone, children, authored_as="grid cell"),) if cell.tone else children)
+    grid_path = lowering.path_of(block)
+    cell_nodes = [
+        _cell_nodes(cell, f"{grid_path}.cells.{index}" if grid_path else None, lowering, depth)
+        for index, cell in enumerate(block.cells)
+    ]
     if len(cell_nodes) == 1 or isinstance(block, models.InnerGrid):
         return [node for children in cell_nodes for node in children]
     ratios = apportioned([cell.span for cell in block.cells], COLUMN_RATIO_TOTAL)

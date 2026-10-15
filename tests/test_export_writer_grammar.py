@@ -49,6 +49,8 @@ SAMPLES: Mapping[str, Node] = {
     "numbered list starting at 3": ListNode("number", (ListEntry(plain("a")),), start=3),
     "list holding a table": ListNode("bullet", (ListEntry(plain("a"), children=(_TABLE,)),)),
     "checklist holding a toggle": ListNode("check", (ListEntry(plain("a"), children=(_TOGGLE,)),)),
+    "list holding a divider": ListNode("number", (ListEntry(plain("a"), children=(Divider(),)),)),
+    "checklist holding a divider": ListNode("check", (ListEntry(plain("a"), children=(Divider(),)),)),
     "table": _TABLE,
     "table over 300 cells": TableNode(
         (TableCell(plain("Aisle")),), tuple(TableRow((TableCell(plain("v")),)) for _ in range(300))
