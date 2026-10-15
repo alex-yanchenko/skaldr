@@ -870,6 +870,11 @@ def test_the_canvas_writer_alone_raises_an_internal_error_for_more_than_three_co
         pytest.param(
             Toggle(make_rich_text("T"), None, (_key_value_table(),)), "TableNode", id="table-in-a-toggle"
         ),
+        pytest.param(
+            Columns((GridColumn(50, (make_paragraph("a"),)), GridColumn(50, (make_paragraph("b"),)))),
+            "Columns",
+            id="column-layout",
+        ),
     ],
 )
 def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_column_cannot_hold(
@@ -882,6 +887,16 @@ def test_the_canvas_writer_alone_raises_an_internal_error_for_a_block_a_column_c
 
     assert str(raised.value) == (
         f"a Slack canvas column has no place for a {kind}; the export check should have refused it"
+    )
+
+
+def test_the_check_refuses_a_column_layout_in_a_column_of_a_tree_built_by_hand() -> None:
+    inner = Columns((GridColumn(50, (make_paragraph("a"),)), GridColumn(50, (make_paragraph("b"),))))
+    node = Columns((GridColumn(50, (make_paragraph("left"),)), GridColumn(50, (inner,))))
+
+    assert vars(refusal_of([node], "slack")) == _canvas_rejection(
+        "a Slack canvas cannot show a grid's columns inside a grid cell",
+        "write the inner grid's cells as cells of the outer grid",
     )
 
 

@@ -373,6 +373,9 @@ class _TreeWalk:
         if isinstance(node, Callout) and node.authored_as == _GRID_CELL_AUTHORED_AS:
             yield self.hit(TonedCell(node.tone), node.authored_at)
             return
+        if isinstance(node, Columns):
+            yield self.hit(GridInAGridCell(), node.authored_at)
+            return
         held = _held(node)
         feature = GRID_CELL_FEATURES.get(held) if held is not None else None
         if feature is not None:

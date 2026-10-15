@@ -215,7 +215,7 @@ def _the_place_cannot_hold(node: Node, place: Place) -> bool:
         case "callout":
             return _a_canvas_callout_cannot_hold(node)
         case "column":
-            return isinstance(node, TableNode | Callout | Divider)
+            return isinstance(node, TableNode | Callout | Divider | Columns)
         case "top":
             return False
         case _:
