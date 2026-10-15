@@ -5127,7 +5127,7 @@
             }
           ],
           "default": null,
-          "description": "A Slack channel or DM id (C..., G... or D...), or a link to one, where skaldr posts the link to each canvas it creates, once, when it creates it. Left out: the canvases are linked nowhere.",
+          "description": "A Slack channel or DM id (C..., G... or D...), or a link to one, where skaldr posts the link to each canvas it creates, once, when it creates it. Left out: the canvases are linked nowhere. Not part of the target's place, so changing it moves no canvas.",
           "title": "Conversation"
         },
         "canvas": {

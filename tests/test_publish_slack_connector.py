@@ -20,7 +20,6 @@ from tests.factories.slack_factory import InMemorySlack
 
 DOCUMENT_CANVAS = "F000000001"
 TOOLS_CANVAS = "F000000002"
-LABEL = "slack conversation C0EXAMPLE1"
 DOCUMENT_STAMP = "Published with skaldr from document garden-handbook"
 TOOLS_STAMP = "Published with skaldr from document garden-handbook, section tools"
 
@@ -188,6 +187,26 @@ def test_an_edit_made_in_slack_stops_the_publish_until_it_is_overwritten(
 
     assert (refused, overwritten, "Sow in spring." in slack.markdown_of(DOCUMENT_CANVAS)) == (1, 0, True)
     assert "-Sow in spring.\n+Sow in June." in refusal.out
+
+
+def test_naming_another_conversation_moves_no_canvas_and_posts_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    write_garden_report(
+        tmp_path, publish=_slack_publish(split=["tools"], where={"conversation": "C0EXAMPLE2"})
+    )
+    slack.forget_requests()
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (exit_code, slack.writes(), capsys.readouterr().out.splitlines()[-1]) == (
+        0,
+        [],
+        "Nothing to publish: every item matches the YAML.",
+    )
 
 
 def test_retiring_the_document_archives_each_canvas(tmp_path: Path) -> None:

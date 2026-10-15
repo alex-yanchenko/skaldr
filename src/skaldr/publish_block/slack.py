@@ -9,30 +9,33 @@ from skaldr.publish_block.target import JsonFields, Location, TargetBase
 from skaldr.services import SlackService
 
 SLACK_HOST = "slack.com"
-CONVERSATION_ID = re.compile(r"[CDG][A-Z0-9]{2,}")
-CANVAS_ID = re.compile(r"F[A-Z0-9]{2,}")
+TEAM = r"T[A-Z0-9]{2,}"
+CONVERSATION = r"[CDG][A-Z0-9]{2,}"
+CANVAS = r"F[A-Z0-9]{2,}"
+CONVERSATION_ID = re.compile(CONVERSATION)
+CANVAS_ID = re.compile(CANVAS)
+CONVERSATION_PATH = re.compile(rf"/(?:archives|client/{TEAM})/({CONVERSATION})(?:/.*)?")
+CANVAS_PATH = re.compile(rf"/docs/{TEAM}/({CANVAS})/?")
 
 
-def _is_slack_host(host: str) -> bool:
-    return host == SLACK_HOST or host.endswith(f".{SLACK_HOST}")
-
-
-def _slack_id(reference: str, pattern: re.Pattern[str]) -> str | None:
+def _slack_id(reference: str, identifier: re.Pattern[str], path: re.Pattern[str]) -> str | None:
     candidate = reference.strip()
-    if pattern.fullmatch(candidate):
+    if identifier.fullmatch(candidate):
         return candidate
     parsed = urlsplit(candidate)
-    if parsed.scheme not in ("http", "https") or not _is_slack_host(parsed.hostname or ""):
+    host = parsed.hostname or ""
+    if parsed.scheme not in ("http", "https") or not (host == SLACK_HOST or host.endswith(f".{SLACK_HOST}")):
         return None
-    return next((segment for segment in parsed.path.split("/") if pattern.fullmatch(segment)), None)
+    found = path.fullmatch(parsed.path)
+    return None if found is None else found.group(1)
 
 
 def slack_conversation_id(reference: str) -> str | None:
-    return _slack_id(reference, CONVERSATION_ID)
+    return _slack_id(reference, CONVERSATION_ID, CONVERSATION_PATH)
 
 
 def slack_canvas_id(reference: str) -> str | None:
-    return _slack_id(reference, CANVAS_ID)
+    return _slack_id(reference, CANVAS_ID, CANVAS_PATH)
 
 
 class SlackWhere(FrozenModel):
@@ -40,7 +43,7 @@ class SlackWhere(FrozenModel):
         default=None,
         description="A Slack channel or DM id (C..., G... or D...), or a link to one, where skaldr posts the "
         "link to each canvas it creates, once, when it creates it. Left out: the canvases are linked "
-        "nowhere.",
+        "nowhere. Not part of the target's place, so changing it moves no canvas.",
     )
     canvas: str | None = Field(
         default=None,
@@ -108,11 +111,9 @@ class SlackTarget(TargetBase):
         return f"{self.place_label()}{written_into}"
 
     def place_key(self) -> Location:
-        return ("slack", self.where.conversation or "", self.where.canvas or "")
+        return ("slack", self.where.canvas or "")
 
     def place_label(self) -> str:
         if self.where.canvas is not None:
             return f"slack canvas {self.where.canvas}"
-        if self.where.conversation is not None:
-            return f"slack conversation {self.where.conversation}"
-        return "slack without a conversation"
+        return "slack canvases"

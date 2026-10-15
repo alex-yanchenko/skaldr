@@ -60,8 +60,8 @@ def test_a_slack_target_without_where_publishes_canvases_it_links_nowhere() -> N
         target.location_label(),
     ) == (
         {"conversation": None, "canvas": None, "workspace": None},
-        ("slack", "", ""),
-        "slack without a conversation",
+        ("slack", ""),
+        "slack canvases",
     )
 
 
@@ -69,26 +69,23 @@ def test_a_slack_target_without_where_publishes_canvases_it_links_nowhere() -> N
     ("where", "place_key", "label"),
     [
         pytest.param(
-            {"conversation": SLACK_CONVERSATION_ID},
-            ("slack", SLACK_CONVERSATION_ID, ""),
-            f"slack conversation {SLACK_CONVERSATION_ID}",
-            id="conversation",
+            {"conversation": SLACK_CONVERSATION_ID}, ("slack", ""), "slack canvases", id="conversation"
         ),
         pytest.param(
             {"conversation": CHANNEL_LINK, "workspace": "Example Garden"},
-            ("slack", SLACK_CONVERSATION_ID, ""),
-            f"slack conversation {SLACK_CONVERSATION_ID}",
+            ("slack", ""),
+            "slack canvases",
             id="conversation-link-and-a-workspace-outside-the-place",
         ),
         pytest.param(
             {"canvas": CANVAS_LINK},
-            ("slack", "", SLACK_CANVAS_ID),
+            ("slack", SLACK_CANVAS_ID),
             f"slack canvas {SLACK_CANVAS_ID} (written into)",
             id="canvas-written-into",
         ),
     ],
 )
-def test_a_slack_target_is_placed_by_its_conversation_or_its_canvas(
+def test_a_slack_target_is_placed_by_its_canvas_and_not_by_where_its_links_are_posted(
     where: dict[str, Any], place_key: tuple[str, ...], label: str
 ) -> None:
     target = _parse({"doc_id": "plan", "targets": [make_slack_target(where=where)]}).targets[0]
@@ -104,12 +101,16 @@ def test_a_slack_target_is_placed_by_its_conversation_or_its_canvas(
         pytest.param(OTHER_CONVERSATION_ID, OTHER_CONVERSATION_ID, id="dm-id"),
         pytest.param(f"  {SLACK_CONVERSATION_ID}\n", SLACK_CONVERSATION_ID, id="surrounding-whitespace"),
         pytest.param(CHANNEL_LINK, SLACK_CONVERSATION_ID, id="archives-link"),
-        pytest.param(f"{CHANNEL_LINK}/p1791921965893669", SLACK_CONVERSATION_ID, id="message-link"),
+        pytest.param(f"{CHANNEL_LINK}/p0000000000000001", SLACK_CONVERSATION_ID, id="message-link"),
         pytest.param(
             f"https://app.slack.com/client/{SLACK_TEAM_ID}/{SLACK_CONVERSATION_ID}",
             SLACK_CONVERSATION_ID,
             id="app-link",
         ),
+        pytest.param(
+            f"https://example.slack.com/huddle/{SLACK_TEAM_ID}/{SLACK_CONVERSATION_ID}", None, id="other-path"
+        ),
+        pytest.param(f"https://example.slack.com/archives/{SLACK_TEAM_ID}", None, id="archives-of-a-team"),
         pytest.param("c0example1", None, id="lowercase"),
         pytest.param("U0EXAMPLE1", None, id="user-id"),
         pytest.param("#garden", None, id="channel-name"),
@@ -130,8 +131,18 @@ def test_a_conversation_id_comes_from_an_id_or_a_slack_link(
         pytest.param(SLACK_CANVAS_ID, SLACK_CANVAS_ID, id="canvas-id"),
         pytest.param(CANVAS_LINK, SLACK_CANVAS_ID, id="canvas-link"),
         pytest.param(f"{CANVAS_LINK}?focus_section_id=temp:C:X", SLACK_CANVAS_ID, id="link-with-a-query"),
+        pytest.param(f"{CANVAS_LINK}/", SLACK_CANVAS_ID, id="trailing-slash"),
         pytest.param(SLACK_CONVERSATION_ID, None, id="channel-id"),
         pytest.param(f"https://example.com/docs/{SLACK_TEAM_ID}/{SLACK_CANVAS_ID}", None, id="other-host"),
+        pytest.param(
+            f"https://example.slack.com/files/U0EXAMPLE1/{SLACK_CANVAS_ID}/notes.txt", None, id="file-link"
+        ),
+        pytest.param(f"https://example.slack.com/docs/{SLACK_CANVAS_ID}", None, id="docs-without-a-team"),
+        pytest.param(
+            f"https://example.slack.com/archives/{SLACK_CONVERSATION_ID}/{SLACK_CANVAS_ID}",
+            None,
+            id="file-id-under-a-channel",
+        ),
         pytest.param("", None, id="empty"),
     ],
 )
@@ -191,17 +202,22 @@ def test_an_empty_override_is_accepted() -> None:
     ("targets", "message"),
     [
         pytest.param(
-            [
-                make_slack_target(),
-                make_slack_target(where={"conversation": CHANNEL_LINK, "workspace": "Example Garden"}),
-            ],
-            f"publish targets 1 and 2 both write to slack conversation {SLACK_CONVERSATION_ID}",
-            id="one-conversation-named-two-ways",
+            [make_slack_target(), make_slack_target(where={"conversation": OTHER_CONVERSATION_ID})],
+            "publish targets 1 and 2 both write to slack canvases",
+            id="two-conversations",
         ),
         pytest.param(
             [{"to": "slack"}, make_slack_target(where={})],
-            "publish targets 1 and 2 both write to slack without a conversation",
+            "publish targets 1 and 2 both write to slack canvases",
             id="two-unlinked",
+        ),
+        pytest.param(
+            [
+                make_slack_target(where={"canvas": SLACK_CANVAS_ID}),
+                make_slack_target(where={"canvas": CANVAS_LINK}),
+            ],
+            f"publish targets 1 and 2 both write to slack canvas {SLACK_CANVAS_ID}",
+            id="one-canvas-named-two-ways",
         ),
     ],
 )
@@ -216,7 +232,7 @@ def test_a_slack_target_sits_beside_a_notion_target() -> None:
             "targets": [
                 make_notion_target(),
                 make_slack_target(),
-                make_slack_target(where={"conversation": OTHER_CONVERSATION_ID}),
+                make_slack_target(where={"canvas": SLACK_CANVAS_ID}),
             ],
         }
     )
