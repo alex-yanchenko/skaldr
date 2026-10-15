@@ -1,6 +1,6 @@
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Final, NoReturn
@@ -15,13 +15,14 @@ from skaldr.export.runs import (
     Chip,
     ExportRich,
     Gauge,
+    IndicatorMark,
     Mark,
     SectionLink,
     TonedLabel,
     write_chipless_export_run,
 )
-from skaldr.export.tree import CodeBlock, TableNode, TableRow
-from skaldr.models import Person, ToneLiteral
+from skaldr.export.tree import CodeBlock, TableCell, TableNode, TableRow, ToneName
+from skaldr.models import BADGE_COLOR_TONE, Person, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -155,19 +156,24 @@ def table_width(table: TableNode) -> int:
     return max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
 
 
-def pipe_table_lines(table: TableNode, inline: Callable[[ExportRich], str]) -> list[str]:
-    def cell_text(runs: ExportRich) -> str:
-        return inline(runs).replace("|", "\\|")
+def _dot_tones_not_leading(tones: Sequence[ToneName], runs: ExportRich) -> tuple[ToneLiteral, ...]:
+    return tuple(
+        dict.fromkeys(tone for tone in tones if tone != "muted" and runs[:1] != (IndicatorMark(tone),))
+    )
 
-    width = table_width(table)
-    lines = [
-        _pipe_table_row(_padded([cell_text(cell.text) for cell in table.header], width)),
-        _pipe_table_row(["---"] * width),
-    ]
-    for row in table.rows:
-        texts = body_cell_texts(table, row, [cell_text(cell.text) for cell in row.cells])
-        lines.append(_pipe_table_row(_padded(texts, width)))
-    return lines
+
+def _own_tone(cell: TableCell) -> tuple[ToneName, ...]:
+    return (cell.tone,) if cell.tone is not None else ()
+
+
+def _row_tone_on_title(table: TableNode, row: TableRow, index: int) -> tuple[ToneName, ...]:
+    if row.tone is None or index != table.title_column:
+        return ()
+    return (row.tone,)
+
+
+def _tones_a_cell_shows(table: TableNode, row: TableRow, index: int, cell: TableCell) -> tuple[ToneName, ...]:
+    return _row_tone_on_title(table, row, index) + _own_tone(cell)
 
 
 class MarkupRuns(TextRunWriter, ABC):
@@ -309,8 +315,22 @@ class CommonMarkRuns(MarkupRuns, ABC):
     def write(self, runs: ExportRich) -> str:
         return self._written(runs, _Enclosing())
 
+    def write_toned(self, tones: Sequence[ToneName], runs: ExportRich) -> str:
+        dots = [self.mark(IndicatorMark(tone)) for tone in _dot_tones_not_leading(tones, runs)]
+        text = self._written_struck(runs) if "muted" in tones else self.write(runs)
+        return " ".join([*dots, text] if text else dots)
+
+    def _written_struck(self, runs: ExportRich) -> str:
+        struck = _Emphasis("strike", self._written(runs, _Enclosing().inside("strike")))
+        return self._joined([struck], _Enclosing())
+
+    def _tone_dot_prefix(self, tone: ToneLiteral) -> str:
+        return f"{self.mark(IndicatorMark(tone))} "
+
     def _written(self, runs: ExportRich, enclosing: _Enclosing) -> str:
-        pieces = self._pieces(runs, enclosing)
+        return self._joined(self._pieces(runs, enclosing), enclosing)
+
+    def _joined(self, pieces: Sequence[_Piece], enclosing: _Enclosing) -> str:
         written = ""
         open_marker_character = NO_CHARACTER
         for index, piece in enumerate(pieces):
@@ -355,7 +375,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case Tinted():
                     self.refuse_a_tint()
                 case TonedLabel():
-                    pieces += self._pieces(run.runs, enclosing)
+                    pieces += [self._tone_dot_prefix(run.tone), *self._pieces(run.runs, enclosing)]
                 case Link():
                     pieces.append(self.link(self._written(run.label, enclosing.inside_brackets()), run.url))
                 case AnchorLink():
@@ -366,7 +386,10 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case DateMention():
                     pieces.append(self.date_mention_around(run, write_runs(run.label, self)))
                 case Chip():
-                    pieces.append(_Emphasis("bold", self.escape(run.label)))
+                    pieces += [
+                        self._tone_dot_prefix(BADGE_COLOR_TONE[run.tone]),
+                        _Emphasis("bold", self.escape(run.label)),
+                    ]
                 case _:
                     pieces.append(write_chipless_export_run(run, self))
         return pieces
@@ -385,3 +408,21 @@ class CommonMarkRuns(MarkupRuns, ABC):
 
     def placeholder(self, name: str, /) -> str:
         return code_span("{{" + name + "}}")
+
+
+def pipe_table_lines(table: TableNode, writer: CommonMarkRuns) -> list[str]:
+    def cell_text(cell: TableCell, tones: Sequence[ToneName]) -> str:
+        return writer.write_toned(tones, cell.text).replace("|", "\\|")
+
+    width = table_width(table)
+    lines = [
+        _pipe_table_row(_padded([cell_text(cell, ()) for cell in table.header], width)),
+        _pipe_table_row(["---"] * width),
+    ]
+    for row in table.rows:
+        written = [
+            cell_text(cell, _tones_a_cell_shows(table, row, index, cell))
+            for index, cell in enumerate(row.cells)
+        ]
+        lines.append(_pipe_table_row(_padded(body_cell_texts(table, row, written), width)))
+    return lines

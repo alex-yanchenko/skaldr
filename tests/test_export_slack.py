@@ -61,6 +61,8 @@ from skaldr.richtext import (
     Tinted,
 )
 from tests.factories import (
+    API_AND_RISK_BADGES,
+    TEXT_X_BLOCK,
     accepted_example,
     folder_texts,
     make_bullets,
@@ -583,7 +585,7 @@ def test_a_block_authored_on_its_own_in_a_list_item_is_rejected_as_a_step_detail
     )
 
 
-def test_a_table_is_a_pipe_table_without_tones_or_widths_and_with_pipes_escaped_and_lines_joined() -> None:
+def test_a_canvas_table_dots_tones_drops_widths_escapes_pipes_and_joins_lines() -> None:
     table = TableNode(
         (make_table_cell("Item"), make_table_cell("Note")),
         (
@@ -594,13 +596,71 @@ def test_a_table_is_a_pipe_table_without_tones_or_widths_and_with_pipes_escaped_
                 ),
                 "warning",
             ),
+            TableRow((make_table_cell("(old)"), make_table_cell("x")), "muted"),
+            TableRow((TableCell(make_rich_text("(old)"), "warning"), make_table_cell("y")), "muted"),
+            TableRow((TableCell(make_rich_text("fire"), "muted"), make_table_cell("z")), "danger"),
             TableRow((make_table_cell("Total"), make_table_cell("2")), emphasis="total"),
         ),
         columns=(TableColumn("info", 0.3), TableColumn()),
     )
 
     assert render_slack([table]) == (
-        "| Item | Note |\n| --- | --- |\n| a\\|b | one<br>two |\n| **Total** | **2** |\n"
+        "| Item | Note |\n"
+        "| --- | --- |\n"
+        "| 🟡 🔴 a\\|b | one<br>two |\n"
+        "| ~~(old)~~ | x |\n"
+        "| 🟡 ~~(old)~~ | y |\n"
+        "| 🔴 ~~fire~~ | z |\n"
+        "| **Total** | **2** |\n"
+    )
+
+
+def test_tones_on_a_canvas_are_dots() -> None:
+    blocks = [
+        {"type": "badge_row", "items": [{"key": "API"}, {"label": "Done", "tone": "green"}]},
+        {
+            "type": "comparison",
+            "options": ["A", "B"],
+            "polarity": ["positive", "negative"],
+            "rows": [{"feature": "Logs", "values": [True, {"value": "high", "tone": "warning"}]}],
+        },
+        {
+            "type": "matrix",
+            "rows": ["Build"],
+            "columns": ["Fill", "Both"],
+            "cells": [
+                {"row": "Build", "col": "Fill", "badge": "RISK"},
+                {"row": "Build", "col": "Both", "tone": "green", "label": "ok"},
+            ],
+        },
+        {
+            "type": "table",
+            "columns": [{"key": "a", "label": "Item"}, {"key": "tag", "label": "Tag", "kind": "badge"}],
+            "tint_by": "tag",
+            "rows": [
+                {"a": "old", "tag": "API", "tone": "muted"},
+                {"a": "fire", "tag": "", "tone": "danger"},
+                {"a": "tinted", "tag": "RISK"},
+            ],
+        },
+        {"type": "meter", "items": [{"label": "Disk", "value": 3, "max": 4, "tone": "warning"}]},
+        {
+            "type": "walkthrough",
+            "steps": [{"label": "Stop", "tone": "danger", "detail": [TEXT_X_BLOCK]}],
+        },
+    ]
+
+    assert slack_of(blocks, badges=API_AND_RISK_BADGES) == (
+        "🔵 **api** 🟢 **Done**\n\n"
+        "|  | A | B |\n| --- | --- | --- |\n| **Logs** | 🟢 ✓ | 🟡 high |\n\n"
+        "|  | Fill | Both |\n| --- | --- | --- |\n| **Build** | 🔴 risk | 🟢 ok |\n\n"
+        "**Legend: badges used on this page**\n\n"
+        "* 🔵 **api** the API\n\n"
+        "| Item | Tag |\n| --- | --- |\n| ~~old~~ | 🔵 **api** |\n"
+        "| 🔴 fire |  |\n| tinted | 🔴 **risk** |\n\n"
+        "* 🟡 **Disk**: ████████░░ 75.0%\n\n"
+        "&nbsp;\n\n"
+        "1. 🔴 **Stop** x\n"
     )
 
 
@@ -1015,7 +1075,9 @@ def test_a_table_of_contents_writes_nothing() -> None:
         pytest.param(Styled("bold", make_rich_text("b")), "**b**", id="bold"),
         pytest.param(Styled("italic", make_rich_text("i")), "*i*", id="italic"),
         pytest.param(Styled("strike", make_rich_text("s")), "~~s~~", id="strike"),
-        pytest.param(TonedLabel("danger", make_rich_text("t")), "t", id="toned-label-is-plain"),
+        pytest.param(
+            TonedLabel("danger", make_rich_text("t")), "🔴 t", id="toned-label-is-led-by-its-tone-dot"
+        ),
         pytest.param(ScriptText("subscript", "2"), "\N{SUBSCRIPT TWO}", id="subscript-digit"),
         pytest.param(
             ScriptText("subscript", "i=0"),
@@ -1044,7 +1106,7 @@ def test_a_table_of_contents_writes_nothing() -> None:
             id="superscript-a-and-o-are-letters-not-ordinal-indicators",
         ),
         pytest.param(Code("a`b"), "``a`b``", id="code-outgrows-its-backticks"),
-        pytest.param(Chip("a*b", "blue"), "**a\\*b**", id="chip-is-bold"),
+        pytest.param(Chip("a*b", "blue"), "🔵 **a\\*b**", id="chip-is-its-tone-dot-and-bold-label"),
         pytest.param(StatusMark("done"), "✅", id="status-mark"),
         pytest.param(
             SectionLink(make_rich_text("method"), "method"), "method", id="section-link-is-its-label"
