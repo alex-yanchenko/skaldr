@@ -530,6 +530,21 @@ def _number_and_title(title: ExportRich, title_tone: ToneName | None = None) -> 
             id="the-row-dot-before-the-title-cell-dot",
         ),
         pytest.param(
+            TableRow(_number_and_title((Plain("old"),), "warning"), "muted"),
+            "| 1 | 🟡 ~~old~~ |",
+            id="a-muted-row-strikes-the-text-after-the-title-cell-dot",
+        ),
+        pytest.param(
+            TableRow(_number_and_title((Plain("fire"),), "muted"), "danger"),
+            "| 1 | 🔴 ~~fire~~ |",
+            id="a-muted-title-cell-in-a-danger-row-is-struck-after-the-row-dot",
+        ),
+        pytest.param(
+            TableRow(_number_and_title((Plain("fire"),), "danger"), "danger"),
+            "| 1 | 🔴 fire |",
+            id="a-title-cell-on-the-row-tone-shows-one-dot",
+        ),
+        pytest.param(
             TableRow(_number_and_title((Plain("fire"),)), tint="danger"),
             "| 1 | fire |",
             id="a-tint-is-dropped",

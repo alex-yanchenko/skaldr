@@ -593,6 +593,8 @@ def test_a_table_is_a_pipe_table_with_tones_as_dots_no_widths_pipes_escaped_and_
                 "warning",
             ),
             TableRow((make_table_cell("(old)"), make_table_cell("x")), "muted"),
+            TableRow((TableCell(make_rich_text("(old)"), "warning"), make_table_cell("y")), "muted"),
+            TableRow((TableCell(make_rich_text("fire"), "muted"), make_table_cell("z")), "danger"),
             TableRow((make_table_cell("Total"), make_table_cell("2")), emphasis="total"),
         ),
         columns=(TableColumn("info", 0.3), TableColumn()),
@@ -603,6 +605,8 @@ def test_a_table_is_a_pipe_table_with_tones_as_dots_no_widths_pipes_escaped_and_
         "| --- | --- |\n"
         "| 🟡 🔴 a\\|b | one<br>two |\n"
         "| ~~(old)~~ | x |\n"
+        "| 🟡 ~~(old)~~ | y |\n"
+        "| 🔴 ~~fire~~ | z |\n"
         "| **Total** | **2** |\n"
     )
 

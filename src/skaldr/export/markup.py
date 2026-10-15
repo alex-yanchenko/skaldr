@@ -28,7 +28,6 @@ from skaldr.richtext import (
     Citation,
     Link,
     MarkerStyle,
-    Plain,
     ScriptPosition,
     Styled,
     StyleName,
@@ -151,25 +150,24 @@ def table_width(table: TableNode) -> int:
     return max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
 
 
-def _led_by_its_tone_dot(tone: ToneLiteral, runs: ExportRich) -> ExportRich:
-    dot = IndicatorMark(tone)
-    if runs[:1] == (dot,):
-        return runs
-    return (dot, Plain(" "), *runs) if runs else (dot,)
+def _dot_tones_not_leading(tones: Sequence[ToneName], runs: ExportRich) -> tuple[ToneLiteral, ...]:
+    return tuple(
+        dict.fromkeys(tone for tone in tones if tone != "muted" and runs[:1] != (IndicatorMark(tone),))
+    )
 
 
 def _own_tone(cell: TableCell) -> tuple[ToneName, ...]:
     return (cell.tone,) if cell.tone is not None else ()
 
 
-def _row_tone_in(table: TableNode, row: TableRow, index: int) -> tuple[ToneName, ...]:
+def _row_tone_on_title(table: TableNode, row: TableRow, index: int) -> tuple[ToneName, ...]:
     if row.tone is None or index != table.title_column:
         return ()
     return (row.tone,)
 
 
 def _tones_a_cell_shows(table: TableNode, row: TableRow, index: int, cell: TableCell) -> tuple[ToneName, ...]:
-    return _row_tone_in(table, row, index) + _own_tone(cell)
+    return _row_tone_on_title(table, row, index) + _own_tone(cell)
 
 
 class MarkupRuns(TextRunWriter, ABC):
@@ -309,16 +307,15 @@ class CommonMarkRuns(MarkupRuns, ABC):
         return self._written(runs, _Enclosing())
 
     def write_toned(self, tones: Sequence[ToneName], runs: ExportRich) -> str:
-        for tone in reversed(tones):
-            if tone != "muted":
-                runs = _led_by_its_tone_dot(tone, runs)
-        return self._written_struck(runs) if "muted" in tones else self.write(runs)
+        dots = [self.mark(IndicatorMark(tone)) for tone in _dot_tones_not_leading(tones, runs)]
+        text = self._written_struck(runs) if "muted" in tones else self.write(runs)
+        return " ".join([*dots, text] if text else dots)
 
     def _written_struck(self, runs: ExportRich) -> str:
         struck = _Emphasis("strike", self._written(runs, _Enclosing().inside("strike")))
         return self._joined([struck], _Enclosing())
 
-    def _tone_dot(self, tone: ToneLiteral) -> str:
+    def _tone_dot_prefix(self, tone: ToneLiteral) -> str:
         return f"{self.mark(IndicatorMark(tone))} "
 
     def _written(self, runs: ExportRich, enclosing: _Enclosing) -> str:
@@ -369,7 +366,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case Tinted():
                     self.refuse_a_tint()
                 case TonedLabel():
-                    pieces += [self._tone_dot(run.tone), *self._pieces(run.runs, enclosing)]
+                    pieces += [self._tone_dot_prefix(run.tone), *self._pieces(run.runs, enclosing)]
                 case Link():
                     pieces.append(self.link(self._written(run.label, enclosing.inside_brackets()), run.url))
                 case AnchorLink():
@@ -378,8 +375,10 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case SectionLink():
                     pieces += self._anchor_link_pieces(run, enclosing)
                 case Chip():
-                    tone = BADGE_COLOR_TONE[run.tone]
-                    pieces += [self._tone_dot(tone), _Emphasis("bold", self.escape(run.label))]
+                    pieces += [
+                        self._tone_dot_prefix(BADGE_COLOR_TONE[run.tone]),
+                        _Emphasis("bold", self.escape(run.label)),
+                    ]
                 case _:
                     pieces.append(write_chipless_export_run(run, self))
         return pieces
@@ -400,9 +399,9 @@ class CommonMarkRuns(MarkupRuns, ABC):
         return code_span("{{" + name + "}}")
 
 
-def pipe_table_lines(table: TableNode, runs: CommonMarkRuns) -> list[str]:
+def pipe_table_lines(table: TableNode, writer: CommonMarkRuns) -> list[str]:
     def cell_text(cell: TableCell, tones: Sequence[ToneName]) -> str:
-        return runs.write_toned(tones, cell.text).replace("|", "\\|")
+        return writer.write_toned(tones, cell.text).replace("|", "\\|")
 
     width = table_width(table)
     lines = [
