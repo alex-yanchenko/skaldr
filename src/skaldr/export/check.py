@@ -259,6 +259,7 @@ class _RunPlace:
     in_a_table_cell: bool
     span: SpanKind | None = None
     span_is_generated: bool = False
+    underlined: bool = False
 
     def around(self, run: ExportRun) -> Self:
         match run:
@@ -266,8 +267,13 @@ class _RunPlace:
                 return replace(self, span=tint_kind(run), span_is_generated=False)
             case TonedLabel():
                 return replace(self, span="colour", span_is_generated=True)
+            case Styled() if run.style == "underline":
+                return replace(self, underlined=True)
             case _:
                 return self
+
+    def closes_at_a_closing_tag(self) -> bool:
+        return self.span is not None or self.underlined
 
 
 def _tint_features(run: Tinted, place: _RunPlace) -> Iterator[TextMarkFeature]:
@@ -291,8 +297,10 @@ def _code_details(code: Code, place: _RunPlace) -> Iterator[InlineCode]:
         return
     elif place.in_a_table_cell:
         yield InlineCode("inline code holding a closing tag in a table cell", code.text)
-    elif place.span is not None:
-        yield InlineCode("inline code holding a closing tag in a coloured or highlighted span", code.text)
+    elif place.closes_at_a_closing_tag():
+        yield InlineCode(
+            "inline code holding a closing tag in a coloured, highlighted or underlined span", code.text
+        )
 
 
 def _inline_details(run: ExportRun, place: _RunPlace) -> Iterator[Details]:
@@ -308,6 +316,8 @@ def _inline_details(run: ExportRun, place: _RunPlace) -> Iterator[Details]:
             yield from (MarkedText(feature, text) for feature in _tint_features(run, place))
         case Styled() if run.style == "underline":
             yield MarkedText("underline", _visible_text(run.runs))
+        case Placeholder() if place.span == "colour":
+            yield MarkedText("placeholder inside coloured text", "{{" + run.name + "}}")
         case AnchorLink():
             yield SameDocumentLink(_visible_text(run.label), run.as_written())
         case DocumentLink():

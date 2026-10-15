@@ -13,7 +13,7 @@ from skaldr.export.runs import (
     TonedLabel,
     mark_name,
     nested_runs,
-    with_nested_runs,
+    write_export_run_around,
     write_export_runs,
 )
 from skaldr.models import Person, ToneLiteral
@@ -21,8 +21,12 @@ from skaldr.richtext import (
     AnchorLink,
     Citation,
     Code,
+    DateMention,
+    DocumentLink,
     InlineMath,
+    IssueLink,
     Link,
+    PersonMention,
     Placeholder,
     Plain,
     ScriptPosition,
@@ -190,11 +194,36 @@ def test_the_nested_runs_of_a_run_are_its_label_or_its_runs_and_a_leaf_holds_non
     assert [nested_runs(run) for run in runs] == [held, held, held, held, (), ()]
 
 
-def test_a_run_rebuilt_with_other_nested_runs_keeps_everything_else_and_a_leaf_stays_as_it_is() -> None:
-    held = (Plain("cold"),)
+def test_a_run_written_around_its_nested_runs_written_apart_is_the_run_written_whole() -> None:
+    held = (Styled("italic", (Plain("hot"),)),)
+    runs: ExportRich = (
+        Link(held, "https://example.com"),
+        AnchorLink(held, "top"),
+        DateMention(held, date(2026, 10, 1), None),
+        PersonMention(held, "ada", Person()),
+        IssueLink(held, "ABC-1", None),
+        DocumentLink(held, "plan", None),
+        Styled("bold", held),
+        Tinted("danger", None, held),
+        SectionLink(held, "totals"),
+        TonedLabel("info", held),
+        Code("x"),
+        Placeholder("who"),
+        Break(),
+        StatusMark("done"),
+        Gauge(3, 4),
+        Chip("api", "blue"),
+    )
+    writer = _structured_writer()
 
-    assert [
-        with_nested_runs(Link((Plain("hot"),), "https://example.com"), held),
-        with_nested_runs(Tinted("danger", "sky", (Plain("hot"),)), held),
-        with_nested_runs(Code("x"), held),
-    ] == [Link(held, "https://example.com"), Tinted("danger", "sky", held), Code("x")]
+    assert [write_export_run_around(run, write_runs(nested_runs(run), writer), writer) for run in runs] == [
+        write_export_runs((run,), writer) for run in runs
+    ]
+
+
+def test_a_run_written_around_other_written_runs_wraps_those_runs() -> None:
+    link = Link((Plain("hot"),), "https://example.com")
+
+    assert write_export_run_around(link, _leaf("text", "cold"), _structured_writer()) == (
+        ("text", "cold", ("link=https://example.com",)),
+    )

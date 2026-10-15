@@ -25,24 +25,15 @@ from skaldr.export.markup import (
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import (
-    Break,
-    CheckMark,
     Chip,
-    DecisionMark,
     ExportRich,
     ExportRun,
-    Gauge,
-    IndicatorMark,
-    SectionLink,
     SpanKind,
-    StatusMark,
-    SwimlaneMark,
     TonedLabel,
     export_visible_text,
     holds_a_chip,
     nested_runs,
-    tint_kind,
-    with_nested_runs,
+    write_export_run_around,
     write_export_runs,
 )
 from skaldr.export.tree import (
@@ -72,7 +63,7 @@ from skaldr.export.tree import (
     heading_of,
 )
 from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, Person, ToneLiteral
-from skaldr.richtext import Code, Rich, Run, ScriptPosition, Tinted
+from skaldr.richtext import Code, Placeholder, ScriptPosition, Styled, Tinted
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
 FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
@@ -109,6 +100,7 @@ BLOCK_COLOR: Final[Mapping[ToneName, str]] = {
     "teal": "brown",
     "sky": "pink",
 }
+PLACEHOLDER_HIGHLIGHT: Final = BLOCK_COLOR["warning"] + BACKGROUND_SUFFIX
 CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
     color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
 }
@@ -188,8 +180,11 @@ class _NotionRuns(MarkupRuns):
             return label
         return f'<mention-user url="{person.notion}">{label}</mention-user>'
 
+    def blank(self, name: str, /) -> str:
+        return self.escape("{{" + name + "}}")
+
     def placeholder(self, name: str, /) -> str:
-        return f'<span color="yellow_bg">{self.escape("{{" + name + "}}")}</span>'
+        return _placeholder_written_in(_Span(), name, self)
 
     def chip(self, run: Chip, /) -> str:
         label = self.text(run.label)
@@ -197,127 +192,125 @@ class _NotionRuns(MarkupRuns):
         return bolded if self.on_fill else _colored_span(CHIP_COLOR[run.tone], bolded)
 
     def underline(self, inner: str, /) -> str:
-        return f'<span underline="true">{inner}</span>'
+        return _Span().underlined().around(inner)
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
         return self.math(LATEX_SCRIPT_OPERATOR[position] + "{" + latex_text(text) + "}")
 
     def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: str, /) -> str:
-        if tone and background:
-            raise ExportInvariantError(
-                "a Notion text run takes a colour or a highlight, not both; "
-                "the export check should have refused it"
-            )
-        if background:
-            return _colored_span(BLOCK_COLOR[background] + BACKGROUND_SUFFIX, inner)
-        return _colored_span(BLOCK_COLOR[tone], inner) if tone else inner
+        return _Span().tinted(tone, background).around(inner)
 
     def toned_label(self, tone: ToneLiteral, inner: str, /) -> str:
-        return _colored_span(BLOCK_COLOR[tone], inner)
+        return _Span().tinted(tone, None).around(inner)
 
 
 def _colored_span(color: str, inner: str) -> str:
     return f'<span color="{color}">{inner}</span>'
 
 
-def _span_of(run: ExportRun) -> SpanKind | None:
-    match run:
-        case Tinted():
-            return tint_kind(run)
-        case TonedLabel():
-            return "colour"
-        case _:
-            return None
-
-
-def _require_spans_notion_can_show(runs: Iterable[ExportRun], open_span: SpanKind | None) -> None:
+def _codes_holding_a_closing_tag(runs: Iterable[ExportRun]) -> Iterator[str]:
     for run in runs:
-        span = _span_of(run)
-        if span is not None and open_span is not None and span != open_span:
+        if isinstance(run, Code) and CLOSING_TAG_OPENER in run.text:
+            yield run.text
+        yield from _codes_holding_a_closing_tag(nested_runs(run))
+
+
+@dataclass(frozen=True)
+class _Span:
+    color: str | None = None
+    kind: SpanKind | None = None
+    underline: bool = False
+
+    def coloured(self, kind: SpanKind, color: str) -> "_Span":
+        if self.kind is not None and self.kind != kind:
             raise ExportInvariantError(
-                f"Notion holds no span inside a span, so it cannot show a {span} inside a {open_span}; "
+                f"Notion holds no span inside a span, so it cannot show a {kind} inside a {self.kind}; "
                 "the export check should have refused it"
             )
-        if isinstance(run, Code) and open_span is not None and CLOSING_TAG_OPENER in run.text:
+        return replace(self, color=color, kind=kind)
+
+    def tinted(self, tone: ToneLiteral | None, background: ToneLiteral | None) -> "_Span":
+        if tone and background:
             raise ExportInvariantError(
-                "Notion closes a coloured or highlighted span early at inline code holding '</', "
-                f"'{run.text}'; the export check should have refused it"
+                "a Notion text run takes a colour or a highlight, not both; "
+                "the export check should have refused it"
             )
-        _require_spans_notion_can_show(nested_runs(run), span or open_span)
+        if background:
+            return self.coloured("highlight", BLOCK_COLOR[background] + BACKGROUND_SUFFIX)
+        return self.coloured("colour", BLOCK_COLOR[tone]) if tone else self
+
+    def underlined(self) -> "_Span":
+        return replace(self, underline=True)
+
+    def _attributes(self) -> str:
+        color = f' color="{self.color}"' if self.color else ""
+        return color + (' underline="true"' if self.underline else "")
+
+    def around(self, inner: str) -> str:
+        attributes = self._attributes()
+        return f"<span{attributes}>{inner}</span>" if attributes and inner else inner
+
+    def holding(self, runs: ExportRich, writer: "_NotionRuns") -> str:
+        if self._attributes():
+            closing = next(_codes_holding_a_closing_tag(runs), None)
+            if closing is not None:
+                raise ExportInvariantError(
+                    "Notion closes a coloured, highlighted or underlined span early at inline code "
+                    f"holding '</', '{closing}'; the export check should have refused it"
+                )
+        return self.around(write_export_runs(runs, writer))
 
 
-def _holds_a_tint(run: ExportRun) -> bool:
-    return any(isinstance(inner, Tinted) or _holds_a_tint(inner) for inner in nested_runs(run))
+def _placeholder_written_in(span: _Span, name: str, writer: "_NotionRuns") -> str:
+    return span.coloured("highlight", PLACEHOLDER_HIGHLIGHT).around(writer.blank(name))
 
 
-def _tinted_together(tint: Tinted, runs: Sequence[Run]) -> list[Run]:
-    return [replace(tint, runs=tuple(runs))] if runs else []
+def _is_a_span(run: ExportRun) -> bool:
+    match run:
+        case Tinted() | TonedLabel() | Placeholder():
+            return True
+        case Styled():
+            return run.style == "underline"
+        case _:
+            return False
 
 
-def _tinted_apart(tint: Tinted, runs: Rich) -> Rich:
-    pieces: list[Run] = []
-    together: list[Run] = []
+def _holds_a_span(run: ExportRun) -> bool:
+    return any(_is_a_span(inner) or _holds_a_span(inner) for inner in nested_runs(run))
+
+
+def _written_in(span: _Span, runs: ExportRich, writer: "_NotionRuns") -> str:
+    parts: list[str] = []
+    outside_any_inner_span: list[ExportRun] = []
     for run in runs:
-        if not isinstance(run, Tinted) and not _holds_a_tint(run):
-            together.append(run)
+        if not _is_a_span(run) and not _holds_a_span(run):
+            outside_any_inner_span.append(run)
             continue
-        pieces += _tinted_together(tint, together)
-        together = []
-        if isinstance(run, Tinted):
-            pieces += _tint_beside_the_spans_it_holds(run)
-        else:
-            pieces.append(with_nested_runs(run, _tinted_apart(tint, nested_runs(run))))
-    return (*pieces, *_tinted_together(tint, together))
+        parts.append(span.holding(tuple(outside_any_inner_span), writer))
+        outside_any_inner_span = []
+        parts.append(_run_written_in(span, run, writer))
+    parts.append(span.holding(tuple(outside_any_inner_span), writer))
+    return writer.concat(parts)
 
 
-def _tint_beside_the_spans_it_holds(tint: Tinted) -> Rich:
-    return _tinted_apart(tint, tint.runs) if _holds_a_tint(tint) else (tint,)
-
-
-def _run_beside_the_spans_it_holds(run: Run) -> Rich:
-    if isinstance(run, Tinted):
-        return _tint_beside_the_spans_it_holds(run)
-    if not _holds_a_tint(run):
-        return (run,)
-    return (with_nested_runs(run, _spans_side_by_side(nested_runs(run))),)
-
-
-def _spans_side_by_side(runs: Rich) -> Rich:
-    return tuple(piece for run in runs for piece in _run_beside_the_spans_it_holds(run))
-
-
-def _export_spans_side_by_side(runs: ExportRich) -> ExportRich:
-    written: list[ExportRun] = []
-    for run in runs:
-        match run:
-            case TonedLabel():
-                toned = Tinted(run.tone, None, run.runs)
-                written += _tint_beside_the_spans_it_holds(toned) if _holds_a_tint(run) else (run,)
-            case SectionLink():
-                written.append(replace(run, label=_spans_side_by_side(run.label)))
-            case (
-                Break()
-                | StatusMark()
-                | SwimlaneMark()
-                | IndicatorMark()
-                | CheckMark()
-                | DecisionMark()
-                | Gauge()
-                | Chip()
-            ):
-                written.append(run)
-            case _:
-                written += _run_beside_the_spans_it_holds(run)
-    return tuple(written)
+def _run_written_in(span: _Span, run: ExportRun, writer: "_NotionRuns") -> str:
+    match run:
+        case Tinted():
+            return _written_in(span.tinted(run.tone, run.background), run.runs, writer)
+        case TonedLabel():
+            return _written_in(span.tinted(run.tone, None), run.runs, writer)
+        case Styled() if run.style == "underline":
+            return _written_in(span.underlined(), run.runs, writer)
+        case Placeholder():
+            return _placeholder_written_in(span, run.name, writer)
+        case _:
+            return write_export_run_around(run, _written_in(span, nested_runs(run), writer), writer)
 
 
 def notion_inline(
     runs: ExportRich, *, inside_bold: bool = False, on_fill: bool = False, in_a_table_cell: bool = False
 ) -> str:
-    _require_spans_notion_can_show(runs, None)
-    return write_export_runs(
-        _export_spans_side_by_side(runs), _NotionRuns(inside_bold, on_fill, in_a_table_cell)
-    )
+    return _written_in(_Span(), runs, _NotionRuns(inside_bold, on_fill, in_a_table_cell))
 
 
 def _block_text(runs: ExportRich) -> str:

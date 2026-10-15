@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from typing_extensions import assert_never
@@ -136,18 +136,6 @@ def nested_runs(run: ExportRun) -> Rich:
             assert_never(run)
 
 
-def with_nested_runs(run: Run, runs: Rich) -> Run:
-    match run:
-        case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
-            return replace(run, label=runs)
-        case Styled() | Tinted():
-            return replace(run, runs=runs)
-        case Plain() | Code() | Citation() | Placeholder() | ScriptText() | InlineMath():
-            return run
-        case _:
-            assert_never(run)
-
-
 def holds_a_chip(runs: ExportRich) -> bool:
     return any(isinstance(run, Chip) for run in runs)
 
@@ -194,6 +182,49 @@ def write_export_run(run: ExportRun, writer: ExportRunWriter[Written]) -> Writte
 
 def write_export_runs(runs: ExportRich, writer: ExportRunWriter[Written]) -> Written:
     return writer.concat([write_export_run(run, writer) for run in runs])
+
+
+def write_export_run_around(run: ExportRun, nested: Written, writer: ExportRunWriter[Written]) -> Written:
+    match run:
+        case Link():
+            return writer.link(nested, run.url)
+        case AnchorLink():
+            return writer.anchor_link(nested, run.anchor)
+        case DateMention():
+            return writer.date_mention(nested, run.start, run.end)
+        case PersonMention():
+            return writer.person_mention(nested, run.key, run.person)
+        case IssueLink():
+            return writer.issue_link(nested, run.key, run.url)
+        case DocumentLink():
+            return writer.document_link(nested, run.doc_id, run.section)
+        case Styled():
+            return writer.styled(run.style, nested)
+        case Tinted():
+            return writer.tinted(run.tone, run.background, nested)
+        case SectionLink():
+            return writer.section_link(nested, run.anchor)
+        case TonedLabel():
+            return writer.toned_label(run.tone, nested)
+        case (
+            Plain()
+            | Code()
+            | Citation()
+            | Placeholder()
+            | ScriptText()
+            | InlineMath()
+            | Break()
+            | StatusMark()
+            | SwimlaneMark()
+            | IndicatorMark()
+            | CheckMark()
+            | DecisionMark()
+            | Gauge()
+            | Chip()
+        ):
+            return write_export_run(run, writer)
+        case _:
+            assert_never(run)
 
 
 def mark_name(mark: Mark) -> str:

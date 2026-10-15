@@ -323,6 +323,71 @@ def test_a_span_inside_a_span_of_the_same_kind_is_written_beside_it_as_notion_sh
     assert notion_inline(runs) == notion
 
 
+@pytest.mark.parametrize(
+    ("runs", "notion"),
+    [
+        pytest.param(
+            parse_rich("[a ++u++ b]{tone=danger}"),
+            '<span color="red">a </span><span color="red" underline="true">u</span>'
+            '<span color="red"> b</span>',
+            id="underline-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("++a [c]{tone=danger} b++"),
+            '<span underline="true">a </span><span color="red" underline="true">c</span>'
+            '<span underline="true"> b</span>',
+            id="colour-inside-an-underline",
+        ),
+        pytest.param(
+            parse_rich("++[h]{bg=warning}++"),
+            '<span color="yellow_bg" underline="true">h</span>',
+            id="highlight-filling-an-underline",
+        ),
+        pytest.param(
+            parse_rich("[a ++b [c]{tone=info}++ d]{tone=danger}"),
+            '<span color="red">a </span><span color="red" underline="true">b </span>'
+            '<span color="blue" underline="true">c</span><span color="red"> d</span>',
+            id="colour-inside-an-underline-inside-a-colour",
+        ),
+        pytest.param(
+            parse_rich("++a **[c]{tone=info}**++"),
+            '<span underline="true">a </span>**<span color="blue" underline="true">c</span>**',
+            id="colour-in-bold-inside-an-underline",
+        ),
+        pytest.param(
+            parse_rich("++fill {{owner}}++"),
+            '<span underline="true">fill </span>'
+            '<span color="yellow_bg" underline="true">\\{\\{owner\\}\\}</span>',
+            id="placeholder-inside-an-underline",
+        ),
+        pytest.param(
+            parse_rich("[due {{date}} now]{bg=sky}"),
+            '<span color="pink_bg">due </span><span color="yellow_bg">\\{\\{date\\}\\}</span>'
+            '<span color="pink_bg"> now</span>',
+            id="placeholder-inside-a-highlight",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Plain("Scan "), Styled("underline", (Plain("now"),)))),),
+            '<span color="red">Scan </span><span color="red" underline="true">now</span>',
+            id="underline-inside-a-toned-label",
+        ),
+    ],
+)
+def test_spans_of_different_attributes_are_written_side_by_side_each_carrying_every_enclosing_attribute(
+    runs: ExportRich, notion: str
+) -> None:
+    assert notion_inline(runs) == notion
+
+
+def test_an_underline_inside_a_colour_passes_the_notion_check_and_is_written_beside_it() -> None:
+    blocks = [{"type": "text", "body": "Zone [a ++u++ b]{tone=danger}."}]
+
+    assert render_export(parse_report(make_report(blocks=blocks)), "notion").pages == {
+        "page.md": 'Zone <span color="red">a </span><span color="red" underline="true">u</span>'
+        '<span color="red"> b</span>.\n'
+    }
+
+
 def test_a_colour_inside_a_colour_passes_the_notion_check_and_is_written_beside_it() -> None:
     blocks = [{"type": "text", "body": "Zone [a [x]{tone=info} b]{tone=danger}."}]
 
@@ -362,16 +427,34 @@ def test_an_author_colour_in_a_toned_step_title_is_written_beside_the_step_colou
             id="highlight-inside-a-toned-label",
         ),
         pytest.param(
-            (Tinted("danger", None, (Plain("see "), Code("</span>"))),),
-            "Notion closes a coloured or highlighted span early at inline code holding '</', '</span>'; "
+            (Tinted("danger", None, (Plain("ask "), Placeholder("owner"))),),
+            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
             "the export check should have refused it",
+            id="placeholder-inside-a-colour",
+        ),
+        pytest.param(
+            (TonedLabel("danger", (Placeholder("owner"),)),),
+            "Notion holds no span inside a span, so it cannot show a highlight inside a colour; "
+            "the export check should have refused it",
+            id="placeholder-inside-a-toned-label",
+        ),
+        pytest.param(
+            (Tinted("danger", None, (Plain("see "), Code("</span>"))),),
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</span>'; the export check should have refused it",
             id="closing-tag-in-code-inside-a-colour",
         ),
         pytest.param(
             (TonedLabel("danger", (Styled("italic", (Code("</b>"),)),)),),
-            "Notion closes a coloured or highlighted span early at inline code holding '</', '</b>'; "
-            "the export check should have refused it",
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</b>'; the export check should have refused it",
             id="closing-tag-in-code-inside-a-toned-label",
+        ),
+        pytest.param(
+            (Styled("underline", (Plain("see "), Code("</span>"))),),
+            "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+            "'</span>'; the export check should have refused it",
+            id="closing-tag-in-code-inside-an-underline",
         ),
     ],
 )

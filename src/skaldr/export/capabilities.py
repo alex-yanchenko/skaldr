@@ -24,13 +24,14 @@ TextMarkFeature = Literal[
     "colour and highlight span",
     "underline",
     "highlight span inside a toned walkthrough step title",
+    "placeholder inside coloured text",
 ]
 SameDocumentLinkFeature = Literal["link to a heading of the same document"]
 OtherDocumentLinkFeature = Literal["link to another skaldr document"]
 InlineCodeFeature = Literal[
     "inline code holding a backtick",
     "inline code holding a closing tag in a table cell",
-    "inline code holding a closing tag in a coloured or highlighted span",
+    "inline code holding a closing tag in a coloured, highlighted or underlined span",
 ]
 TextNumberingFeature = Literal["list numbered with letters or roman numerals"]
 FencedInAListItemFeature = Literal[
@@ -324,6 +325,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "placeholder inside coloured text": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion cannot show a highlight inside coloured text, "
+                "so it cannot show the placeholder '{text}'",
+                "move the blank out of the coloured text",
+            )
+        }
+    ),
     "link to a heading of the same document": _kept_except(
         {
             "notion": Rejection(_OWN_HEADING_WHY.format(target="a Notion page"), _OWN_HEADING_INSTEAD),
@@ -353,12 +363,12 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
-    "inline code holding a closing tag in a coloured or highlighted span": _kept_except(
+    "inline code holding a closing tag in a coloured, highlighted or underlined span": _kept_except(
         {
             "notion": Rejection(
-                "Notion closes a coloured or highlighted span early at inline code holding '</', "
+                "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
                 "as in '{code}'",
-                "write the code outside the coloured text, or without '</'",
+                "write the code outside the coloured, highlighted or underlined text, or without '</'",
             )
         }
     ),

@@ -21,6 +21,7 @@ class RefusedCase:
     why: str
     instead: str
     where: str
+    unfilled_placeholders_note: str = ""
 
     def rejection(self) -> dict[str, str]:
         return {"target": self.target, "why": self.why, "instead": self.instead, "where": self.where}
@@ -293,9 +294,15 @@ NOTION_BOTH_WHY = (
 NOTION_BOTH_INSTEAD = "keep either the colour or the highlight on the text"
 CANVAS_HIGHLIGHT_WHY = "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'"
 SPAN_CODE_WHY = (
-    "Notion closes a coloured or highlighted span early at inline code holding '</', as in '{code}'"
+    "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
+    "as in '{code}'"
 )
-SPAN_CODE_INSTEAD = "write the code outside the coloured text, or without '</'"
+SPAN_CODE_INSTEAD = "write the code outside the coloured, highlighted or underlined text, or without '</'"
+PLACEHOLDER_IN_A_COLOUR_WHY = (
+    "Notion cannot show a highlight inside coloured text, so it cannot show the placeholder '{{owner}}'"
+)
+PLACEHOLDER_IN_A_COLOUR_INSTEAD = "move the blank out of the coloured text"
+ONE_OWNER_UNFILLED = "  (1 unfilled placeholder: owner)"
 STEP_PATH_OF_THE_TITLE = "at blocks.0.walkthrough"
 
 
@@ -338,6 +345,8 @@ class NestedSpans:
 
 HIGHLIGHT_IN_A_STEP_TITLE = toned_step_titled("the [cold room]{bg=sky} first")
 CODE_IN_A_COLOUR_SPAN = [{"type": "text", "body": "Write [code `</span>` inside]{tone=danger}."}]
+CODE_IN_AN_UNDERLINE = [{"type": "text", "body": "Write ++code `</span>` inside++."}]
+PLACEHOLDER_IN_A_COLOUR_SPAN = [{"type": "text", "body": "Ask [{{owner}} first]{tone=danger}."}]
 SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
     **NestedSpans("Zone [[x]{bg=sky}]{tone=danger}.", "x", "x", "x", outer_is_a_colour=True).refusals(
         "highlight-inside-a-colour-span"
@@ -393,6 +402,48 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
         SPAN_CODE_WHY.format(code="</span>"),
         SPAN_CODE_INSTEAD,
         STEP_PATH_OF_THE_TITLE,
+    ),
+    "notion-inline-code-holding-a-closing-tag-in-an-underline": RefusedCase(
+        "notion", CODE_IN_AN_UNDERLINE, SPAN_CODE_WHY.format(code="</span>"), SPAN_CODE_INSTEAD, AT_THE_TEXT
+    ),
+    "slack-inline-code-holding-a-closing-tag-in-an-underline": RefusedCase(
+        "slack",
+        CODE_IN_AN_UNDERLINE,
+        "a Slack canvas cannot underline text, so it cannot show the underline on 'code </span> inside'",
+        "write the text without the underline or export the document elsewhere",
+        AT_THE_TEXT,
+    ),
+    "notion-placeholder-inside-a-colour-span": RefusedCase(
+        "notion",
+        PLACEHOLDER_IN_A_COLOUR_SPAN,
+        PLACEHOLDER_IN_A_COLOUR_WHY,
+        PLACEHOLDER_IN_A_COLOUR_INSTEAD,
+        AT_THE_TEXT,
+        ONE_OWNER_UNFILLED,
+    ),
+    "markdown-placeholder-inside-a-colour-span": RefusedCase(
+        "markdown",
+        PLACEHOLDER_IN_A_COLOUR_SPAN,
+        GITHUB_COLOUR_WHY.format(text="owner first"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+        ONE_OWNER_UNFILLED,
+    ),
+    "slack-placeholder-inside-a-colour-span": RefusedCase(
+        "slack",
+        PLACEHOLDER_IN_A_COLOUR_SPAN,
+        CANVAS_COLOUR_WHY.format(text="owner first"),
+        WITHOUT_THE_COLOUR,
+        AT_THE_TEXT,
+        ONE_OWNER_UNFILLED,
+    ),
+    "notion-placeholder-inside-a-toned-step-title": RefusedCase(
+        "notion",
+        toned_step_titled("ask {{owner}} first"),
+        PLACEHOLDER_IN_A_COLOUR_WHY,
+        PLACEHOLDER_IN_A_COLOUR_INSTEAD,
+        STEP_PATH_OF_THE_TITLE,
+        ONE_OWNER_UNFILLED,
     ),
 }
 LIST_FROM_3 = [{"type": "text", "body": "3. a\n4. b"}]
