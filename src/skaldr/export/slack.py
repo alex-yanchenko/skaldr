@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, Literal
@@ -6,7 +6,11 @@ from typing import Final, Literal
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError
-from skaldr.export.capabilities import FIRST_LIST_NUMBER
+from skaldr.export.capabilities import (
+    FIRST_LIST_NUMBER,
+    UNICODE_SCRIPT_FORMS,
+    character_without_a_unicode_form,
+)
 from skaldr.export.glyphs import callout_icon, tab_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -68,16 +72,6 @@ BULLET_INDENT: Final = len(BULLET_MARKER) + 1
 LIST_SEPARATOR: Final = "&nbsp;"
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
-UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
-    "superscript": str.maketrans(
-        "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
-        "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁻⁼⁽⁾ᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ",
-    ),
-    "subscript": str.maketrans(
-        "0123456789+-\N{MINUS SIGN}=()aehijklmnoprstuvx",
-        "₀₁₂₃₄₅₆₇₈₉₊₋₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ",
-    ),
-}
 Place = Literal["top", "callout", "column"]
 
 
@@ -85,23 +79,14 @@ def _slack_date(day: date) -> str:
     return f"![](slack_date:{day.isoformat()})"
 
 
-def _script_without_a_unicode_form(
-    position: ScriptPosition, text: str, character: str
-) -> ExportRejectedError:
-    return ExportRejectedError(
-        SLACK_TARGET,
-        f"a Slack canvas cannot show the {position} '{text}', "
-        f"since '{character}' has no Unicode {position} form",
-        f"write the text without the {position} or export the document elsewhere",
-    )
-
-
 def _in_unicode_script_form(position: ScriptPosition, text: str) -> str:
-    forms = UNICODE_SCRIPT_FORMS[position]
-    without_a_form = next((character for character in text if ord(character) not in forms), None)
+    without_a_form = character_without_a_unicode_form(position, text)
     if without_a_form is not None:
-        raise _script_without_a_unicode_form(position, text, without_a_form)
-    return text.translate(forms)
+        raise ExportInvariantError(
+            f"a Slack canvas has no {position} form for '{without_a_form}' in '{text}'; "
+            "the export check should have refused it"
+        )
+    return text.translate(UNICODE_SCRIPT_FORMS[position])
 
 
 class _SlackRuns(CommonMarkRuns):

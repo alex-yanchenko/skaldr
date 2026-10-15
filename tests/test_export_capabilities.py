@@ -50,6 +50,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "numbered list starting past 1": {"slack": "reject"},
     "table over 300 cells": {"slack": "reject"},
     "grid inside a walkthrough step": {"slack": "reject"},
+    "subscript or superscript with no Unicode form": {"slack": "reject"},
 }
 REJECTIONS = [
     pytest.param(capability, FEATURE_DETAILS[feature], id=f"{target}-{feature}")
@@ -84,8 +85,8 @@ def test_the_table_holds_a_cell_for_every_feature_and_target_and_rejects_only_th
     }
 
     assert verdicts == {
-        feature: {target: SEEDED_VERDICTS[feature].get(target, "keep") for target in EXPORT_TARGETS}
-        for feature in FEATURES
+        feature: {target: seeded.get(target, "keep") for target in EXPORT_TARGETS}
+        for feature, seeded in SEEDED_VERDICTS.items()
     }
 
 

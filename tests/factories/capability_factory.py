@@ -163,6 +163,16 @@ SLACK_CASES = [
         ),
         id="slack-grid-in-a-walkthrough-step",
     ),
+    pytest.param(
+        RefusedCase(
+            "slack",
+            [{"type": "text", "body": "x^q^"}],
+            "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form",
+            "write the text without the superscript or export the document elsewhere",
+            "at blocks.0.text",
+        ),
+        id="slack-script-with-no-unicode-form",
+    ),
 ]
 SEEDED_CASES = [*ADF_CASES, *SLACK_CASES]
 

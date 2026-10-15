@@ -20,6 +20,7 @@ from skaldr.richtext import (
     Plain,
     Rich,
     Run,
+    ScriptPosition,
     ScriptText,
     Styled,
     Tinted,
@@ -37,12 +38,23 @@ Feature = Literal[
     "numbered list starting past 1",
     "table over 300 cells",
     "grid inside a walkthrough step",
+    "subscript or superscript with no Unicode form",
 ]
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
 Held = Literal["table", "callout", "quote", "toggle"]
 FIRST_LIST_NUMBER: Final = 1
 CANVAS_TABLE_CELL_LIMIT: Final = 300
+UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
+    "superscript": str.maketrans(
+        "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
+        "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁻⁼⁽⁾ᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ",
+    ),
+    "subscript": str.maketrans(
+        "0123456789+-\N{MINUS SIGN}=()aehijklmnoprstuvx",
+        "₀₁₂₃₄₅₆₇₈₉₊₋₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -69,11 +81,18 @@ class CellCount:
 
 
 @dataclass(frozen=True)
+class ScriptForm:
+    position: ScriptPosition
+    text: str
+    character: str
+
+
+@dataclass(frozen=True)
 class NoDetails:
     pass
 
 
-Details = Placement | HeldByAListItem | ListStart | CellCount | NoDetails
+Details = Placement | HeldByAListItem | ListStart | CellCount | ScriptForm | NoDetails
 FEATURE_DETAILS: Final[Mapping[Feature, type[Details]]] = {
     "table inside a callout": Placement,
     "callout inside a callout": Placement,
@@ -86,6 +105,7 @@ FEATURE_DETAILS: Final[Mapping[Feature, type[Details]]] = {
     "numbered list starting past 1": ListStart,
     "table over 300 cells": CellCount,
     "grid inside a walkthrough step": NoDetails,
+    "subscript or superscript with no Unicode form": ScriptForm,
 }
 
 
@@ -153,6 +173,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "subscript or superscript with no Unicode form": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas cannot show the {position} '{text}', "
+                "since '{character}' has no Unicode {position} form",
+                "write the text without the {position} or export the document elsewhere",
+            )
+        }
+    ),
 }
 
 PLACEMENTS: Final[Mapping[tuple[Holder, Held], Feature]] = {
@@ -163,6 +192,11 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], Feature]] = {
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
 }
+
+
+def character_without_a_unicode_form(position: ScriptPosition, text: str) -> str | None:
+    forms = UNICODE_SCRIPT_FORMS[position]
+    return next((character for character in text if ord(character) not in forms), None)
 
 
 def mermaid_cannot_label_its_series(block: Chart) -> bool:

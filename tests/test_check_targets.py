@@ -3,7 +3,11 @@ from pathlib import Path
 import pytest
 
 from skaldr.cli import main
+from skaldr.export import check as check_module
+from skaldr.export import lower as lower_module
+from skaldr.export.lower import Lowering
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
+from skaldr.models import Report
 from tests.factories import make_jira_target, make_notion_target, make_report, make_section, write_report
 from tests.factories.capability_factory import (
     CLEAN_BLOCKS,
@@ -16,6 +20,7 @@ from tests.factories.capability_factory import (
 )
 
 FOR_WITHOUT_CHECK = "--for only applies to --check (it names the export targets to check for)"
+CANVAS_OVER_THE_LIMIT_CODE_LENGTH = 1_048_568
 
 
 @pytest.mark.parametrize("case", SEEDED_CASES)
@@ -113,6 +118,41 @@ def test_check_with_a_publish_block_also_checks_the_targets_for_names(
     assert main(["--check", str(data_path), "--for", "adf"]) == 1
 
     assert capsys.readouterr().err == f"FAIL  {data_path}: {TABLE_IN_A_PANEL.message()}\n\n1 file failed\n"
+
+
+def test_check_for_slack_refuses_a_canvas_the_export_refuses_for_its_size_and_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "code", "content": "x" * CANVAS_OVER_THE_LIMIT_CODE_LENGTH}]
+    data_path = write_report(tmp_path, make_report(blocks=blocks))
+    export_dir = tmp_path / "exported"
+
+    exit_code = main(
+        ["--check", str(data_path), "--for", "slack", "--export", "slack", "--export-dir", str(export_dir)]
+    )
+
+    assert (exit_code, capsys.readouterr().err, export_dir.exists()) == (
+        1,
+        f"FAIL  {data_path}: the canvas Markdown is 1,048,577 characters, over the 1,048,576 characters "
+        "(1 MiB) a Slack canvas can hold; split the document into several canvases or export it elsewhere"
+        "\n\n1 file failed\n",
+        False,
+    )
+
+
+def test_check_without_a_publish_block_or_a_for_target_lowers_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def lowering_nobody_asked_for(_report: Report) -> Lowering:
+        raise NotImplementedError
+
+    monkeypatch.setattr(check_module, "lowering_for", lowering_nobody_asked_for)
+    monkeypatch.setattr(lower_module, "lowering_for", lowering_nobody_asked_for)
+    data_path = write_report(tmp_path, make_report(blocks=TABLE_IN_A_PANEL.blocks))
+
+    assert main(["--check", str(data_path)]) == 0
+
+    assert capsys.readouterr().out == f"OK    {data_path}\n"
 
 
 def test_check_then_export_refuses_before_writing_anything(

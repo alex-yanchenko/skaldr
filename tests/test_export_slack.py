@@ -3,7 +3,7 @@ import os
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 import yaml
@@ -938,6 +938,53 @@ def test_a_script_with_a_character_that_has_no_unicode_form_is_rejected(
     run: ExportRun, why: str, instead: str
 ) -> None:
     assert _rejected([Paragraph((run,))]) == _canvas_rejection(why, instead)
+
+
+SCRIPT_WITHOUT_A_FORM: Final = ScriptText("superscript", "q")
+SCRIPT_WHY: Final = (
+    "a Slack canvas cannot show the superscript 'q', since 'q' has no Unicode superscript form"
+)
+SCRIPT_INSTEAD: Final = "write the text without the superscript or export the document elsewhere"
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        pytest.param(Heading(2, (SCRIPT_WITHOUT_A_FORM,)), id="heading"),
+        pytest.param(ListNode("bullet", (ListEntry((SCRIPT_WITHOUT_A_FORM,)),)), id="list-entry"),
+        pytest.param(TableNode((TableCell((SCRIPT_WITHOUT_A_FORM,)),), ()), id="table-header"),
+        pytest.param(
+            TableNode((make_table_cell("h"),), (TableRow((TableCell((SCRIPT_WITHOUT_A_FORM,)),)),)),
+            id="table-cell",
+        ),
+        pytest.param(Quote((make_rich_text("q"),), (SCRIPT_WITHOUT_A_FORM,)), id="quote-cite"),
+        pytest.param(Toggle((SCRIPT_WITHOUT_A_FORM,), None, ()), id="toggle-title"),
+        pytest.param(Tabs((Tab((SCRIPT_WITHOUT_A_FORM,), ()),)), id="tab-title"),
+        pytest.param(
+            Media("image", "https://example.com/a.png", caption=(SCRIPT_WITHOUT_A_FORM,)), id="image-caption"
+        ),
+        pytest.param(
+            Paragraph((Link((Styled("bold", (SCRIPT_WITHOUT_A_FORM,)),), "https://example.com"),)),
+            id="bold-inside-a-link-label",
+        ),
+    ],
+)
+def test_a_script_with_no_unicode_form_is_refused_by_the_check_wherever_the_canvas_writes_text(
+    node: Node,
+) -> None:
+    with pytest.raises(ExportInvariantError):
+        render_slack([node])
+
+    assert _rejected([node]) == _canvas_rejection(SCRIPT_WHY, SCRIPT_INSTEAD)
+
+
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_script_with_no_unicode_form() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Paragraph((SCRIPT_WITHOUT_A_FORM,))])
+
+    assert str(raised.value) == (
+        "a Slack canvas has no superscript form for 'q' in 'q'; the export check should have refused it"
+    )
 
 
 @pytest.mark.parametrize(

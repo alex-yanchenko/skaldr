@@ -24,8 +24,9 @@ from skaldr.export import (
     export_markdown,
     export_notion,
     export_slack,
+    render_export,
 )
-from skaldr.export.check import reject_what_the_targets_cannot_show
+from skaldr.export.check import reject_what_the_publish_targets_cannot_show
 from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
@@ -206,8 +207,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="validate the content file(s) against the schema, and against what each target its `publish` "
-        "block names (and each --for target) can show; exits non-zero if any file is invalid. "
+        help="validate the content file(s) against the schema, and against what each target that its "
+        "`publish` block names can show; exits non-zero if any file is invalid. "
         "Pass several (e.g. a glob) to validate a whole set, or add -o/--pdf/--embed/--export to one "
         "file to render it once it passes. A file that fails is never written.",
     )
@@ -217,9 +218,9 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         choices=EXPORT_TARGETS,
         metavar="TARGET",
-        help="with --check: also fail if the document holds a block the export target cannot show "
-        f"({', '.join(EXPORT_TARGETS)}); give it once per target. --check always checks the targets "
-        "the document's `publish` block names.",
+        help="with --check: also run the whole --export to TARGET in memory, writing nothing, and fail "
+        f"wherever that export would refuse the document ({', '.join(EXPORT_TARGETS)}); give it once per "
+        "target. --check always checks the targets the document's `publish` block names.",
     )
     parser.add_argument(
         "--strict",
@@ -716,7 +717,9 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
             # Render (discarding output) to collect placeholders AND surface render-time errors (e.g. a
             # dangling anchor) as a clean FAIL — must stay inside the try so nothing escapes as a traceback.
             unfilled = find_placeholders(report)
-            reject_what_the_targets_cannot_show(report, targets)
+            reject_what_the_publish_targets_cannot_show(report)
+            for target in dict.fromkeys(targets):
+                render_export(report, target)
         except ReportError as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)

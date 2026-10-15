@@ -22,10 +22,24 @@ from skaldr.export.capabilities import (
     NoDetails,
     Placement,
     Rejection,
+    ScriptForm,
+    character_without_a_unicode_form,
 )
 from skaldr.export.lower import assemble_page, lower_regions, lowering_for
 from skaldr.export.markup import table_width
-from skaldr.export.runs import ExportRich, export_visible_text
+from skaldr.export.runs import (
+    Break,
+    CheckMark,
+    Chip,
+    DecisionMark,
+    ExportRich,
+    ExportRun,
+    Gauge,
+    IndicatorMark,
+    StatusMark,
+    SwimlaneMark,
+    export_visible_text,
+)
 from skaldr.export.tree import (
     AuthoredNode,
     BlockRegion,
@@ -51,6 +65,22 @@ from skaldr.export.tree import (
 )
 from skaldr.export_targets import ExportTarget
 from skaldr.models import InnerGrid, Report, Walkthrough, walk_located_block
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    Code,
+    DateMention,
+    DocumentLink,
+    InlineMath,
+    IssueLink,
+    Link,
+    PersonMention,
+    Placeholder,
+    Plain,
+    ScriptText,
+    Styled,
+    Tinted,
+)
 
 _NODE_TERMS: Final[Mapping[type, str]] = {
     Heading: "heading",
@@ -185,6 +215,58 @@ def _what_a_list_item_cannot_hold(child: Node, holds_a_list: bool) -> str | None
             assert_never(child)
 
 
+def _own_texts(node: Node) -> Iterator[ExportRich]:
+    match node:
+        case Heading() | Paragraph():
+            yield node.text
+        case ListNode():
+            yield from (entry.text for entry in node.entries)
+        case TableNode():
+            yield from (cell.text for cell in node.header)
+            yield from (cell.text for row in node.rows for cell in row.cells)
+        case Media():
+            yield from (node.description, node.caption)
+        case Quote():
+            yield from (*node.lines, node.cite)
+        case Toggle():
+            yield node.title
+        case Tabs():
+            yield from (tab.title for tab in node.tabs)
+        case Callout() | CodeBlock() | DisplayMath() | Divider() | Columns() | Diagram() | TableOfContents():
+            return
+        case _:
+            assert_never(node)
+
+
+def _scripts(runs: Iterable[ExportRun]) -> Iterator[ScriptText]:
+    for run in runs:
+        match run:
+            case ScriptText():
+                yield run
+            case Link() | AnchorLink() | DateMention() | PersonMention() | IssueLink() | DocumentLink():
+                yield from _scripts(run.label)
+            case Styled() | Tinted():
+                yield from _scripts(run.runs)
+            case (
+                Plain()
+                | Code()
+                | Citation()
+                | Placeholder()
+                | InlineMath()
+                | Break()
+                | StatusMark()
+                | SwimlaneMark()
+                | IndicatorMark()
+                | CheckMark()
+                | DecisionMark()
+                | Gauge()
+                | Chip()
+            ):
+                pass
+            case _:
+                assert_never(run)
+
+
 def _item_feature(child: Node, holder: ListNode) -> Feature:
     authored_on_its_own = child.authored_at != holder.authored_at
     return "block inside a walkthrough step" if authored_on_its_own else "block inside a list item"
@@ -204,7 +286,15 @@ class _TreeWalk:
         for node in nodes:
             yield from self.node(node, place)
 
+    def script_hits(self, node: Node) -> Iterator[FeatureHit]:
+        for script in (script for text in _own_texts(node) for script in _scripts(text)):
+            character = character_without_a_unicode_form(script.position, script.text)
+            if character is not None:
+                details = ScriptForm(script.position, script.text, character)
+                yield self.hit("subscript or superscript with no Unicode form", node.authored_at, details)
+
     def node(self, node: Node, place: _Place) -> Iterator[FeatureHit]:
+        yield from self.script_hits(node)
         match node:
             case Heading():
                 self.note_heading(node.text)
@@ -314,15 +404,12 @@ def reject_what_the_target_cannot_show(
     _raise_the_first_rejection(chain(_model_hits(report, document), _tree_hits(document.body)), target)
 
 
-def reject_what_the_targets_cannot_show(report: Report, targets: Sequence[ExportTarget]) -> None:
+def reject_what_the_publish_targets_cannot_show(report: Report) -> None:
+    if report.publish is None:
+        return
     lowering = lowering_for(report)
     regions = lower_regions(lowering)
-    published = report.publish.targets if report.publish is not None else []
-    for publish_target in published:
+    for publish_target in report.publish.targets:
         chosen = [region for region in regions if publish_target.builds_from(region.section_id)]
         page = assemble_page(chosen, lowering)
         reject_what_the_target_cannot_show(report, page, publish_target.export_target())
-    if targets:
-        whole = assemble_page(regions, lowering)
-        for target in dict.fromkeys(targets):
-            reject_what_the_target_cannot_show(report, whole, target)

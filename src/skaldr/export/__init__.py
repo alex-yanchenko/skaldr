@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Annotated, Final
 
 from pydantic import StringConstraints, ValidationError
+from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document
@@ -25,10 +26,12 @@ __all__ = [
     "EXPORT_TARGETS",
     "ExportResult",
     "ExportTarget",
+    "RenderedExport",
     "export_adf",
     "export_markdown",
     "export_notion",
     "export_slack",
+    "render_export",
 ]
 
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
@@ -50,6 +53,13 @@ class ExportResult:
     files: tuple[Path, ...]
     oversized_sections: tuple[str, ...] = ()
     unreadable_manifest: bool = False
+
+
+@dataclass(frozen=True)
+class RenderedExport:
+    title: str
+    pages: Mapping[str, str]
+    oversized_sections: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -134,24 +144,7 @@ def _checked_document(report: Report, target: ExportTarget) -> LoweredDocument:
     return document
 
 
-def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
-    document = _checked_document(report, "notion")
-    page_width = report.meta.notion_width
-    if chunk is None:
-        return _export_pages(
-            out_dir, document.title, {MARKDOWN_PAGE_NAME: render_notion(document.body, page_width)}
-        )
-    split = chunk_notion(document.body, character_budget(chunk), page_width)
-    return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
-
-
-def export_markdown(report: Report, out_dir: Path) -> ExportResult:
-    document = _checked_document(report, "markdown")
-    return _export_pages(out_dir, document.title, {MARKDOWN_PAGE_NAME: render_markdown_document(document)})
-
-
-def export_adf(report: Report, out_dir: Path) -> ExportResult:
-    document = _checked_document(report, "adf")
+def _adf_pages(document: LoweredDocument) -> RenderedExport:
     adf = render_adf_document(document)
     size = compact_adf_length(adf)
     over_the_limit = (
@@ -159,9 +152,44 @@ def export_adf(report: Report, out_dir: Path) -> ExportResult:
         if size > JIRA_DESCRIPTION_LIMIT
         else ()
     )
-    return _export_pages(out_dir, document.title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
+    return RenderedExport(document.title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
+
+
+def render_export(report: Report, target: ExportTarget) -> RenderedExport:
+    document = _checked_document(report, target)
+    match target:
+        case "notion":
+            page = render_notion(document.body, report.meta.notion_width)
+            return RenderedExport(document.title, {MARKDOWN_PAGE_NAME: page})
+        case "markdown":
+            return RenderedExport(document.title, {MARKDOWN_PAGE_NAME: render_markdown_document(document)})
+        case "adf":
+            return _adf_pages(document)
+        case "slack":
+            return RenderedExport(document.title, {MARKDOWN_PAGE_NAME: render_slack(document.body)})
+        case _:
+            assert_never(target)
+
+
+def _written(out_dir: Path, rendered: RenderedExport) -> ExportResult:
+    return _export_pages(out_dir, rendered.title, rendered.pages, rendered.oversized_sections)
+
+
+def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
+    if chunk is None:
+        return _written(out_dir, render_export(report, "notion"))
+    document = _checked_document(report, "notion")
+    split = chunk_notion(document.body, character_budget(chunk), report.meta.notion_width)
+    return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
+
+
+def export_markdown(report: Report, out_dir: Path) -> ExportResult:
+    return _written(out_dir, render_export(report, "markdown"))
+
+
+def export_adf(report: Report, out_dir: Path) -> ExportResult:
+    return _written(out_dir, render_export(report, "adf"))
 
 
 def export_slack(report: Report, out_dir: Path) -> ExportResult:
-    document = _checked_document(report, "slack")
-    return _export_pages(out_dir, document.title, {MARKDOWN_PAGE_NAME: render_slack(document.body)})
+    return _written(out_dir, render_export(report, "slack"))
