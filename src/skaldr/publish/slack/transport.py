@@ -229,10 +229,11 @@ class SlackTransport:
                 f"a Slack canvas has no fields, so skaldr cannot change {', '.join(named)} on canvas "
                 f"{item_id}"
             )
+        edits = _Edits(self._api, item_id, keyed)
         if request.changes_the_title:
-            self._api.edit_canvas(item_id, _rename(request.title))
+            edits.rename(request.title)
         if keyed.stamp is None:
-            _Edits(self._api, item_id, keyed).append(canvas_stamp_line(request.stamp))
+            edits.append(canvas_stamp_line(request.stamp))
         return self._remote(item_id, self._markdown(item_id), layout)
 
     def archive_item(self, item_id: str, /) -> None:

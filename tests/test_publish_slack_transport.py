@@ -635,6 +635,23 @@ def test_a_new_title_renames_the_canvas() -> None:
     )
 
 
+def test_a_stamp_that_fails_after_the_rename_landed_says_the_canvas_is_partly_written() -> None:
+    slack = InMemorySlack()
+    slack.add_canvas(TITLE_TEXT, "Welcome to the garden.\n")
+    transport = slack.transport()
+    transport.read_item(CANVAS, ItemContent(title=TITLE_TEXT, sections={"intro": "Welcome to the garden.\n"}))
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5, operation="insert_at_end")
+
+    with pytest.raises(ConnectorError) as raised:
+        transport.write_fields(CANVAS, FieldsWrite("Garden guide", {}, TITLE_TEXT, {}, STAMP))
+
+    assert (type(raised.value), str(raised.value), slack.canvases[CANVAS].title) == (
+        ConnectorError,
+        PARTLY_WRITTEN_WHILE_LOCKED,
+        "Garden guide",
+    )
+
+
 @pytest.mark.parametrize(
     ("fields", "previous", "named"),
     [
