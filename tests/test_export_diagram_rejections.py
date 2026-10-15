@@ -20,8 +20,10 @@ from tests.factories.capability_factory import (
     DIAGRAM_CASES,
     DIAGRAM_REFUSALS,
     DONUT,
+    FLOW,
     MATH_BLOCKS,
     ONE_SERIES_CHARTS,
+    RANGE,
     SEVERAL_SERIES_OR_STACKED,
     AcceptedCase,
     RefusedCase,
@@ -43,6 +45,13 @@ def test_the_check_refuses_each_diagram_case_naming_its_yaml_path(case: RefusedC
         _check(case.blocks, case.target)
 
     assert vars(raised.value) == case.rejection()
+
+
+def test_the_first_refusal_in_the_document_is_reported_though_a_later_block_is_found_on_the_model() -> None:
+    with pytest.raises(ExportRejectedError) as raised:
+        _check([FLOW, RANGE], "adf")
+
+    assert raised.value.where == "at blocks.0.flow"
 
 
 @pytest.mark.parametrize("case", DIAGRAM_CASES)
