@@ -5,7 +5,13 @@ from typing import Final, Literal, TypeVar
 
 from typing_extensions import Self
 
-from skaldr.errors import AuthError, ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import (
+    AuthError,
+    ConnectorError,
+    CreatedButUnfinishedError,
+    ItemNotFoundError,
+    WriteRejectedError,
+)
 from skaldr.publish.content import ItemContent
 from skaldr.publish.transport import RawSections
 
@@ -73,6 +79,17 @@ def finished_after_a_change(item: str, title: str, finish: Callable[[], Answer])
     except (ConnectorError, AuthError) as exc:
         raise ConnectorError(
             f'skaldr wrote {item} for "{title}" but could not finish writing it: {exc}'
+        ) from exc
+
+
+def finished_after_a_create(item: str, item_id: str, title: str, finish: Callable[[], Answer]) -> Answer:
+    try:
+        return finish()
+    except (ConnectorError, AuthError) as exc:
+        raise CreatedButUnfinishedError(
+            f'skaldr created {item} for "{title}" but could not finish writing it: {exc}; the next publish '
+            "records it",
+            item_id,
         ) from exc
 
 

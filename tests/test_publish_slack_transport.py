@@ -183,8 +183,8 @@ def test_a_canvas_that_cannot_be_read_back_is_named_so_the_next_publish_records_
         slack.transport().create_item(NewItem(UNLINKED, STAMP, CONTENT))
 
     assert (str(raised.value), raised.value.item_id, slack.markdown_of(CANVAS)) == (
-        f'skaldr created Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not read it back: Slack refused '
-        f"to read canvas {CANVAS} (internal_error); the next publish records it",
+        f'skaldr created Slack canvas {CANVAS} for "{TITLE_TEXT}" but could not finish writing it: Slack '
+        f"refused to read canvas {CANVAS} (internal_error); the next publish records it",
         CANVAS,
         STORED,
     )

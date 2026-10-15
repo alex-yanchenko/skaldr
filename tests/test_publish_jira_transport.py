@@ -4,7 +4,7 @@ from collections.abc import Callable
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
 from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
 from skaldr.publish.jira.description import layout_of, section_text
@@ -660,12 +660,12 @@ def test_a_failure_after_the_issue_is_created_names_the_created_issue(
     jira = FakeJira(honours_properties_on_create=honours_properties)
     jira.answer_next(method, path, refusal)
 
-    with pytest.raises(ConnectorError) as raised:
+    with pytest.raises(CreatedButUnfinishedError) as raised:
         _transport(jira).create_item(NewItem(TARGET, STAMP, CONTENT))
 
-    assert (type(raised.value), str(raised.value), list(jira.issues)) == (
-        ConnectorError,
-        f"created DEMO-1 but could not read it back: {cause}",
+    assert (str(raised.value), raised.value.item_id, list(jira.issues)) == (
+        f"created DEMO-1 but could not read it back: {cause}; the next publish records it",
+        "DEMO-1",
         ["DEMO-1"],
     )
 

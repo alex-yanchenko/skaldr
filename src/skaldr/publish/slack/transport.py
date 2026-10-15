@@ -4,12 +4,13 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from typing import Final, NoReturn
 
-from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
+from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, placed_section
 from skaldr.publish.keyed import (
     ReadLayouts,
     comparable_sections,
     finished_after_a_change,
+    finished_after_a_create,
     refuse_a_change_since_the_read,
     refused_when_not_found,
 )
@@ -177,14 +178,12 @@ class SlackTransport:
         if conversation is not None:
             opens_the_document = request.stamp.section_id is None
             self._share(canvas_id, content.title, conversation, posts_the_link=opens_the_document)
-        try:
-            return self._written_with(canvas_id, self.comparable_form(content).sections)
-        except ConnectorError as exc:
-            raise CreatedButUnfinishedError(
-                f'skaldr created Slack canvas {canvas_id} for "{content.title}" but could not read it back: '
-                f"{exc}; the next publish records it",
-                canvas_id,
-            ) from exc
+        return finished_after_a_create(
+            _canvas_named(canvas_id),
+            canvas_id,
+            content.title,
+            lambda: self._written_with(canvas_id, self.comparable_form(content).sections),
+        )
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         change = request.change

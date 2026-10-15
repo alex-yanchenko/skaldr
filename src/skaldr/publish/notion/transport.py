@@ -13,6 +13,7 @@ from skaldr.publish.keyed import (
     ReadLayouts,
     comparable_sections,
     finished_after_a_change,
+    finished_after_a_create,
     refuse_a_change_since_the_read,
     refused_when_not_found,
 )
@@ -209,8 +210,9 @@ class NotionTransport:
         body = _with_nothing_sent(lambda: self._create_body(request, batches[0], stamp))
         page = refused_when_not_found(lambda: self._api.create_page(body))
         item_id = _page_key(page.id)
-        return finished_after_a_change(
+        return finished_after_a_create(
             _page_named(item_id),
+            item_id,
             request.content.title,
             lambda: self._finish_create(item_id, request.content, batches[1:]),
         )
