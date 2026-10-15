@@ -77,11 +77,7 @@ def lower_fan(block: Fan, lowering: Lowering) -> list[Node]:
 
 def _donut_table(block: Chart) -> TableNode:
     rows = tuple(
-        TableRow(
-            plain_cells(item.label, compute.fmt(item.value), legend["note"] or ""),
-            item.tone,
-            tone_only_tints=item.tone is not None,
-        )
+        TableRow(plain_cells(item.label, compute.fmt(item.value), legend["note"] or ""), tint=item.tone)
         for item, legend in zip(block.slices, chart_legend(block), strict=True)
     )
     total = TableRow(plain_cells(TOTAL_LABEL, compute.fmt(donut_total(block)), ""), emphasis="total")
@@ -102,11 +98,7 @@ def _stack_totals(block: Chart) -> tuple[TableRow, ...]:
 
 def _xy_chart(block: Chart, mark: XYChartMark) -> Diagram:
     rows = tuple(
-        TableRow(
-            plain_cells(series.label, *map(compute.fmt, series.values)),
-            series.tone,
-            tone_only_tints=series.tone is not None,
-        )
+        TableRow(plain_cells(series.label, *map(compute.fmt, series.values)), tint=series.tone)
         for series in block.series
     )
     table = TableNode(

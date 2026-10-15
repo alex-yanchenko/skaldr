@@ -288,7 +288,7 @@ def test_a_donut_is_a_pie_over_a_table_of_its_values_shares_and_total() -> None:
                 TableNode(
                     _cells("Slice", "Value", "Share"),
                     (
-                        TableRow(_cells("A", "3", "67%"), "success", tone_only_tints=True),
+                        TableRow(_cells("A", "3", "67%"), tint="success"),
                         TableRow(_cells("B", "1.5", "33%")),
                         TableRow(_cells("Total", "4.5", ""), emphasis="total"),
                     ),
@@ -358,7 +358,7 @@ def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> No
             (
                 TableNode(
                     _cells("Series", "Q1", "Q2"),
-                    (TableRow(_cells("x", "1", "2"), "danger", tone_only_tints=True),),
+                    (TableRow(_cells("x", "1", "2"), tint="danger"),),
                 ),
             ),
         ),
@@ -2005,7 +2005,7 @@ def test_a_tinted_table_row_takes_the_tone_of_its_badge_key(
         API_LEGEND,
         TableNode(
             _cells("A", ""),
-            (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tone, tone_only_tints=True),),
+            (TableRow((TableCell((Plain("x"),)), TableCell(chips)), tint=tone),),
         ),
     )
 

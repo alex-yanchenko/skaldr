@@ -78,8 +78,7 @@ def _table_row(block: models.Table, row: models.Row, lowering: Lowering) -> Tabl
     row_cells = tuple(_body_cell(block, column, row, lowering) for column in block.cell_columns)
     if row.tone:
         return TableRow(row_cells, row.tone)
-    tint = _badge_tint(block, row, lowering)
-    return TableRow(row_cells, tint, tone_only_tints=tint is not None)
+    return TableRow(row_cells, tint=_badge_tint(block, row, lowering))
 
 
 def _table_body(block: models.Table, lowering: Lowering) -> list[TableRow]:

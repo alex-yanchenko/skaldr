@@ -530,9 +530,9 @@ def _number_and_title(title: ExportRich, title_tone: ToneName | None = None) -> 
             id="the-row-dot-before-the-title-cell-dot",
         ),
         pytest.param(
-            TableRow(_number_and_title((Plain("fire"),)), "danger", tone_only_tints=True),
+            TableRow(_number_and_title((Plain("fire"),)), tint="danger"),
             "| 1 | fire |",
-            id="a-tone-that-only-tints-is-dropped",
+            id="a-tint-is-dropped",
         ),
         pytest.param(
             TableRow((TableCell((Plain("1"),), "muted"), TableCell((Plain("x"),)))),

@@ -163,7 +163,7 @@ def _own_tone(cell: TableCell) -> tuple[ToneName, ...]:
 
 
 def _row_tone_in(table: TableNode, row: TableRow, index: int) -> tuple[ToneName, ...]:
-    if row.tone is None or row.tone_only_tints or index != table.title_column:
+    if row.tone is None or index != table.title_column:
         return ()
     return (row.tone,)
 

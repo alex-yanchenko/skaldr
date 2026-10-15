@@ -74,7 +74,11 @@ class TableRow:
     cells: tuple[TableCell, ...]
     tone: ToneName | None = None
     emphasis: Literal["group", "total"] | None = None
-    tone_only_tints: bool = False
+    tint: ToneName | None = None
+
+    @property
+    def fill(self) -> ToneName | None:
+        return self.tone or self.tint
 
 
 @dataclass(frozen=True)

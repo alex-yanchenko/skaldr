@@ -607,6 +607,19 @@ def test_cell_row_and_column_tones_are_cell_backgrounds_with_the_cell_winning() 
     )
 
 
+def test_a_tinted_row_is_a_cell_background_as_a_toned_row_is() -> None:
+    node = TableNode(
+        (_cell("A"), _cell("B")), (TableRow((_cell("1", "danger"), _cell("2")), tint="success"),)
+    )
+
+    assert _rendered(node) == _doc(
+        _table(
+            _row(_table_cell("tableHeader", "A"), _table_cell("tableHeader", "B")),
+            _row(_table_cell("tableCell", "1", "#FFEBE6"), _table_cell("tableCell", "2", "#E3FCEF")),
+        )
+    )
+
+
 def test_a_group_row_is_a_bold_band_and_a_total_row_is_bold() -> None:
     node = TableNode(
         (_cell("A"),),

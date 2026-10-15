@@ -391,8 +391,8 @@ def _in_a_toned_column(column_tones: Sequence[ToneName | None], index: int) -> b
 
 
 def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
-    band = (row.tone or "neutral") if row.emphasis == "group" else None
-    cells = _row_tone_in_one_cell(row.cells, row.tone) if row.tone and band is None else row.cells
+    band = (row.fill or "neutral") if row.emphasis == "group" else None
+    cells = _row_tone_in_one_cell(row.cells, row.fill) if row.fill and band is None else row.cells
     column_tones = _column_tones(table)
     texts = body_cell_texts(
         table,

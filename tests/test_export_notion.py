@@ -1318,6 +1318,20 @@ def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ..
     )
 
 
+def test_a_tinted_row_fills_its_badge_cell_as_a_toned_row_does() -> None:
+    table = TableNode(
+        (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
+        (TableRow((TableCell((Plain("a"),)), TableCell((Chip("x", "blue"),))), tint="info"),),
+    )
+
+    assert render_notion([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td>a</td>\n\t\t<td color="blue_bg">**x**</td>\n\t</tr>\n'
+        "</table>\n"
+    )
+
+
 def test_a_badge_in_a_column_filled_by_its_tone_takes_the_normal_colour() -> None:
     table = TableNode(
         (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
