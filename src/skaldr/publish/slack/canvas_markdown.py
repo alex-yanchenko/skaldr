@@ -185,7 +185,7 @@ class KeyedCanvas:
 
     @property
     def archived(self) -> bool:
-        return self.title.endswith(ARCHIVED_TITLE_MARKER) or self.opens_with_the_archived_line
+        return self.title.endswith(ARCHIVED_TITLE_MARKER)
 
     def positions_of(self, key: str) -> list[int]:
         return [

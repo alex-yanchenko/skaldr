@@ -12,7 +12,7 @@ from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.cli import installed_connectors, main
 from skaldr.publish.slack.connector import SlackConnector
 from skaldr.publish.slack.transport import SlackTransport
-from skaldr.publish.state import state_path_for
+from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish_block import JiraTarget, SlackTarget
 from tests.factories import SLACK_CANVAS_ID, make_jira_target, make_slack_target
 from tests.factories.auth_factory import make_slack_credentials
@@ -296,6 +296,25 @@ def test_retiring_the_document_archives_each_canvas(tmp_path: Path) -> None:
                 ["skaldr archived this canvas: the document garden-handbook no longer publishes here."],
             ),
         ],
+    )
+
+
+def test_an_archive_whose_rename_failed_is_renamed_by_the_next_publish(tmp_path: Path) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack, split=[])
+    write_garden_report(tmp_path, publish={"doc_id": "garden-handbook", "targets": []})
+    slack.fail_next("canvases.edit", "internal_error", operation="rename")
+
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    state = load_state(state_path_for(path), "garden-handbook")
+
+    assert (stopped, finished, slack.canvases[DOCUMENT_CANVAS].title, state.targets) == (
+        1,
+        0,
+        "Garden handbook (archived by skaldr)",
+        {},
     )
 
 

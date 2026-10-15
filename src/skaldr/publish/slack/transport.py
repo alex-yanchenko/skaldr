@@ -238,18 +238,20 @@ class SlackTransport:
             return
         read = self._read.layouts.get(item_id)
         keyed = keyed_canvas(markdown, {} if read is None else read)
-        if keyed.title.endswith(ARCHIVED_TITLE_MARKER):
+        if keyed.archived:
             return
         edits = _Edits(self._api, item_id, len(keyed.blocks))
+        stamp_at = keyed.stamp_at
         if not keyed.opens_with_the_archived_line:
             if read is not None:
                 refuse_a_change_since_the_read(_canvas_named(item_id), read, keyed.raw_sections)
             for position in reversed(range(keyed.content_start, keyed.content_end)):
                 edits.delete(position)
-            if keyed.stamp_at is not None:
-                edits.delete(keyed.content_start)
             doc_id = None if keyed.stamp is None else keyed.stamp.doc_id
             edits.insert(keyed.content_start, canvas_markdown_of([archived_line(doc_id)]))
+            stamp_at = None if stamp_at is None else keyed.content_start + 1
+        if stamp_at is not None:
+            edits.delete(stamp_at)
         edits.rename(f"{keyed.title}{ARCHIVED_TITLE_MARKER}")
 
     def release_item(self, item_id: str, request: Release, /) -> None:

@@ -148,6 +148,12 @@ class _Failure:
     error: str
     times: int
     passed_first: int
+    operation: str | None
+
+    def matches(self, method: str, form: dict[str, Any]) -> bool:
+        if method != self.method:
+            return False
+        return self.operation is None or form["changes"][0]["operation"] == self.operation
 
 
 @dataclass
@@ -195,8 +201,10 @@ class InMemorySlack:
     def markdown_of(self, canvas_id: str) -> str:
         return self.canvases[canvas_id].markdown()
 
-    def fail_next(self, method: str, error: str, *, times: int = 1, after: int = 0) -> None:
-        self.failures.append(_Failure(method, error, times, after))
+    def fail_next(
+        self, method: str, error: str, *, times: int = 1, after: int = 0, operation: str | None = None
+    ) -> None:
+        self.failures.append(_Failure(method, error, times, after, operation))
 
     def answer_too_many_requests_next(self, *, retry_after: str) -> None:
         self.retry_after_next = retry_after
@@ -228,7 +236,7 @@ class InMemorySlack:
             return httpx2.Response(
                 429, json={"ok": False, "error": "ratelimited"}, headers={"Retry-After": retry_after}
             )
-        failure = next((failure for failure in self.failures if failure.method == method), None)
+        failure = next((failure for failure in self.failures if failure.matches(method, form)), None)
         if failure is not None and failure.passed_first > 0:
             failure.passed_first -= 1
         elif failure is not None:

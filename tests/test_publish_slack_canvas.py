@@ -275,24 +275,34 @@ def test_the_last_stamp_counts_and_an_earlier_one_is_content() -> None:
 
 
 @pytest.mark.parametrize(
-    ("markdown", "archived"),
+    ("markdown", "archived", "opens_with_the_archived_line"),
     [
         pytest.param(
             f"# Garden handbook (archived by skaldr)\n\n{archived_line('garden-handbook')}\n",
             True,
+            True,
             id="archived",
         ),
-        pytest.param(f"# Garden handbook\n\n{archived_line(None)}\n", True, id="archived-unstamped"),
-        pytest.param(f"# T\n\n{archived_line(None)}\n\nA note kept below.\n", True, id="content-kept-below"),
-        pytest.param("# Garden handbook (archived by skaldr)\n\nWelcome.\n", True, id="title-marker"),
-        pytest.param(f"# T\n\nWelcome.\n\n{archived_line(None)}\n", False, id="archived-line-not-first"),
-        pytest.param(STORED, False, id="published"),
+        pytest.param(f"# Garden handbook\n\n{archived_line(None)}\n", False, True, id="not-yet-renamed"),
+        pytest.param(
+            f"# T\n\n{archived_line(None)}\n\nA note kept below.\n", False, True, id="content-kept-below"
+        ),
+        pytest.param("# Garden handbook (archived by skaldr)\n\nWelcome.\n", True, False, id="title-marker"),
+        pytest.param(
+            f"# T\n\nWelcome.\n\n{archived_line(None)}\n", False, False, id="archived-line-not-first"
+        ),
+        pytest.param(
+            f"# T\n\n{archived_line(None)} Welcome back.\n", False, False, id="archived-words-then-more-text"
+        ),
+        pytest.param(STORED, False, False, id="published"),
     ],
 )
-def test_an_archived_canvas_opens_with_the_archived_line_or_carries_the_title_marker(
-    markdown: str, archived: bool
+def test_a_canvas_is_archived_by_its_title_marker_and_an_unfinished_archive_by_its_opening_line(
+    markdown: str, archived: bool, opens_with_the_archived_line: bool
 ) -> None:
-    assert keyed_canvas(markdown, LAYOUT).archived is archived
+    keyed = keyed_canvas(markdown, LAYOUT)
+
+    assert (keyed.archived, keyed.opens_with_the_archived_line) == (archived, opens_with_the_archived_line)
 
 
 @pytest.mark.parametrize(
