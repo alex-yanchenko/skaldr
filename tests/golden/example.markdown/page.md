@@ -1,6 +1,6 @@
 # 📦 Q3 Warehouse Inventory Count: Discrepancies & Fixes
 
-[Cover image](https://example.com/covers/warehouse.png)
+![Cover](https://example.com/covers/warehouse.png)
 
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.
 
@@ -24,10 +24,9 @@ Ops can read the impact of each category; the floor team can read the fix.
 - [Reconciling a bin against the live system](#reconciling-a-bin-against-the-live-system)
 - [Sources](#sources)
 
-* **Source**: WMS export
-* **Period**: Q3 2026
-* **Site**: DC-West
-* **Owner**: Inventory Ops
+| Source | Period | Site | Owner |
+| --- | --- | --- | --- |
+| WMS export | Q3 2026 | DC-West | Inventory Ops |
 
 ## Overview
 
@@ -38,13 +37,9 @@ Ops can read the impact of each category; the floor team can read the fix.
 - **Method**: `full cycle count`
 - **Mode**: strict
 
-* **Matched cleanly**: 8,500 (85.0%) 🟢 **▲ +3%**
-* **Floor: fixable**: 1,100 (11.0%) 🟡 **Floor**
-
-  Miscounts + mislabeled bins we can correct.
-* **Vendor: escalate**: 400 (4.0%) 🟢 **▼ −90** 🔴 **Vendor**
-* 🟣 **Count status**: HEALTHY
-* ⚪ **Total units**: 10,000
+| Matched cleanly | Floor: fixable | Vendor: escalate | 🟣 Count status | ⚪ Total units |
+| --- | --- | --- | --- | --- |
+| 8,500 (85.0%) 🟢 **▲ +3%** | 1,100 (11.0%) 🟡 **Floor**<br>Miscounts + mislabeled bins we can correct. | 400 (4.0%) 🟢 **▼ −90** 🔴 **Vendor** | HEALTHY | 10,000 |
 
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
@@ -52,7 +47,7 @@ Percentages are of the 10,000-unit total. Counts were verified against the shelf
 
 Every bin label now ends in a <ins>check digit</ins>. The cold room logged H<sub>2</sub>O condensation on 3 of 10<sup>2</sup> shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 
-Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
+Zone C is behind schedule, its recount is <mark>due Friday</mark>, and the vendor lots stay open until the supplier replies.
 
 The recount runs <span data-range="2026-07-10/2026-07-14">10 to 14 Jul</span>, is led by Ada Park, is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows [the cold room plan](cold-room-plan.md).
 
@@ -62,7 +57,7 @@ The recount runs <span data-range="2026-07-10/2026-07-14">10 to 14 Jul</span>, i
 flowchart LR
     s1["1: Scan"]:::info
     s2["2: Reconcile"]:::accent
-    s3["3: Flag"]:::warning
+    s3["3: Flag<br>🔵 System"]:::warning
     s4["4: Fix"]:::success
     s5["5: Recount"]
     s1 --> s2
@@ -76,8 +71,6 @@ flowchart LR
     classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
 ```
 
-- **Flag** 🔵 **System**
-
 ### Discrepancy resolution across teams
 
 | Lane | Detect<br>In-house | Investigate | Resolve | Escalate<br>Vendor claim |
@@ -88,19 +81,24 @@ flowchart LR
 
 ✅ done · 🔵 current · ⛔ blocked · ⏸️ deferred
 
-> ⚠️ **Action needed before the next count**
+> [!WARNING]
+> **Action needed before the next count**
 >
 > The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.
 
+> [!NOTE]
 > 📏 Counts below are per distinct discrepancy class, not per unit.
 
 ## Discrepancies & fixes
 
-**Legend: badges used on this page**
+<details>
+<summary>Legend: badges used on this page</summary>
 
 - 🟡 **Floor** Fixable on the floor before the next count.
 - 🔵 **System** Defect in the scanning/labeling pipeline.
 - 🔴 **Vendor** Depends on the vendor to resolve.
+
+</details>
 
 | Discrepancy | Risk | Units | What the problem is | Proposed fix |
 | --- | --- | --- | --- | --- |
@@ -150,21 +148,55 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 #### Sign-off and rollback
 
-- **Owner**: Inventory Ops. **@site-lead** signs off each fix.
-- **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+<dl>
+<dt>Owner</dt>
+<dd>
+
+Inventory Ops. **@site-lead** signs off each fix.
+
+</dd>
+<dt>Rollback</dt>
+<dd>
+
+Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+
+</dd>
+</dl>
 
 ---
 
+> [!NOTE]
 > 🎤 **For the read-out**
 >
 > Lead with the reconciliation gate: it is the one number leadership tracks.
 
 ### Re-count procedure, from step iv
 
-- iv. Freeze inbound moves in the overflow aisles.
-- v. Re-scan every bin with the widened reader.
-  - i. Start with the aisles that held the 260 skipped units.
-- vi. Re-run reconciliation and compare against the first count.
+<ol type="i" start="4">
+<li>
+
+Freeze inbound moves in the overflow aisles.
+
+</li>
+<li>
+
+Re-scan every bin with the widened reader.
+
+<ol type="i">
+<li>
+
+Start with the aisles that held the 260 skipped units.
+
+</li>
+</ol>
+
+</li>
+<li>
+
+Re-run reconciliation and compare against the first count.
+
+</li>
+</ol>
 
 ### Decisions
 
@@ -232,10 +264,18 @@ Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough
 
 ## At a glance
 
+<table>
+<tr>
+<td>
+
 > 📌
 >
-> - 🟢 **Matched cleanly**: 8,500 (85.0%)
-> - 🟡 **Needs work**: 1,500 (15.0%)
+> | 🟢 Matched cleanly | 🟡 Needs work |
+> | --- | --- |
+> | 8,500 (85.0%) | 1,500 (15.0%) |
+
+</td>
+<td>
 
 > 💡 **Reading this section**
 >
@@ -246,16 +286,15 @@ Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough
 * ✅ Reconciliation gate passes.
 * ⏸️ Awaiting `OPS-1234`.
 
+</td>
+</tr>
+</table>
+
 ## Recount Zone C
 
-- **Status**: In Progress
-- **Priority**: High
-- **Assignee**: ada
-- **Due**: 2026-10-15
-- **Labels**: recount, bins
-- **Estimate**: 3
-- **Relates**: [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
-- **team**: Floor ops
+| Status | Priority | Assignee | Due | Labels | Estimate | Relates | team |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| In Progress | High | ada | 2026-10-15 | recount, bins | 3 | [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts) | Floor ops |
 
 Zone C holds most of the mislabeled bins, so it is recounted first.
 
@@ -270,12 +309,15 @@ Zone C holds most of the mislabeled bins, so it is recounted first.
 
 Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.
 
-**How the raw counts were pulled**
+<details>
+<summary>How the raw counts were pulled</summary>
 
 One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reason code each scanner attached.
 
 - Scans with no reason code count as matched.
 - A pallet scanned in two aisles counts once, under its first aisle.
+
+</details>
 
 ## Counts at a glance
 
@@ -325,11 +367,9 @@ pie
 
 ## Readiness by zone
 
-- 🟡 **Floor**: 7 (43.8%)
-- 🔵 **System**: 2 (12.5%)
-- 🔴 **Vendor**: 2 (12.5%)
-
-  Awaiting the vendor's corrected ASN.
+| 🟡 **Floor** | 🔵 **System** | 🔴 **Vendor** |
+| --- | --- | --- |
+| 7 (43.8%) | 2 (12.5%) | 2 (12.5%)<br>Awaiting the vendor's corrected ASN. |
 
 |  | Scanned | Reconciled | Re-labeled | Signed off |
 | --- | --- | --- | --- | --- |
@@ -338,18 +378,28 @@ pie
 | **Zone C** | 🟡 Floor | 🔵 System | ⚪ n/a |  |
 | **Overflow** | 🔴 Vendor | 🔴 Vendor |  |  |
 
-**⚠️ Floor**
+<details open>
+<summary>⚠️ Floor</summary>
 
 - Re-label the Zone B bins the scanner misread.
 - Recount Zone C by hand before sign-off.
 
-**💡 System**
+</details>
+
+<details>
+<summary>💡 System</summary>
 
 Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.
 
-**🛑 Vendor**
+</details>
 
-> 🛑 Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
+<details>
+<summary>🛑 Vendor</summary>
+
+> [!CAUTION]
+> Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
+
+</details>
 
 ## Where the count comes from
 
@@ -401,7 +451,8 @@ The counts above come from the export, but a disputed bin is quicker to settle a
 - `{{bin}}` bin: for example A-17-3
 - `{{token}}` API token: a secret, supply your own
 
-**✅ a bin that balances**
+<details open>
+<summary>✅ a bin that balances</summary>
 
 ```bash
 curl -i -X GET \
@@ -423,9 +474,13 @@ content-type: application/json
 }
 ```
 
-> ✅ **Verdict**: Expected and counted agree, so the bin needs no recount.
+> [!TIP]
+> **Verdict**: Expected and counted agree, so the bin needs no recount.
 
-**✅ an overflow bin**
+</details>
+
+<details>
+<summary>✅ an overflow bin</summary>
 
 ```bash
 curl -i -X GET \
@@ -447,9 +502,13 @@ content-type: application/json
 }
 ```
 
-> ✅ **Verdict**: A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.
+> [!TIP]
+> **Verdict**: A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.
 
-**⚠️ a bin the token cannot read**
+</details>
+
+<details>
+<summary>⚠️ a bin the token cannot read</summary>
 
 ```bash
 curl -i -X GET \
@@ -468,13 +527,17 @@ content-type: application/json
 }
 ```
 
-> ⚠️ **Verdict**: The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.
+> [!WARNING]
+> **Verdict**: The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.
+
+</details>
 
 Overflow bins are the one place the export and the WMS disagree by design. The command below pulls every flagged bin with its gap already worked out. The team's secrets wrapper supplies the token, so there is nothing to fill in: copy it, run it, compare.
 
 **Every overflow bin in one warehouse**
 
-**⚠️ NW-04, the finding**
+<details open>
+<summary>⚠️ NW-04, the finding</summary>
 
 ```bash
 vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
@@ -497,9 +560,13 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 ]
 ```
 
-> ⚠️ **Verdict**: Two overflow bins short, 26 units between them, matching the manual-path queue.
+> [!WARNING]
+> **Verdict**: Two overflow bins short, 26 units between them, matching the manual-path queue.
 
-**✅ NW-02, the control**
+</details>
+
+<details>
+<summary>✅ NW-02, the control</summary>
 
 ```bash
 vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
@@ -518,7 +585,10 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 ]
 ```
 
-> ✅ **Verdict**: A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.
+> [!TIP]
+> **Verdict**: A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.
+
+</details>
 
 ## Reconciling a bin against the live system
 
@@ -553,11 +623,13 @@ content-type: application/json
 }
 ```
 
-> ✅ **Verdict**: Tokens last fifteen minutes, so a long recount needs this step again partway through.
+> [!TIP]
+> **Verdict**: Tokens last fifteen minutes, so a long recount needs this step again partway through.
 
 **Step 2 of 2: Read the bins that did not balance**
 
-**✅ with the token**
+<details open>
+<summary>✅ with the token</summary>
 
 ```bash
 curl -i -X GET \
@@ -580,9 +652,13 @@ x-total-count: 3
 }
 ```
 
-> ✅ **Verdict**: The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.
+> [!TIP]
+> **Verdict**: The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.
 
-**⚠️ once the token has expired**
+</details>
+
+<details>
+<summary>⚠️ once the token has expired</summary>
 
 ```bash
 curl -i -X GET \
@@ -602,7 +678,10 @@ content-type: application/json
 }
 ```
 
-> ⚠️ **Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
+> [!WARNING]
+> **Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
+
+</details>
 
 > **Before the next count**
 >
@@ -612,9 +691,9 @@ content-type: application/json
 
 ## Sources
 
-Method definitions follow the warehouse counting SOP \[1\]; the discrepancy thresholds come from the Q2 reconciliation audit [\[2\]](https://example.com/q2-audit).
+Method definitions follow the warehouse counting SOP [^1]; the discrepancy thresholds come from the Q2 reconciliation audit [^2].
 
-- \[1\] *Warehouse Counting SOP*, rev. 7, §3 Cycle vs sampling.
-- \[2\] Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
+[^1]: *Warehouse Counting SOP*, rev. 7, §3 Cycle vs sampling.
+[^2]: Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
 
 WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.

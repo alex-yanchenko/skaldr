@@ -260,18 +260,20 @@ def test_a_page_whose_cases_bind_every_variable_has_no_fields_and_no_slots() -> 
 def test_the_markdown_export_shows_each_cases_command_with_its_own_values() -> None:
     assert markdown_of([_command_request()]) == (
         "**Tier mappings on the partner API**\n\n"
-        "**⚠️ Second term**\n\n"
+        "<details open>\n<summary>⚠️ Second term</summary>\n\n"
         "```bash\n"
         "vault-run -- curl -s \"https://api.example.test/v1/records?id=A100&term=2&seq=1\" | jq '.'\n"
         "```\n\n"
         "**Recorded output**\n\n"
         "```\nsecond\n```\n\n"
-        "**✅ Control**\n\n"
+        "</details>\n\n"
+        "<details>\n<summary>✅ Control</summary>\n\n"
         "```bash\n"
         "vault-run -- curl -s \"https://api.example.test/v1/records?id=A100&term=1&seq=1\" | jq '.'\n"
         "```\n\n"
         "**Recorded output**\n\n"
-        "```\nfirst\n```\n"
+        "```\nfirst\n```\n\n"
+        "</details>\n"
     )
 
 
@@ -303,7 +305,7 @@ def test_the_markdown_export_lists_only_the_values_the_reader_still_supplies() -
     ]
     markdown = markdown_of([_command_request(cases=cases, command_note=None)])
 
-    assert markdown.split("**One**")[0] == (
+    assert markdown.split("<details open>")[0] == (
         "**Tier mappings on the partner API**\n\n**Values you supply**\n\n- `{{seq}}` seq: supply a value\n\n"
     )
 

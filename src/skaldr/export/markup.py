@@ -311,16 +311,35 @@ class CommonMarkRuns(MarkupRuns, ABC):
     @abstractmethod
     def require_links_to_its_own_headings(self) -> None: ...
 
+    def highlighted(self, _inner: str, /) -> str | None:
+        return None
+
     def heading_slug(self, _anchor: str, /) -> str | None:
         return None
+
+    def _tinted_piece(self, run: Tinted, enclosing: _Enclosing) -> str:
+        inner = self._written(run.runs, enclosing)
+        highlight = self.highlighted(inner) if run.tone is None else None
+        if highlight is None:
+            self.refuse_a_tint()
+        return highlight
 
     def write(self, runs: ExportRich) -> str:
         return self._written(runs, _Enclosing())
 
     def write_toned(self, tones: Sequence[ToneName], runs: ExportRich) -> str:
-        dots = [self.mark(IndicatorMark(tone)) for tone in _dot_tones_not_leading(tones, runs)]
-        text = self._written_struck(runs) if "muted" in tones else self.write(runs)
+        dots = self.tone_dots(tones, runs)
+        text = self.write_struck_if_muted(tones, runs)
         return " ".join([*dots, text] if text else dots)
+
+    def tone_dots(self, tones: Sequence[ToneName], runs: ExportRich) -> list[str]:
+        return [self.mark(IndicatorMark(tone)) for tone in _dot_tones_not_leading(tones, runs)]
+
+    def write_struck_if_muted(self, tones: Sequence[ToneName], runs: ExportRich) -> str:
+        return self._written_struck(runs) if "muted" in tones else self.write(runs)
+
+    def write_cell(self, tones: Sequence[ToneName], cell: TableCell) -> str:
+        return self.write_toned(tones, cell_text(cell))
 
     def _written_struck(self, runs: ExportRich) -> str:
         struck = _Emphasis("strike", self._written(runs, _Enclosing().inside("strike")))
@@ -375,7 +394,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case Styled():
                     pieces += self._styled_pieces(run, enclosing)
                 case Tinted():
-                    self.refuse_a_tint()
+                    pieces.append(self._tinted_piece(run, enclosing))
                 case TonedLabel():
                     pieces += [self._tone_dot_prefix(run.tone), *self._pieces(run.runs, enclosing)]
                 case Link():
@@ -418,7 +437,7 @@ def pipe_table_lines(
     def cell_markup(cell: TableCell, tones: Sequence[ToneName]) -> str:
         if cell.blocks and block_cell is not None:
             return block_cell(cell, tones).replace("|", "\\|")
-        return writer.write_toned(tones, cell_text(cell)).replace("|", "\\|")
+        return writer.write_cell(tones, cell).replace("|", "\\|")
 
     width = table_width(table)
     lines = [

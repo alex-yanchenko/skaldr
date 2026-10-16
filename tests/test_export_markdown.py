@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -7,11 +7,13 @@ import pytest
 from markdown_it import MarkdownIt
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
-from skaldr.export import ExportResult, export_markdown
+from skaldr.export import ExportResult, export_markdown, render_export
 from skaldr.export import markdown as markdown_module
+from skaldr.export.adf import render_adf
 from skaldr.export.flanking import markers_flank
-from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
+from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown, uncited_remainder
 from skaldr.export.markup import code_block_lines, code_span, styled
+from skaldr.export.notion import render_notion
 from skaldr.export.runs import (
     Break,
     CheckMark,
@@ -27,10 +29,13 @@ from skaldr.export.runs import (
     TonedLabel,
     export_visible_text,
 )
+from skaldr.export.slack import render_slack
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     Graph,
     GraphNode,
@@ -42,6 +47,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     Tab,
     TableCell,
     TableNode,
@@ -56,6 +63,7 @@ from skaldr.models import BadgeColorLiteral, ToneLiteral, load_report, parse_rep
 from skaldr.richtext import (
     AnchorLink,
     Citation,
+    Code,
     DateMention,
     Link,
     Placeholder,
@@ -116,7 +124,12 @@ def test_the_example_reworked_for_github_less_the_blocks_github_refuses_matches_
     )
 
 
-def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> None:
+API_LEGEND = (
+    "<details>\n<summary>Legend: badges used on this page</summary>\n\n- 🔵 **api** the API\n\n</details>\n\n"
+)
+
+
+def test_a_request_with_several_cases_is_a_details_block_per_case_with_the_first_open() -> None:
     cases = [
         {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
         {"label": "control", "tone": "success", "response": {"body": "none"}},
@@ -125,8 +138,10 @@ def test_a_request_with_several_cases_lists_each_case_under_a_bold_title() -> No
 
     assert markdown_of([request]) == (
         "**Tier mappings on the partner API**\n\n"
-        "**⚠️ finding**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```json\n[]\n```\n\n"
-        "**✅ control**\n\n```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```\nnone\n```\n"
+        "<details open>\n<summary>⚠️ finding</summary>\n\n"
+        "```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```json\n[]\n```\n\n</details>\n\n"
+        "<details>\n<summary>✅ control</summary>\n\n"
+        "```bash\nlist-tiers\n```\n\n**Recorded output**\n\n```\nnone\n```\n\n</details>\n"
     )
 
 
@@ -157,17 +172,18 @@ def test_a_query_holding_backticks_gets_a_longer_fence() -> None:
 @pytest.mark.parametrize(
     ("tone", "title"),
     [
-        pytest.param("success", "**✅ t**", id="success"),
-        pytest.param("info", "**💡 t**", id="info-matches-its-callout"),
-        pytest.param("warning", "**⚠️ t**", id="warning"),
-        pytest.param("danger", "**🛑 t**", id="danger"),
-        pytest.param("neutral", "**t**", id="neutral-has-no-icon"),
-        pytest.param(None, "**t**", id="no-tone"),
+        pytest.param("success", "✅ t", id="success"),
+        pytest.param("info", "💡 t", id="info-matches-its-callout"),
+        pytest.param("warning", "⚠️ t", id="warning"),
+        pytest.param("danger", "🛑 t", id="danger"),
+        pytest.param("neutral", "t", id="neutral-has-no-icon"),
+        pytest.param(None, "t", id="no-tone"),
     ],
 )
 def test_a_tab_title_carries_the_icon_of_its_case_tone(tone: ToneName | None, title: str) -> None:
     assert (
-        render_markdown([Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))]) == f"{title}\n\nz\n"
+        render_markdown([Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))])
+        == f"<details open>\n<summary>{title}</summary>\n\nz\n\n</details>\n"
     )
 
 
@@ -179,15 +195,78 @@ def test_a_flow_keeps_its_mermaid_and_the_detail_mermaid_cannot_show() -> None:
     }
 
     assert markdown_of([flow]) == (
+        '```mermaid\nflowchart LR\n    s1["Scan<br>• by aisle"]\n    s2["Fix"]\n    s1 --> s2\n```\n'
+    )
+
+
+def test_a_flow_step_shows_its_note_points_and_badges_in_its_node_label() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [
+            {
+                "label": "Scan",
+                "note": "first",
+                "points": ["by aisle", "by **bin**"],
+                "badges": ["API", "RISK"],
+            },
+            {"label": "Fix"},
+        ],
+    }
+
+    assert markdown_of([flow], badges=API_AND_RISK_BADGES) == (
+        f"{API_LEGEND}"
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan<br>first<br>• by aisle<br>• by bin<br>🔵 api 🔴 risk"]\n'
+        '    s2["Fix"]\n'
+        "    s1 --> s2\n"
+        "```\n"
+    )
+
+
+def test_a_fan_hub_and_spoke_show_their_points_and_badges_in_their_node_labels() -> None:
+    fan = {
+        "type": "fan",
+        "direction": "out",
+        "hub": {"label": "Hub", "points": ["owns the queue"], "badges": ["API"]},
+        "spokes": [{"label": "A", "points": ["one"]}, {"label": "B"}],
+    }
+
+    assert markdown_of([fan], badges=API_BADGES) == (
+        f"{API_LEGEND}"
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    hub["Hub<br>• owns the queue<br>🔵 api"]\n'
+        '    s1["A<br>• one"]\n'
+        '    s2["B"]\n'
+        "    hub --> s1\n"
+        "    hub --> s2\n"
+        "```\n"
+    )
+
+
+def test_a_flow_with_a_point_a_label_cannot_hold_keeps_the_step_list_beside_the_plain_labels() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [
+            {"label": "Scan", "points": ["see [doc](https://example.com/d)"]},
+            {"label": "Fix", "points": ["twice"]},
+        ],
+    }
+
+    assert markdown_of([flow]) == (
         "```mermaid\n"
         "flowchart LR\n"
         '    s1["Scan"]\n'
         '    s2["Fix"]\n'
         "    s1 --> s2\n"
-        "```\n"
-        "\n"
+        "```\n\n"
         "- **Scan**\n"
-        "  - by aisle\n"
+        "  - see [doc](https://example.com/d)\n"
+        "- **Fix**\n"
+        "  - twice\n"
     )
 
 
@@ -206,6 +285,16 @@ def test_the_page_starts_with_the_title_as_its_only_top_level_heading(tmp_path: 
 
     assert result == ExportResult("Q3 *count*", (tmp_path / "page.md",))
     assert (tmp_path / "page.md").read_text(encoding="utf-8") == "# Q3 \\*count\\*\n\nHello.\n"
+
+
+def test_a_page_cover_is_an_image_under_the_icon_led_title() -> None:
+    report = parse_report(
+        make_report(meta={"title": "Q3", "icon": "📦", "cover": "https://example.com/covers/q3.png"})
+    )
+
+    assert render_export(report, "markdown").pages["page.md"] == (
+        "# 📦 Q3\n\n![Cover](https://example.com/covers/q3.png)\n\nHello.\n"
+    )
 
 
 def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link_urls() -> None:
@@ -285,11 +374,19 @@ def test_a_bang_right_before_anything_written_as_a_link_is_escaped_so_it_is_not_
     assert render_markdown(nodes) == f"## M\n\nwow\\!{written}\n"
 
 
+def test_a_highlight_span_is_a_mark_tag_around_its_text_whatever_its_tone() -> None:
+    span = Tinted(None, "warning", (Plain("Friday"),))
+    other = Tinted(None, "sky", (Styled("bold", (Plain("soon"),)),))
+
+    assert render_markdown([Paragraph((Plain("due "), span, Plain(" or "), other))]) == (
+        "due <mark>Friday</mark> or <mark>**soon**</mark>\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("tone", "background"),
     [
         pytest.param("danger", None, id="colour"),
-        pytest.param(None, "warning", id="highlight"),
         pytest.param("danger", "sky", id="colour-and-highlight"),
     ],
 )
@@ -338,17 +435,85 @@ def test_a_link_target_holding_whitespace_is_percent_encoded(url: str, written: 
         pytest.param("https://e.com/a<b>", "https://e.com/a%3Cb%3E", id="angles"),
     ],
 )
-def test_a_reference_url_is_percent_encoded_in_its_citation_and_its_source_link(
-    url: str, written: str
-) -> None:
+def test_a_reference_url_is_percent_encoded_in_its_source_link(url: str, written: str) -> None:
     references = {
         "type": "references",
         "items": [{"key": "a", "text": "SOP", "url": url}, {"key": "b", "text": "Memo"}],
     }
 
     assert markdown_of([{"type": "text", "body": "see [^a] [^b]"}, references]) == (
-        f"see [\\[1\\]]({written}) \\[2\\]\n\n- \\[1\\] SOP [source]({written})\n- \\[2\\] Memo\n"
+        f"see [^1] [^2]\n\n[^1]: SOP [source]({written})\n[^2]: Memo\n"
     )
+
+
+def test_a_citation_is_a_footnote_reference_and_its_reference_a_footnote_definition() -> None:
+    references = {
+        "type": "references",
+        "items": [
+            {"key": "sop", "text": "*Counting SOP*, rev. 7", "url": "https://example.com/sop"},
+            {"key": "audit", "text": "Q2 audit, p. 12"},
+        ],
+    }
+    text = {"type": "text", "body": "Per the SOP [^sop] and the audit [^audit], twice [^sop]."}
+
+    assert markdown_of([text, references]) == (
+        "Per the SOP [^1] and the audit [^2], twice [^1].\n\n"
+        "[^1]: *Counting SOP*, rev. 7 [source](https://example.com/sop)\n"
+        "[^2]: Q2 audit, p. 12\n"
+    )
+
+
+def test_a_reference_no_citation_names_stays_a_bullet_beside_the_footnotes() -> None:
+    references = {
+        "type": "references",
+        "items": [
+            {"key": "a", "text": "SOP"},
+            {"key": "b", "text": "Memo"},
+            {"key": "c", "text": "Audit", "url": "https://example.com/audit"},
+        ],
+    }
+    text = {"type": "text", "body": "Cites [^c] and [^a]."}
+
+    assert markdown_of([text, references]) == (
+        "Cites [^3] and [^1].\n\n"
+        "[^1]: SOP\n"
+        "[^3]: Audit [source](https://example.com/audit)\n\n"
+        "- \\[2\\] Memo\n"
+    )
+
+
+def test_a_citation_the_page_never_defines_keeps_its_linked_number() -> None:
+    nodes = [Paragraph((Plain("see "), Citation("a", 1, "https://example.com/a")))]
+
+    assert render_markdown(nodes) == "see [\\[1\\]](https://example.com/a)\n"
+
+
+def test_a_citation_in_a_summary_stays_a_linked_number_and_leaves_its_reference_a_bullet() -> None:
+    title = (Plain("See "), Citation("a", 1, "https://example.com/a"))
+    nodes = [
+        Toggle(title, None, (Paragraph((Plain("x"),)),)),
+        References((ReferenceEntry(1, (Plain("SOP"),)),)),
+    ]
+
+    assert render_markdown(nodes) == (
+        '<details>\n<summary>See <a href="https://example.com/a">[1]</a></summary>\n\nx\n\n</details>\n\n'
+        "- \\[1\\] SOP\n"
+    )
+
+
+def test_a_citation_in_a_table_cell_and_a_heading_is_a_footnote_reference_too() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A", "kind": "rich"}],
+        "rows": [{"a": "claim [^a]"}],
+    }
+    blocks = [
+        {"type": "heading", "text": "Method"},
+        table,
+        {"type": "references", "items": [{"key": "a", "text": "SOP"}]},
+    ]
+
+    assert markdown_of(blocks) == "## Method\n\n| A |\n| --- |\n| claim [^1] |\n\n[^1]: SOP\n"
 
 
 def test_a_dollar_sign_is_escaped_so_github_does_not_render_math() -> None:
@@ -656,8 +821,7 @@ def test_a_table_shows_row_tones_on_the_title_and_drops_a_tint() -> None:
     }
 
     assert markdown_of([table], badges=API_AND_RISK_BADGES) == (
-        "**Legend: badges used on this page**\n\n"
-        "- 🔵 **api** the API\n\n"
+        f"{API_LEGEND}"
         "| N | Item | Risk | Tag |\n"
         "| --- | --- | --- | --- |\n"
         "| 1 | ~~old (x)~~ | 🟡 | 🔵 **api** |\n"
@@ -674,7 +838,7 @@ def test_a_toned_item_label_is_preceded_by_its_dot() -> None:
     ]
 
     assert markdown_of(blocks) == (
-        "- 🟡 **Disk**: ████████░░ 75.0%\n\n* 🔴 **Errors**: 3\n\n1. 🔴 **Stop**\n\n   x\n"
+        "- 🟡 **Disk**: ████████░░ 75.0%\n\n| 🔴 Errors |\n| --- |\n| 3 |\n\n1. 🔴 **Stop**\n\n   x\n"
     )
 
 
@@ -683,29 +847,29 @@ def test_a_toned_item_label_is_preceded_by_its_dot() -> None:
     [
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "badges": ["API"]},
-            "* 🔴 **Err**: 3 🔵 **api**\n",
+            "| 🔴 Err |\n| --- |\n| 3 🔵 **api** |\n",
             id="a-tone-unlike-the-badge-color-keeps-its-dot",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "info", "badges": ["API"]},
-            "* **Err**: 3 🔵 **api**\n",
+            "| Err |\n| --- |\n| 3 🔵 **api** |\n",
             id="a-tone-like-the-badge-color-leaves-the-dot-to-the-badge",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "info", "badges": ["RISK", "API"]},
-            "* **Err**: 3 🔴 **risk** 🔵 **api**\n",
+            "| Err |\n| --- |\n| 3 🔴 **risk** 🔵 **api** |\n",
             id="a-tone-like-any-badge-color-leaves-the-dot-to-that-badge",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "badges": ["API"]},
-            "* **Err**: 3 🔵 **api**\n",
+            "| Err |\n| --- |\n| 3 🔵 **api** |\n",
             id="a-badge-without-a-card-tone",
         ),
     ],
 )
 def test_a_card_dot_gives_way_to_a_badge_of_its_color(card: dict[str, Any], written: str) -> None:
     assert markdown_of([{"type": "cards", "items": [card]}], badges=API_AND_RISK_BADGES) == (
-        "**Legend: badges used on this page**\n\n- 🔵 **api** the API\n\n" + written
+        API_LEGEND + written
     )
 
 
@@ -714,17 +878,17 @@ def test_a_card_dot_gives_way_to_a_badge_of_its_color(card: dict[str, Any], writ
     [
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up", "tone": "danger"}},
-            "- **Err**: 3 🔴 **up**\n",
+            "| Err |\n| --- |\n| 3 🔴 **up** |\n",
             id="a-tone-like-the-delta-chip-leaves-the-dot-to-the-chip",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up", "tone": "success"}},
-            "- 🔴 **Err**: 3 🟢 **up**\n",
+            "| 🔴 Err |\n| --- |\n| 3 🟢 **up** |\n",
             id="a-tone-unlike-the-delta-chip-keeps-its-dot",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up"}},
-            "- 🔴 **Err**: 3 up\n",
+            "| 🔴 Err |\n| --- |\n| 3 up |\n",
             id="a-delta-without-a-tone-leaves-the-dot-to-the-card",
         ),
     ],
@@ -831,16 +995,69 @@ def test_a_swimlane_group_color_shows_no_dot() -> None:
     assert markdown_of([swimlane]) == "| Lane | Plan<br>Q1 |\n| --- | --- |\n| **Ops** | ⛔ **1** Draft |\n"
 
 
-def test_a_grid_becomes_its_cells_in_order() -> None:
-    grid = {
-        "type": "grid",
-        "cells": [
-            {"span": 2, "blocks": [{"type": "text", "body": "a"}]},
-            {"span": 4, "blocks": [{"type": "text", "body": "b"}]},
-        ],
-    }
+def _text_cell(span: int, body: str, **overrides: Any) -> dict[str, Any]:
+    return {"span": span, "blocks": [{"type": "text", "body": body}], **overrides}
 
-    assert markdown_of([grid]) == "a\n\nb\n"
+
+def test_a_grid_of_up_to_three_plain_cells_is_a_raw_table_with_each_cell_width() -> None:
+    grid = {"type": "grid", "cells": [_text_cell(2, "a"), _text_cell(4, "**b**")]}
+
+    assert markdown_of([grid]) == (
+        '<table>\n<tr>\n<td width="33%">\n\na\n\n</td>\n<td width="67%">\n\n**b**\n\n</td>\n</tr>\n</table>\n'
+    )
+
+
+def test_a_grid_of_four_cells_is_a_raw_table_without_widths() -> None:
+    grid = {"type": "grid", "cells": [_text_cell(1, letter) for letter in "abcd"]}
+
+    assert markdown_of([grid]) == (
+        "<table>\n<tr>\n"
+        "<td>\n\na\n\n</td>\n<td>\n\nb\n\n</td>\n<td>\n\nc\n\n</td>\n<td>\n\nd\n\n</td>\n"
+        "</tr>\n</table>\n"
+    )
+
+
+def test_a_grid_cell_holding_a_table_is_a_raw_table_without_widths_around_a_pipe_table() -> None:
+    inner = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A"}],
+        "rows": [{"a": "x"}],
+    }
+    grid = {"type": "grid", "cells": [{"span": 3, "blocks": [inner]}, _text_cell(3, "b")]}
+
+    assert markdown_of([grid]) == (
+        "<table>\n<tr>\n<td>\n\n| A |\n| --- |\n| x |\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+    )
+
+
+def test_a_toned_grid_cell_is_a_raw_table_without_widths_around_an_icon_led_quote() -> None:
+    grid = {"type": "grid", "cells": [_text_cell(3, "a", tone="warning"), _text_cell(3, "b")]}
+
+    assert markdown_of([grid]) == (
+        "<table>\n<tr>\n<td>\n\n> ⚠️ a\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+    )
+
+
+def test_a_callout_in_a_grid_cell_is_an_icon_led_quote_and_an_empty_cell_is_an_empty_td() -> None:
+    callout = Callout("success", (Paragraph((Plain("done"),)),))
+    grid = Columns((GridColumn(50, (callout,)), GridColumn(50, ())))
+
+    assert render_markdown([grid]) == (
+        '<table>\n<tr>\n<td width="50%">\n\n> ✅ done\n\n</td>\n<td width="50%"></td>\n</tr>\n</table>\n'
+    )
+
+
+def test_a_grid_inside_a_grid_cell_is_a_table_inside_the_td() -> None:
+    inner = Columns(
+        (GridColumn(50, (Paragraph((Plain("i"),)),)), GridColumn(50, (Paragraph((Plain("j"),)),)))
+    )
+    outer = Columns((GridColumn(50, (inner,)), GridColumn(50, (Paragraph((Plain("o"),)),))))
+
+    assert render_markdown([outer]) == (
+        '<table>\n<tr>\n<td width="50%">\n\n'
+        '<table>\n<tr>\n<td width="50%">\n\ni\n\n</td>\n<td width="50%">\n\nj\n\n</td>\n</tr>\n</table>\n\n'
+        '</td>\n<td width="50%">\n\no\n\n</td>\n</tr>\n</table>\n'
+    )
 
 
 @pytest.mark.parametrize(
@@ -944,20 +1161,57 @@ def test_a_check_list_becomes_a_task_list() -> None:
             {"start": 9}, "9. c\n10. d\n    1. e\n", id="start-counts-on-and-a-nested-list-from-one"
         ),
         pytest.param({"numbering": "decimal"}, "1. c\n2. d\n   1. e\n", id="decimal-is-native"),
-        pytest.param(
-            {"numbering": "letters"}, "- a. c\n- b. d\n  - a. e\n", id="letters-are-bullets-led-by-the-letter"
-        ),
-        pytest.param(
-            {"start": 4, "numbering": "roman"},
-            "- iv. c\n- v. d\n  - i. e\n",
-            id="roman-is-bullets-led-by-the-numeral-from-the-start",
-        ),
     ],
 )
 def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, object], markdown: str) -> None:
     block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
 
     assert markdown_of([block]) == markdown
+
+
+def test_a_lettered_list_is_an_ol_of_type_a_with_each_item_set_apart_by_blank_lines() -> None:
+    block = {"type": "list", "style": "number", "numbering": "letters", "items": ["c", "**d**"]}
+
+    assert markdown_of([block]) == ('<ol type="a">\n<li>\n\nc\n\n</li>\n<li>\n\n**d**\n\n</li>\n</ol>\n')
+
+
+def test_a_roman_list_is_an_ol_of_type_i_from_its_start_with_nested_lists_inside_its_items() -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "numbering": "roman",
+        "start": 4,
+        "items": ["c", {"text": "d", "items": ["e"]}],
+    }
+
+    assert markdown_of([block]) == (
+        '<ol type="i" start="4">\n'
+        "<li>\n\nc\n\n</li>\n"
+        '<li>\n\nd\n\n<ol type="i">\n<li>\n\ne\n\n</li>\n</ol>\n\n</li>\n'
+        "</ol>\n"
+    )
+
+
+def test_an_ol_does_not_join_the_markdown_lists_around_it() -> None:
+    lettered = ListNode("number", (ListEntry((Plain("b"),)),), numbering="letters")
+    nodes = [
+        ListNode("number", (ListEntry((Plain("a"),)),)),
+        lettered,
+        ListNode("number", (ListEntry((Plain("c"),)),)),
+    ]
+
+    assert render_markdown(nodes) == '1. a\n\n<ol type="a">\n<li>\n\nb\n\n</li>\n</ol>\n\n1. c\n'
+
+
+def test_an_ol_item_holding_a_callout_keeps_the_icon_led_quote_and_a_blank_item_is_empty() -> None:
+    inner = Callout("success", (Paragraph((Plain("done"),)),))
+    lettered = ListNode(
+        "number", (ListEntry((Plain("a"),), children=(inner,)), ListEntry(())), numbering="roman"
+    )
+
+    assert render_markdown([lettered]) == (
+        '<ol type="i">\n<li>\n\na\n\n> ✅ done\n\n</li>\n<li></li>\n</ol>\n'
+    )
 
 
 @pytest.mark.parametrize(
@@ -1056,10 +1310,10 @@ def test_a_subtitle_led_by_spaces_and_a_dash_stays_a_paragraph() -> None:
     )
 
 
-def test_a_callout_led_by_a_list_puts_its_icon_on_a_line_of_its_own() -> None:
-    callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),))
+def test_a_callout_led_by_a_list_has_a_blank_line_between_its_alert_line_and_the_list() -> None:
+    callout = Callout("info", (ListNode("number", (ListEntry((Plain("a"),)),), start=3),))
 
-    assert render_markdown([callout]) == "> 💡\n>\n> - a\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n>\n> 3. a\n"
 
 
 def test_a_table_of_contents_entry_with_no_heading_is_its_title_alone() -> None:
@@ -1079,7 +1333,13 @@ def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None
 
 
 def _columns(*cells: tuple[Node, ...]) -> Columns:
-    return Columns(tuple(GridColumn(1, cell) for cell in cells))
+    return Columns(tuple(GridColumn(100 // len(cells), cell) for cell in cells))
+
+
+def _table_of(*cells: str) -> str:
+    width = f' width="{100 // len(cells)}%"'
+    opened = "".join(f"<td{width}>\n\n{cell}\n\n</td>\n" for cell in cells)
+    return f"<table>\n<tr>\n{opened}</tr>\n</table>"
 
 
 @pytest.mark.parametrize(
@@ -1087,17 +1347,17 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
     [
         pytest.param(
             [make_bullets("a", "b"), _columns((make_bullets("c", "d"),), (make_paragraph("t"),))],
-            "- a\n- b\n\n* c\n* d\n\nt\n",
+            "- a\n- b\n\n" + _table_of("- c\n- d", "t") + "\n",
             id="list-then-a-grid-opening-with-a-list",
         ),
         pytest.param(
             [_columns((make_paragraph("t"),), (make_bullets("c"),)), make_bullets("d")],
-            "t\n\n- c\n\n* d\n",
+            _table_of("t", "- c") + "\n\n- d\n",
             id="grid-ending-with-a-list-then-a-list",
         ),
         pytest.param(
             [_columns((make_bullets("a"),)), _columns((make_bullets("b"),)), make_bullets("c")],
-            "- a\n\n* b\n\n- c\n",
+            _table_of("- a") + "\n\n" + _table_of("- b") + "\n\n- c\n",
             id="a-chain-of-lists-through-grids",
         ),
         pytest.param(
@@ -1110,7 +1370,8 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
                 Tabs((Tab((Plain("A"),), (make_paragraph("a"),)), Tab((Plain("B"),), (make_bullets("x"),)))),
                 make_bullets("z"),
             ],
-            "**A**\n\na\n\n**B**\n\n- x\n\n* z\n",
+            "<details open>\n<summary>A</summary>\n\na\n\n</details>\n\n"
+            "<details>\n<summary>B</summary>\n\n- x\n\n</details>\n\n- z\n",
             id="tabs-ending-with-a-list-then-a-list",
         ),
         pytest.param(
@@ -1118,8 +1379,9 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
                 make_bullets("a"),
                 Tabs((Tab((Plain("A"),), (make_bullets("x"),)), Tab((Plain("B"),), (make_bullets("y"),)))),
             ],
-            "- a\n\n**A**\n\n- x\n\n**B**\n\n- y\n",
-            id="a-tab-title-already-separates-lists",
+            "- a\n\n<details open>\n<summary>A</summary>\n\n- x\n\n</details>\n\n"
+            "<details>\n<summary>B</summary>\n\n- y\n\n</details>\n",
+            id="a-details-block-already-separates-lists",
         ),
         pytest.param(
             [
@@ -1131,7 +1393,7 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
         ),
         pytest.param(
             [Toggle((Plain("T"),), None, (make_bullets("x"),)), make_bullets("z")],
-            "**T**\n\n- x\n\n* z\n",
+            "<details>\n<summary>T</summary>\n\n- x\n\n</details>\n\n- z\n",
             id="toggle-ending-with-a-list-then-a-list",
         ),
         pytest.param(
@@ -1139,12 +1401,12 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
                 ListNode("number", (ListEntry((Plain("a"),)),)),
                 _columns((ListNode("number", (ListEntry((Plain("b"),)),)),)),
             ],
-            "1. a\n\n1) b\n",
+            "1. a\n\n" + _table_of("1. b") + "\n",
             id="ordered-lists-either-side-of-a-grid",
         ),
         pytest.param(
             [make_bullets("a"), _columns((Callout("info", (make_bullets("b"),)),)), make_bullets("c")],
-            "- a\n\n> 💡\n>\n> - b\n\n- c\n",
+            "- a\n\n" + _table_of("> 💡\n>\n> - b") + "\n\n- c\n",
             id="a-quoted-list-in-a-grid-separates-the-lists-around-it",
         ),
     ],
@@ -1165,19 +1427,19 @@ def test_lists_around_an_authored_grid_stay_separate_lists_in_github() -> None:
     }
     blocks = [{"type": "list", "items": ["a", "b"]}, grid, {"type": "list", "items": ["e"]}]
 
-    assert markdown_of(blocks) == "- a\n- b\n\n* c\n* d\n\nt\n\n- e\n"
+    assert markdown_of(blocks) == "- a\n- b\n\n" + _table_of("- c\n- d", "t") + "\n\n- e\n"
 
 
 def test_a_callout_whose_first_paragraph_is_empty_keeps_its_icon_off_the_list_that_follows() -> None:
-    callout = Callout("info", (Paragraph(()), make_bullets("first", "second")))
+    callout = Callout("info", (Paragraph(()), make_bullets("first", "second")), icon="💡")
 
-    assert render_markdown([callout]) == "> 💡\n>\n> - first\n> - second\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n> 💡\n>\n> - first\n> - second\n"
 
 
 def test_a_callout_with_an_empty_first_paragraph_puts_its_icon_before_a_later_paragraph() -> None:
-    callout = Callout("info", (Paragraph(()), make_paragraph("later")))
+    callout = Callout("info", (Paragraph(()), make_paragraph("later")), icon="💡")
 
-    assert render_markdown([callout]) == "> 💡 later\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n> 💡 later\n"
 
 
 def _github_html(markdown: str) -> str:
@@ -1559,9 +1821,9 @@ def test_a_list_either_side_of_a_block_with_an_empty_title_stays_a_separate_list
 
 
 def test_a_tab_with_an_empty_title_passes_the_list_before_it_through() -> None:
-    tabs = Tabs((Tab((Plain("A"),), (make_bullets("x"),)), Tab((), (make_bullets("y"),))))
+    tabs = Tabs((Tab((), (make_bullets("y"),)),))
 
-    assert render_markdown([tabs]) == "**A**\n\n- x\n\n* y\n"
+    assert render_markdown([make_bullets("x"), tabs]) == "- x\n\n* y\n"
 
 
 def test_a_paragraph_nested_in_callouts_is_rendered_once(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1583,14 +1845,18 @@ def test_a_paragraph_nested_in_callouts_is_rendered_once(monkeypatch: pytest.Mon
 @pytest.mark.parametrize(
     ("node", "markdown"),
     [
-        pytest.param(Callout("info", (ListNode("bullet", ()),)), "> 💡\n", id="callout-with-nothing-to-say"),
         pytest.param(
-            Callout("warning", (Paragraph((Plain("careful"),)),)), "> ⚠️ careful\n", id="callout-paragraph"
+            Callout("info", (ListNode("bullet", ()),)), "> [!NOTE]\n", id="callout-with-nothing-to-say"
+        ),
+        pytest.param(
+            Callout("warning", (Paragraph((Plain("careful"),)),)),
+            "> [!WARNING]\n> careful\n",
+            id="callout-paragraph",
         ),
         pytest.param(Quote((Paragraph((Plain("said"),)),)), "> said\n", id="quote"),
         pytest.param(
             Toggle((Plain("Legend"),), None, (Paragraph((Plain("x"),)),)),
-            "**Legend**\n\nx\n",
+            "<details>\n<summary>Legend</summary>\n\nx\n\n</details>\n",
             id="toggle-without-heading",
         ),
         pytest.param(
@@ -1604,23 +1870,55 @@ def test_a_block_node_becomes_a_markdown_block(node: Node, markdown: str) -> Non
     assert render_markdown([node]) == markdown
 
 
-def test_a_toggle_is_its_bold_title_over_its_content() -> None:
-    toggle = {
-        "type": "toggle",
-        "title": "Raw counts",
-        "blocks": [
-            {"type": "text", "body": "x"},
-            {"type": "toggle", "title": "Inner", "blocks": [{"type": "text", "body": "y"}]},
-        ],
-    }
+def test_a_collapsed_toggle_is_a_details_block_with_its_title_as_the_summary() -> None:
+    toggle = make_toggle({"type": "text", "body": "x"}, title="Raw counts")
 
-    assert markdown_of([toggle]) == "**Raw counts**\n\nx\n\n**Inner**\n\ny\n"
+    assert markdown_of([toggle]) == ("<details>\n<summary>Raw counts</summary>\n\nx\n\n</details>\n")
 
 
-def test_an_open_toggle_is_its_bold_title_over_its_content() -> None:
+def test_an_open_toggle_is_a_details_block_that_starts_open() -> None:
     toggle = make_toggle({"type": "text", "body": "x"}, title="Raw counts", collapsed=False)
 
-    assert markdown_of([toggle]) == "**Raw counts**\n\nx\n"
+    assert markdown_of([toggle]) == ("<details open>\n<summary>Raw counts</summary>\n\nx\n\n</details>\n")
+
+
+def test_toggles_nested_three_deep_are_nested_details_blocks() -> None:
+    innermost = make_toggle({"type": "text", "body": "z"}, title="Third")
+    middle = make_toggle(innermost, title="Second")
+    outer = make_toggle(middle, title="First", collapsed=False)
+
+    assert markdown_of([outer]) == (
+        "<details open>\n<summary>First</summary>\n\n"
+        "<details>\n<summary>Second</summary>\n\n"
+        "<details>\n<summary>Third</summary>\n\nz\n\n</details>\n\n"
+        "</details>\n\n"
+        "</details>\n"
+    )
+
+
+def test_a_toggle_with_no_content_is_a_summary_alone() -> None:
+    toggle = Toggle((Plain("Empty"),), None, ())
+
+    assert render_markdown([toggle]) == "<details>\n<summary>Empty</summary>\n</details>\n"
+
+
+def test_a_toggle_title_is_written_as_html_since_a_summary_reads_no_markdown() -> None:
+    title = (
+        Plain("a<b & "),
+        Styled("bold", (Plain("c"),)),
+        Plain(" "),
+        Link((Plain("docs"),), "https://example.com/a b"),
+        Plain(" "),
+        Code("x"),
+        Plain(" "),
+        Tinted(None, "sky", (Plain("hot"),)),
+    )
+    toggle = Toggle(title, None, (Paragraph((Plain("x"),)),))
+
+    assert render_markdown([toggle]) == (
+        '<details>\n<summary>a&lt;b &amp; <strong>c</strong> <a href="https://example.com/a%20b">docs</a> '
+        "<code>x</code> <mark>hot</mark></summary>\n\nx\n\n</details>\n"
+    )
 
 
 def _authored_tabs() -> dict[str, object]:
@@ -1634,8 +1932,14 @@ def _authored_tabs() -> dict[str, object]:
     }
 
 
-def test_authored_tabs_are_bold_titled_parts_led_by_the_icon_a_request_case_tone_gets() -> None:
-    assert markdown_of([_authored_tabs()]) == "**⚠️ Floor**\n\na\n\n**System**\n\nb\n\n**Vendor**\n\nc\n"
+def test_authored_tabs_are_a_details_block_per_tab_with_the_first_open_and_the_tone_icon_in_its_title() -> (
+    None
+):
+    assert markdown_of([_authored_tabs()]) == (
+        "<details open>\n<summary>⚠️ Floor</summary>\n\na\n\n</details>\n\n"
+        "<details>\n<summary>System</summary>\n\nb\n\n</details>\n\n"
+        "<details>\n<summary>Vendor</summary>\n\nc\n\n</details>\n"
+    )
 
 
 def test_a_level_four_heading_is_four_hashes_and_a_link_reaches_its_github_slug() -> None:
@@ -1735,25 +2039,69 @@ def test_a_web_image_and_a_media_block_nest_in_a_section_or_a_grid_cell(
     )
 
 
-def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
+def test_a_callout_is_an_alert_over_its_bold_title_and_body() -> None:
     callout = {"type": "callout", "tone": "warning", "title": "Heads up", "body": "one\n\ntwo"}
 
-    assert markdown_of([callout]) == "> ⚠️ **Heads up**\n>\n> one\n>\n> two\n"
+    assert markdown_of([callout]) == "> [!WARNING]\n> **Heads up**\n>\n> one\n>\n> two\n"
 
 
-def test_a_callout_and_a_note_icon_take_the_place_of_the_tone_icon() -> None:
+@pytest.mark.parametrize(
+    ("tone", "alert"),
+    [
+        pytest.param("info", "NOTE", id="info"),
+        pytest.param("sky", "NOTE", id="sky"),
+        pytest.param("neutral", "NOTE", id="neutral"),
+        pytest.param("success", "TIP", id="success"),
+        pytest.param("teal", "TIP", id="teal"),
+        pytest.param("warning", "WARNING", id="warning"),
+        pytest.param("danger", "CAUTION", id="danger"),
+        pytest.param("accent", "IMPORTANT", id="accent"),
+    ],
+)
+def test_a_callout_tone_picks_its_alert_type(tone: ToneName, alert: str) -> None:
+    assert render_markdown([Callout(tone, (Paragraph((Plain("x"),)),))]) == f"> [!{alert}]\n> x\n"
+
+
+def test_a_note_is_a_note_alert() -> None:
+    assert markdown_of([{"type": "note", "title": "Aside", "body": "text"}]) == (
+        "> [!NOTE]\n> **Aside**\n>\n> text\n"
+    )
+
+
+def test_a_callout_and_a_note_icon_lead_the_alert_body() -> None:
     blocks = [
         {"type": "callout", "tone": "warning", "icon": "🚧", "title": "Heads up", "body": "one"},
         {"type": "note", "icon": "📌", "body": "aside"},
     ]
 
-    assert markdown_of(blocks) == "> 🚧 **Heads up**\n>\n> one\n\n> 📌 aside\n"
+    assert markdown_of(blocks) == ("> [!WARNING]\n> 🚧 **Heads up**\n>\n> one\n\n> [!NOTE]\n> 📌 aside\n")
 
 
-def test_an_icon_leads_a_callout_whose_first_block_is_a_list_on_a_line_of_its_own() -> None:
+def test_an_icon_leads_an_alert_whose_first_block_is_a_list_on_a_line_of_its_own() -> None:
     callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),), icon="🚀")
 
-    assert render_markdown([callout]) == "> 🚀\n>\n> - a\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n> 🚀\n>\n> - a\n"
+
+
+def test_a_callout_with_nothing_inside_is_its_alert_line_alone() -> None:
+    assert render_markdown([Callout("danger", ())]) == "> [!CAUTION]\n"
+
+
+def test_a_callout_inside_a_list_item_or_a_callout_is_a_quote_led_by_its_icon() -> None:
+    inner = Callout("success", (Paragraph((Plain("done"),)),))
+    nodes = [
+        ListNode("bullet", (ListEntry((Plain("step"),), children=(inner,)),)),
+        Callout("warning", (Paragraph((Plain("outer"),)), inner)),
+    ]
+
+    assert render_markdown(nodes) == ("- step\n\n  > ✅ done\n\n> [!WARNING]\n> outer\n>\n> > ✅ done\n")
+
+
+def test_a_callout_after_one_that_held_a_callout_is_an_alert_again() -> None:
+    inner = Callout("success", (Paragraph((Plain("done"),)),))
+    nodes = [Callout("warning", (inner,)), Callout("info", (Paragraph((Plain("later"),)),))]
+
+    assert render_markdown(nodes) == "> [!WARNING]\n>\n> > ✅ done\n\n> [!NOTE]\n> later\n"
 
 
 def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:
@@ -1762,26 +2110,51 @@ def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:
     assert markdown_of([quote]) == "> first\n>\n> second\n>\n> *Ops lead*\n"
 
 
-def test_list_lines_in_a_callout_body_become_a_list_inside_the_quote() -> None:
+def test_list_lines_in_a_callout_body_become_a_list_inside_the_alert() -> None:
     callout = {"type": "callout", "tone": "info", "body": "Checks:\n- lint\n- test"}
 
-    assert markdown_of([callout]) == "> 💡 Checks:\n>\n> - lint\n> - test\n"
+    assert markdown_of([callout]) == "> [!NOTE]\n> Checks:\n>\n> - lint\n> - test\n"
 
 
-def test_list_lines_in_a_quote_are_lines_led_by_their_marker() -> None:
-    quote = {"type": "quote", "body": "Said:\n- a\n- b"}
+def test_a_list_in_a_quote_is_a_markdown_list_inside_the_quote() -> None:
+    quote = {"type": "quote", "body": "Said:\n- a\n- b\n\n2. c\n3. d", "cite": "Ops lead"}
 
-    assert markdown_of([quote]) == "> Said:\n>\n> • a\n>\n> • b\n"
+    assert markdown_of([quote]) == ("> Said:\n>\n> - a\n> - b\n>\n> 2. c\n> 3. d\n>\n> *Ops lead*\n")
 
 
-def test_list_lines_in_a_table_cell_are_lines_led_by_their_marker() -> None:
+def test_a_nested_list_in_a_quote_nests_under_its_item() -> None:
+    quote = {"type": "quote", "body": "- a\n  - b\n- c"}
+
+    assert markdown_of([quote]) == "> - a\n>   - b\n> - c\n"
+
+
+def test_a_list_in_a_table_cell_is_an_inline_ul_or_ol_after_the_cell_text() -> None:
     table = {
         "type": "table",
         "columns": [{"key": "a", "label": "A", "kind": "rich"}],
-        "rows": [{"a": "Steps:\n\n2. one\n3. two"}],
+        "rows": [{"a": "Steps:\n\n2. one\n3. **two**"}, {"a": "- a | b\n  - c\n- d"}],
     }
 
-    assert markdown_of([table]) == "| A |\n| --- |\n| Steps:<br>2. one<br>3. two |\n"
+    assert markdown_of([table]) == (
+        "| A |\n| --- |\n"
+        '| Steps:<br><ol start="2"><li>one</li><li>**two**</li></ol> |\n'
+        "| <ul><li>a \\| b<ul><li>c</li></ul></li><li>d</li></ul> |\n"
+    )
+
+
+def test_a_toned_row_dots_a_cell_holding_a_list_and_strikes_its_text_when_muted() -> None:
+    cell = TableCell(
+        (), blocks=(Paragraph((Plain("Fix:"),)), ListNode("bullet", (ListEntry((Plain("one"),)),)))
+    )
+    table = TableNode(
+        (TableCell((Plain("Steps"),)),), (TableRow((cell,), tone="danger"), TableRow((cell,), tone="muted"))
+    )
+
+    assert render_markdown([table]) == (
+        "| Steps |\n| --- |\n"
+        "| 🔴 Fix:<br><ul><li>one</li></ul> |\n"
+        "| ~~Fix:~~<br><ul><li>~~one~~</li></ul> |\n"
+    )
 
 
 def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
@@ -1801,28 +2174,115 @@ def test_a_panel_inside_a_section_becomes_a_callout_under_the_section_heading() 
     assert markdown_of([section]) == "## Appendix\n\n> **Card**\n>\n> inside\n"
 
 
-def test_the_badge_legend_is_a_bold_title_over_its_list() -> None:
+def test_the_badge_legend_is_a_collapsed_details_block_over_its_list() -> None:
     row = {"type": "badge_row", "items": [{"key": "API"}]}
 
-    assert (
-        markdown_of([row], badges=API_BADGES)
-        == "**Legend: badges used on this page**\n\n- 🔵 **api** the API\n\n🔵 **api**\n"
-    )
+    assert markdown_of([row], badges=API_BADGES) == f"{API_LEGEND}🔵 **api**\n"
 
 
 def test_every_badge_and_state_block_becomes_github_markdown() -> None:
     assert markdown_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
-        "**Legend: badges used on this page**\n\n- 🔵 **api** the API\n\n"
-        "* **Site**: West\n* **Owner**: ops\n\n"
+        f"{API_LEGEND}"
+        "| Site | Owner |\n| --- | --- |\n| West | ops |\n\n"
         "- **Lead**: **Ana**\n\n"
-        "* **Drift**: first\n\n  second\n* **Gap**\n\n"
-        "- **Clean**: 9 (90.0%) 🟢 **▲ +1** 🔵 **api**\n\n  since Monday\n- **Lag**: 3 days → flat\n\n"
+        "<dl>\n<dt>Drift</dt>\n<dd>\n\nfirst\n\nsecond\n\n</dd>\n<dt>Gap</dt>\n<dd></dd>\n</dl>\n\n"
+        "| Clean | Lag |\n| --- | --- |\n"
+        "| 9 (90.0%) 🟢 **▲ +1** 🔵 **api**<br>since Monday | 3 days → flat |\n\n"
         "**Affects**: 🔵 **api** 🟢 **ops**\n\n"
         "- **Owners**: 🟣 **web**\n\n"
         "* ✅ Ship\n* ⏸️ Vendor\n\n"
         "- 🔵 **Mon**: Start 🔵 **api**\n\n  kick-off\n- Later\n\n"
         "* 🟡 **Zone**: ████░░░░░░ 42.9%\n"
     )
+
+
+def test_a_fact_strip_is_a_one_row_pipe_table_with_its_labels_as_the_header() -> None:
+    block = {
+        "type": "fact_strip",
+        "facts": [
+            {"label": "Site:", "value": "West | dock"},
+            {"label": "Owner", "value": "**ops**"},
+            {"label": " ", "value": "no label"},
+        ],
+    }
+
+    assert markdown_of([block]) == (
+        "| Site | Owner |  |\n| --- | --- | --- |\n| West \\| dock | \\*\\*ops\\*\\* | no label |\n"
+    )
+
+
+def test_section_fields_are_a_one_row_pipe_table_under_the_heading() -> None:
+    section = {
+        "type": "section",
+        "title": "Recount",
+        "collapsed": False,
+        "fields": {"status": "Open", "estimate": 3, "labels": ["a", "b"]},
+        "blocks": [{"type": "text", "body": "Body."}],
+    }
+
+    assert markdown_of([section]) == (
+        "## Recount\n\n| Status | Labels | Estimate |\n| --- | --- | --- |\n| Open | a, b | 3 |\n\nBody.\n"
+    )
+
+
+def test_cards_are_a_pipe_table_with_a_column_per_card_and_its_note_under_the_value() -> None:
+    cards = {
+        "type": "cards",
+        "items": [
+            {"label": "Clean:", "value": 9, "of": 10, "note": "since Monday", "tone": "success"},
+            {"label": "Lag", "value": "3 | 4 days"},
+            {"label": " ", "value": "unlabelled"},
+            {"label": "Quiet", "value": ""},
+        ],
+    }
+
+    assert markdown_of([cards]) == (
+        "| 🟢 Clean | Lag |  | Quiet |\n| --- | --- | --- | --- |\n"
+        "| 9 (90.0%)<br>since Monday | 3 \\| 4 days | unlabelled |  |\n"
+    )
+
+
+def test_a_derived_card_is_a_column_led_by_its_badge_chip() -> None:
+    blocks = [
+        {"type": "cards", "items": [{"badge": "API", "of_matrix": "m", "note": "live"}]},
+        {
+            "type": "matrix",
+            "id": "m",
+            "rows": ["r1", "r2"],
+            "columns": ["c"],
+            "cells": [{"row": "r1", "col": "c", "badge": "API"}],
+        },
+    ]
+
+    assert markdown_of(blocks, badges=API_BADGES) == (
+        f"{API_LEGEND}| 🔵 **api** |\n| --- |\n| 1 (50.0%)<br>live |\n\n"
+        "|  | c |\n| --- | --- |\n| **r1** | 🔵 api |\n| **r2** |  |\n"
+    )
+
+
+def test_a_definition_list_is_a_dl_with_each_body_between_blank_lines_in_its_dd() -> None:
+    block = {
+        "type": "def_list",
+        "items": [
+            {"term": "Drift & gap:", "body": "first **bold**\n\n- a\n- b"},
+            {"term": "Open", "body": " "},
+        ],
+    }
+
+    assert markdown_of([block]) == (
+        "<dl>\n<dt>Drift &amp; gap</dt>\n<dd>\n\nfirst **bold**\n\n- a\n- b\n\n</dd>\n"
+        "<dt>Open</dt>\n<dd></dd>\n</dl>\n"
+    )
+
+
+def test_a_list_after_a_definition_list_starts_with_the_first_marker_again() -> None:
+    blocks = [
+        {"type": "list", "items": ["a"]},
+        {"type": "def_list", "items": [{"term": "T", "body": "b"}]},
+        {"type": "list", "items": ["c"]},
+    ]
+
+    assert markdown_of(blocks) == "- a\n\n<dl>\n<dt>T</dt>\n<dd>\n\nb\n\n</dd>\n</dl>\n\n- c\n"
 
 
 def test_a_badge_is_its_dot_and_bold_label_and_a_label_colon_is_not_doubled() -> None:
@@ -1911,7 +2371,8 @@ def test_a_link_reaches_a_heading_inside_a_tab_and_a_same_named_heading_after_it
 
     assert markdown_of(blocks) == (
         "jump to [scan](#scan) or [the second](#scan-1)\n\n"
-        "**Floor**\n\n### Scan\n\n**System**\n\nsys\n\n## Scan\n"
+        "<details open>\n<summary>Floor</summary>\n\n### Scan\n\n</details>\n\n"
+        "<details>\n<summary>System</summary>\n\nsys\n\n</details>\n\n## Scan\n"
     )
 
 
@@ -1931,7 +2392,7 @@ def test_the_table_of_contents_and_anchor_links_point_at_github_slugs() -> None:
 
 def test_a_list_right_after_the_table_of_contents_stays_its_own_list() -> None:
     blocks = [
-        {"type": "fact_strip", "facts": [{"label": "Site", "value": "West"}]},
+        {"type": "key_value", "pairs": [{"label": "Site", "value": "West"}]},
         {"type": "heading", "text": "A"},
     ]
 
@@ -1940,3 +2401,115 @@ def test_a_list_right_after_the_table_of_contents_stays_its_own_list() -> None:
 
 def test_a_page_with_no_toc_entries_drops_the_table_of_contents() -> None:
     assert markdown_of([{"type": "text", "body": "only"}], meta={"title": "T", "toc": True}) == "only\n"
+
+
+CITED_ONCE = Paragraph((Plain("see "), Citation("a", 1)))
+ONE_REFERENCE = References((ReferenceEntry(1, (Plain("SOP"),)),))
+BULLET_REFERENCE = "- \\[1\\] SOP"
+
+
+@pytest.mark.parametrize(
+    ("holder", "written"),
+    [
+        pytest.param(
+            Toggle((Plain("S"),), None, (ONE_REFERENCE,)),
+            f"<details>\n<summary>S</summary>\n\n{BULLET_REFERENCE}\n\n</details>\n",
+            id="details",
+        ),
+        pytest.param(
+            ListNode("bullet", (ListEntry((Plain("item"),), children=(ONE_REFERENCE,)),)),
+            f"- item\n  {BULLET_REFERENCE}\n",
+            id="list-item",
+        ),
+        pytest.param(
+            Columns((GridColumn(50, (ONE_REFERENCE,)), GridColumn(50, ()))),
+            '<table>\n<tr>\n<td width="50%">\n\n'
+            f'{BULLET_REFERENCE}\n\n</td>\n<td width="50%"></td>\n</tr>\n</table>\n',
+            id="grid-cell",
+        ),
+        pytest.param(
+            DefinitionList((Definition("T", (ONE_REFERENCE,)),)),
+            f"<dl>\n<dt>T</dt>\n<dd>\n\n{BULLET_REFERENCE}\n\n</dd>\n</dl>\n",
+            id="definition",
+        ),
+        pytest.param(
+            ListNode("number", (ListEntry((Plain("i"),), children=(ONE_REFERENCE,)),), numbering="roman"),
+            f'<ol type="i">\n<li>\n\ni\n\n{BULLET_REFERENCE}\n\n</li>\n</ol>\n',
+            id="ol-item",
+        ),
+        pytest.param(
+            Quote((Paragraph((Plain("q"),)),)),
+            "> q\n",
+            id="quote-holds-no-references",
+        ),
+    ],
+)
+def test_references_below_the_top_level_stay_bullets_and_their_citation_stays_a_linked_number(
+    holder: Node, written: str
+) -> None:
+    assert render_markdown([CITED_ONCE, holder]) == f"see \\[1\\]\n\n{written}"
+
+
+def test_a_callout_inside_a_details_block_is_still_an_alert() -> None:
+    toggle = Toggle((Plain("S"),), None, (Callout("warning", (Paragraph((Plain("careful"),)),)),))
+
+    assert render_markdown([toggle]) == (
+        "<details>\n<summary>S</summary>\n\n> [!WARNING]\n> careful\n\n</details>\n"
+    )
+
+
+def test_a_table_cell_whose_first_block_is_empty_starts_with_its_list_and_no_line_break() -> None:
+    cell = TableCell((), blocks=(Paragraph(()), ListNode("bullet", (ListEntry((Plain("a"),)),))))
+    table = TableNode((TableCell((Plain("H"),)),), (TableRow((cell,)),))
+
+    assert render_markdown([table]) == "| H |\n| --- |\n| <ul><li>a</li></ul> |\n"
+
+
+def test_a_check_list_in_a_table_cell_leads_each_item_with_its_box_as_text() -> None:
+    checks = ListNode("check", (ListEntry((Plain("done"),), checked=True), ListEntry((Plain("open"),))))
+    table = TableNode((TableCell((Plain("H"),)),), (TableRow((TableCell((), blocks=(checks,)),)),))
+
+    assert render_markdown([table]) == ("| H |\n| --- |\n| <ul><li>☑ done</li><li>☐ open</li></ul> |\n")
+
+
+@pytest.mark.parametrize(
+    ("write", "outcome"),
+    [
+        pytest.param(render_notion, '<span color="yellow_bg">x</span>\n', id="notion-writes-it"),
+        pytest.param(
+            render_adf,
+            "a Jira description does not show a text highlight; the export check should have refused it",
+            id="adf-refuses-it",
+        ),
+        pytest.param(
+            render_slack,
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it",
+            id="slack-refuses-it",
+        ),
+    ],
+)
+def test_the_other_writers_keep_their_own_answer_to_a_highlight_span(
+    write: Callable[[Sequence[Node]], object], outcome: str
+) -> None:
+    nodes = [Paragraph((Tinted(None, "warning", (Plain("x"),)),))]
+
+    try:
+        result: object = write(nodes)
+    except ExportInvariantError as refusal:
+        result = str(refusal)
+
+    assert result == outcome
+
+
+def test_the_uncited_remainder_of_a_references_node_keeps_the_path_it_was_authored_at() -> None:
+    node = References(
+        (ReferenceEntry(1, (Plain("a"),)), ReferenceEntry(2, (Plain("b"),))),
+        authored_at="blocks.3.references",
+    )
+
+    remainder = uncited_remainder(node, frozenset({1}))
+
+    assert (remainder.entries, remainder.authored_at) == (
+        (ReferenceEntry(2, (Plain("b"),)),),
+        "blocks.3.references",
+    )
