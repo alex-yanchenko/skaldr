@@ -2,11 +2,10 @@ from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
-from skaldr.models import BadgeColor, MediaKind, TimelineState, ToneLiteral
+from skaldr.models import BadgeColor, ListKind, MediaKind, TimelineState, ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
 LinkCardDisplay = Literal["card", "embed"]
-ListKind = Literal["bullet", "number", "check"]
 TextNumbering = Literal["letters", "roman"]
 AuthoredName = Literal[
     "panel",

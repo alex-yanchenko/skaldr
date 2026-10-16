@@ -506,7 +506,8 @@ def _any_item_flagged(items: list["str | ListItem"], flagged: Callable[["ListIte
     )
 
 
-ListStyle = Literal["bullet", "number", "check", "decision"]
+ListKind = Literal["bullet", "number", "check"]
+ListStyle = Literal[ListKind, "decision"]
 ListNumbering = Literal["decimal", "letters", "roman"]
 LARGEST_LIST_START: Final = 999_999_999
 

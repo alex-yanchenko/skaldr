@@ -82,6 +82,7 @@ from tests.factories import (
     make_table,
     make_tabs,
     make_toggle,
+    parsed_block,
 )
 
 
@@ -4543,9 +4544,7 @@ def test_a_request_is_accepted_inside_a_panel() -> None:
 
 
 def _parsed_request(block: dict[str, Any]) -> Request:
-    parsed = parse_report(make_report(blocks=[block])).blocks[0]
-    assert isinstance(parsed, Request)
-    return parsed
+    return parsed_block(Request, block)
 
 
 def test_a_command_request_needs_no_method_url_or_reader_field() -> None:
