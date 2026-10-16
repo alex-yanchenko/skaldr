@@ -263,19 +263,16 @@ def test_a_collapsed_section_keeps_the_fact_list_inside_its_toggle() -> None:
     )
 
 
-def test_the_github_markdown_lists_the_facts_under_the_section_heading() -> None:
+def test_the_github_markdown_shows_the_facts_as_a_one_row_table_under_the_section_heading() -> None:
     blocks = fielded_report(FULL_FIELDS)["blocks"]
 
     assert markdown_of(blocks) == (
         "## Widen the bin code\n"
         "\n"
-        "- **Status**: In Progress\n"
-        "- **Priority**: High\n"
-        "- **Assignee**: ada\n"
-        "- **Due**: 2026-10-15\n"
-        "- **Labels**: onboarding, bins\n"
-        "- **Estimate**: 3\n"
-        "- **Blocks**: [Relabel the aisles](#relabel-the-aisles)\n"
+        "| Status | Priority | Assignee | Due | Labels | Estimate | Blocks |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| In Progress | High | ada | 2026-10-15 | onboarding, bins | 3 "
+        "| [Relabel the aisles](#relabel-the-aisles) |\n"
         "\n"
         "x\n"
         "\n"
@@ -410,7 +407,9 @@ def test_both_markdown_flavours_show_numbers_without_thousands_separators() -> N
     )
 
     assert (markdown_of(numbered_blocks()), notion_of(numbered_blocks())) == (
-        f"## T\n\n{expected_facts}\nx\n",
+        "## T\n\n"
+        "| Estimate | year | points | whole | tags |\n| --- | --- | --- | --- | --- |\n"
+        "| 1000 | 2026 | 1234.5 | 3 | 1500, x |\n\nx\n",
         f"## T\n{expected_facts}x\n",
     )
 
@@ -431,12 +430,9 @@ def test_hostile_field_values_are_escaped_in_github_markdown() -> None:
     assert markdown_of(blocks) == (
         "## T\n"
         "\n"
-        "- **Status**: {color=red}\n"
-        "- **Priority**: \\_\\_x\\_\\_\n"
-        "- **Assignee**: \\<script\\>\n"
-        "- **Labels**: \\[l\\](u), a|b\n"
-        "- **team**: \\*bold\\* \\`c\\`\n"
-        "- **tags**: x\\_y, 7\n"
+        "| Status | Priority | Assignee | Labels | team | tags |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| {color=red} | \\_\\_x\\_\\_ | \\<script\\> | \\[l\\](u), a\\|b | \\*bold\\* \\`c\\` | x\\_y, 7 |\n"
         "\n"
         "x\n"
     )
@@ -472,7 +468,9 @@ def test_a_link_type_label_keeps_the_rest_of_its_case() -> None:
     assert markdown_of(blocks) == (
         "## Widen the bin code\n"
         "\n"
-        "- **QA review**: [Relabel the aisles](#relabel-the-aisles)\n"
+        "| QA review |\n"
+        "| --- |\n"
+        "| [Relabel the aisles](#relabel-the-aisles) |\n"
         "\n"
         "x\n"
         "\n"
