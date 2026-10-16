@@ -100,8 +100,8 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "grid inside a grid cell": {"slack": "reject"},
     "heading deeper than a canvas holds": {"slack": "reject"},
     "divider inside a walkthrough step": {"adf": "reject"},
-    "set of tabs": {"notion": "swap", "adf": "swap"},
-    "request with several cases": {"notion": "swap", "adf": "swap"},
+    "set of tabs": {"adf": "swap"},
+    "request with several cases": {"adf": "swap"},
 }
 REQUEST_WITH_TWO_CASES = make_request(
     cases=[{"label": "a", "response": {"body": "1"}}, {"label": "b", "response": {"body": "2"}}]
@@ -142,7 +142,13 @@ RENDERERS: dict[ExportTarget, Callable[[Sequence[Node]], object]] = {
     "slack": render_slack,
 }
 PANES_WRITTEN_AS_TITLES: dict[ExportTarget, object] = {
-    "markdown": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
+    "markdown": (
+        "<details open>\n<summary>⚠️ One</summary>\n\na\n\n</details>\n\n"
+        "<details>\n<summary>Two</summary>\n\nb\n\n</details>\n"
+    ),
+    "notion": (
+        '<tabs>\n\t<tab icon="⚠️">\n\t\tOne\n\t\ta\n\t</tab>\n\t<tab>\n\t\tTwo\n\t\tb\n\t</tab>\n</tabs>\n'
+    ),
     "slack": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
 }
 DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
@@ -167,7 +173,7 @@ REJECTION_CELLS: set[tuple[Feature, ExportTarget]] = {
 }
 TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "colour span": {"markdown": "reject", "slack": "reject"},
-    "highlight span": {"markdown": "reject", "slack": "reject"},
+    "highlight span": {"slack": "reject"},
     "colour and highlight span": {"markdown": "reject", "notion": "reject", "slack": "reject"},
     "underline": {"slack": "reject"},
     "link to a heading of the same document": {"notion": "reject", "adf": "reject", "slack": "reject"},
@@ -372,7 +378,22 @@ def test_every_other_target_exports_what_one_target_refuses_without_a_refusal(
             id="underline-on-github",
         ),
         pytest.param(
-            LETTERED_LIST, "markdown", "# Test Report\n\n- a. a\n- b. b\n", id="lettered-list-on-github"
+            HIGHLIGHTED_TEXT,
+            "markdown",
+            "# Test Report\n\nThe recount is <mark>due Friday</mark>.\n",
+            id="highlight-on-github",
+        ),
+        pytest.param(
+            LETTERED_LIST,
+            "markdown",
+            '# Test Report\n\n<ol type="a">\n<li>\n\na\n\n</li>\n<li>\n\nb\n\n</li>\n</ol>\n',
+            id="lettered-list-on-github",
+        ),
+        pytest.param(
+            LIST_IN_A_QUOTE,
+            "markdown",
+            "# Test Report\n\n> Count:\n>\n> - aisles\n> - bins\n",
+            id="list-in-a-quote-on-github",
         ),
         pytest.param(
             LINK_TO_ANOTHER_DOCUMENT,
@@ -463,14 +484,9 @@ def test_a_writer_that_swaps_panes_refuses_panes_whose_cell_is_not_a_swap(
 def test_a_writer_swaps_the_panes_whose_own_cell_says_swap(
     monkeypatch: pytest.MonkeyPatch, kept_feature: Feature, swapped_node: Tabs
 ) -> None:
-    monkeypatch.setitem(CAPABILITIES[kept_feature], "notion", "keep")
     monkeypatch.setitem(CAPABILITIES[kept_feature], "adf", "keep")
 
-    assert (render_notion([swapped_node]), render_adf([swapped_node])["content"]) == (
-        "<details>\n<summary>⚠️ One</summary>\n\ta\n</details>\n"
-        "<details>\n<summary>Two</summary>\n\tb\n</details>\n",
-        _adf_expands("⚠️ One", "Two"),
-    )
+    assert render_adf([swapped_node])["content"] == _adf_expands("⚠️ One", "Two")
 
 
 @pytest.mark.parametrize(("feature", "block"), SWAPPED_BLOCKS_OF_EACH_FEATURE)

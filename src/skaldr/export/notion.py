@@ -12,7 +12,7 @@ from skaldr.export.apportion import apportioned, apportioned_at_least
 from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
 from skaldr.export.folds import cell_text, folded, quote_lines
-from skaldr.export.glyphs import CALLOUT_ICON
+from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
 from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -47,7 +47,6 @@ from skaldr.export.swaps import (
     data_table_swapped_in,
     figure_mermaid_draws,
     swaps_the_figure,
-    tabs_swapped_for_toggles,
     web_address_of,
 )
 from skaldr.export.tree import (
@@ -76,6 +75,7 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    Tab,
     TableCell,
     TableNode,
     TableOfContents,
@@ -110,6 +110,7 @@ CODE_FENCE_RUN: Final = re.compile(r"`{3,}")
 LINE_INSIDE_A_BLOCK: Final = re.compile(
     r"</[a-z_]+>|<colgroup>|<col\b[^>]*>|<td\b.*</td>|<summary>.*</summary>"
 )
+TAB_OPENING: Final = re.compile(r"<tab(?: icon=\"[^\"]*\")?>")
 NOTION_PLAIN_TEXT_LANGUAGE: Final = "plain text"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
 NOTION_FULL_PAGE_WIDTH_PX: Final = 1200
@@ -627,10 +628,19 @@ def _columns_lines(node: Columns, room: TableRoom) -> list[str]:
     return ["<columns>", *_indent(lines), "</columns>"]
 
 
+def _tab_lines(tab: Tab, room: TableRoom) -> list[str]:
+    if not tab.title:
+        raise ExportInvariantError(
+            "a Notion tab needs a title, since Notion reads the first line of a tab as its title; "
+            "the export check should have refused it"
+        )
+    icon = tab_icon(tab.tone)
+    opening = "<tab>" if icon is None else f'<tab icon="{icon}">'
+    return [opening, *_indent([_block_text(tab.title), *_notion_blocks(tab.children, room)]), "</tab>"]
+
+
 def _tabs_lines(node: Tabs, room: TableRoom) -> list[str]:
-    return [
-        line for toggle in tabs_swapped_for_toggles(node, "notion") for line in _toggle_lines(toggle, room)
-    ]
+    return ["<tabs>", *_indent([line for tab in node.tabs for line in _tab_lines(tab, room)]), "</tabs>"]
 
 
 def _starts_a_numbered_list_past_one(nodes: Sequence[Node]) -> bool:
@@ -900,13 +910,18 @@ def starts_a_block(stripped_line: str) -> bool:
 def notion_block_count(text: str) -> int:
     count = 0
     closer: str | None = None
+    title_follows = False
     for line in text.split("\n"):
         stripped = line.strip()
         if closer is not None:
             closer = None if stripped == closer else closer
             continue
+        if title_follows and stripped:
+            title_follows = False
+            continue
         if not starts_a_block(stripped):
             continue
+        title_follows = TAB_OPENING.fullmatch(stripped) is not None
         closer = notion_fence_closer(stripped)
         count += 1
     return count

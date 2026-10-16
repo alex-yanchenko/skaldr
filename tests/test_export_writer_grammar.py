@@ -34,6 +34,8 @@ from skaldr.export.tree import (
     PieChart,
     PieSlice,
     Quote,
+    ReferenceEntry,
+    References,
     Tab,
     TableCell,
     TableNode,
@@ -95,6 +97,7 @@ SAMPLES: Mapping[str, Node] = {
     "cards": Cards((Card("Clean", plain("9"), note="since Monday"),)),
     "timeline": Timeline((TimelineEvent("Start", body=plain("kick-off")),)),
     "link card": LinkCard("Runbook", "https://example.com/runbook", "card"),
+    "references": References((ReferenceEntry(1, plain("Runbook")),)),
 }
 ADF_CONTAINERS: Mapping[str, Wrap] = {
     "doc": lambda node: (node,),

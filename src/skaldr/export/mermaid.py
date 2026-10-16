@@ -5,12 +5,43 @@ from typing import Final, NamedTuple, NoReturn
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.capabilities import in_unicode_script_form
+from skaldr.export.capabilities import character_without_a_unicode_form, in_unicode_script_form
+from skaldr.export.glyphs import mark_glyph
 from skaldr.export.inline import one_line
-from skaldr.export.runs import ExportVisibleText, write_export_runs
+from skaldr.export.runs import (
+    Chip,
+    ExportRich,
+    ExportRun,
+    ExportVisibleText,
+    IndicatorMark,
+    every_run_within,
+    write_export_runs,
+)
 from skaldr.export.swaps import mermaid_cannot_draw
 from skaldr.export.tree import Figure, Graph, GraphNode, PieChart, ToneName, XYChart
-from skaldr.richtext import Citation, ScriptPosition, StyleName
+from skaldr.models import BADGE_COLOR_TONE
+from skaldr.richtext import (
+    AnchorLink,
+    Citation,
+    DocumentLink,
+    InlineMath,
+    IssueLink,
+    Link,
+    ScriptPosition,
+    ScriptText,
+    Styled,
+    StyleName,
+)
+
+RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD: Final[tuple[type[ExportRun], ...]] = (
+    Link,
+    AnchorLink,
+    IssueLink,
+    DocumentLink,
+    Citation,
+    InlineMath,
+)
+POINT_MARKER: Final = "• "
 
 
 class NodeColors(NamedTuple):
@@ -91,10 +122,42 @@ class _LabelText(ExportVisibleText):
             _no_label_form_for("struck-through text")
         return inner
 
+    def chip(self, run: Chip, /) -> str:
+        return f"{mark_glyph(IndicatorMark(BADGE_COLOR_TONE[run.tone]))} {run.label}"
 
-def _node_line(node: GraphNode) -> str:
+
+def _a_diagram_label_cannot_hold(run: ExportRun) -> bool:
+    match run:
+        case ScriptText():
+            return character_without_a_unicode_form(run.position, run.text) is not None
+        case Styled():
+            return run.style == "strike"
+        case _:
+            return isinstance(run, RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD)
+
+
+def loses_meaning_in_a_diagram_label(runs: ExportRich) -> bool:
+    return any(map(_a_diagram_label_cannot_hold, every_run_within(runs)))
+
+
+def step_details_fit_their_labels(graph: Graph) -> bool:
+    return not any(loses_meaning_in_a_diagram_label(point) for node in graph.nodes for point in node.points)
+
+
+def step_has_details(node: GraphNode) -> bool:
+    return bool(node.points or node.badges)
+
+
+def _detail_lines(node: GraphNode) -> list[str]:
+    points = [POINT_MARKER + write_export_runs(point, _LabelText()) for point in node.points]
+    return [*points, write_export_runs(node.badges, _LabelText())] if node.badges else points
+
+
+def _node_line(node: GraphNode, *, with_details: bool) -> str:
     note = write_export_runs(node.note, _LabelText())
-    label = _mermaid_text(node.label) + (f"<br>{_mermaid_text(note)}" if note else "")
+    details = _detail_lines(node) if with_details else []
+    lines = [node.label, *([note] if note else []), *details]
+    label = "<br>".join(_mermaid_text(line) for line in lines)
     tone_class = f":::{node.tone}" if node.tone else ""
     return f'    {node.key}["{label}"]{tone_class}'
 
@@ -104,8 +167,11 @@ def _class_line(tone: ToneName) -> str:
     return f"    classDef {tone} fill:{colors.fill},stroke:{colors.stroke},color:{MERMAID_TEXT}"
 
 
-def _graph_lines(graph: Graph) -> list[str]:
-    lines = [f"flowchart {graph.direction}", *(_node_line(node) for node in graph.nodes)]
+def _graph_lines(graph: Graph, *, with_details: bool) -> list[str]:
+    lines = [
+        f"flowchart {graph.direction}",
+        *(_node_line(node, with_details=with_details) for node in graph.nodes),
+    ]
     lines += [f"    {edge.source} {'-.->' if edge.dashed else '-->'} {edge.target}" for edge in graph.edges]
     used = {node.tone for node in graph.nodes}
     return [*lines, *(_class_line(tone) for tone in sorted(MERMAID_FILL) if tone in used)]
@@ -122,10 +188,10 @@ def _xy_lines(chart: XYChart) -> list[str]:
     return ["xychart-beta", axis, *marks]
 
 
-def _mermaid_lines(figure: Figure) -> list[str]:
+def _mermaid_lines(figure: Figure, *, with_step_details: bool) -> list[str]:
     match figure:
         case Graph():
-            return _graph_lines(figure)
+            return _graph_lines(figure, with_details=with_step_details)
         case PieChart():
             slices = (
                 f"    {_quoted_string(item.label)} : {_mermaid_number(item.value)}" for item in figure.slices
@@ -137,5 +203,5 @@ def _mermaid_lines(figure: Figure) -> list[str]:
             assert_never(figure)
 
 
-def mermaid_fence_lines(figure: Figure) -> list[str]:
-    return ["```mermaid", *_mermaid_lines(figure), "```"]
+def mermaid_fence_lines(figure: Figure, *, with_step_details: bool = False) -> list[str]:
+    return ["```mermaid", *_mermaid_lines(figure, with_step_details=with_step_details), "```"]

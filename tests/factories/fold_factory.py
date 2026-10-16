@@ -24,6 +24,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     TableCell,
     TableNode,
     TableRow,
@@ -152,6 +154,29 @@ FOLD_CASES: Mapping[str, FoldCase] = {
                     children=(Paragraph(UNDERLINED_OPS),),
                 ),
                 ListEntry((Plain("Later"),)),
+            ),
+        ),
+    ),
+    "references": fold_case(
+        References(
+            (
+                ReferenceEntry(1, plain("Runbook"), RUNBOOK_URL),
+                ReferenceEntry(2, UNDERLINED_OPS),
+            )
+        ),
+        ListNode(
+            "bullet",
+            (
+                ListEntry(
+                    (
+                        Plain("[1]"),
+                        Plain(" "),
+                        Plain("Runbook"),
+                        Plain(" "),
+                        Link((Plain("source"),), RUNBOOK_URL),
+                    )
+                ),
+                ListEntry((Plain("[2]"), Plain(" "), *UNDERLINED_OPS)),
             ),
         ),
     ),

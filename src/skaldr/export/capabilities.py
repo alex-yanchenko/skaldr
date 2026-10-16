@@ -423,10 +423,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "colour span": _kept_except({"markdown": _GITHUB_CANNOT_COLOUR, "slack": _CANVAS_CANNOT_COLOUR}),
     "highlight span": _kept_except(
         {
-            "markdown": Rejection(
-                "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'",
-                _WITHOUT_THE_HIGHLIGHT,
-            ),
             "slack": Rejection(
                 "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'",
                 _WITHOUT_THE_HIGHLIGHT,
@@ -577,16 +573,10 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         }
     ),
     "set of tabs": _kept_except(
-        {
-            "notion": Swap("one toggle per tab, its title led by the icon of the tab's tone"),
-            "adf": Swap("one expand per tab, its title led by the icon of the tab's tone"),
-        }
+        {"adf": Swap("one expand per tab, its title led by the icon of the tab's tone")}
     ),
     "request with several cases": _kept_except(
-        {
-            "notion": Swap("one toggle per case, its title led by the icon of the case's status"),
-            "adf": Swap("one expand per case, its title led by the icon of the case's status"),
-        }
+        {"adf": Swap("one expand per case, its title led by the icon of the case's status")}
     ),
     "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
     "flow diagram": _kept_except(

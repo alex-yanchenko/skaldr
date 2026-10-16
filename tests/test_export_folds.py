@@ -83,9 +83,27 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
     return list(feature_hits(report, LoweredDocument("Plan", (BlockRegion(0, tuple(nodes)),))))
 
 
+WRITTEN_NATIVELY_ON_GITHUB = frozenset(
+    {
+        "open toggle",
+        "roman list",
+        "letter list",
+        "quote holding lists",
+        "table cell holding a list",
+        "long list cell beside a short cell",
+        "fact strip",
+        "definition list",
+        "cards",
+    }
+)
 WRITTEN_IN_ITS_OWN_FORM: Mapping[str, frozenset[str]] = {
     "slack": frozenset({"table cell holding a list", "long list cell beside a short cell"}),
+    "markdown": WRITTEN_NATIVELY_ON_GITHUB,
 }
+CONTEXTS_WHERE_SLACK_WRITES_A_LINK_CARD_AS_A_BARE_URL: Final = frozenset(
+    {"alone", "after a bullet list", "before a bullet list", "in a toggle", "in a toggle in a toggle"}
+)
+CASES_SLACK_WRITES_AS_A_BARE_URL_AT_THE_TOP: Final = frozenset({"link card", "link embed"})
 CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND: Final = frozenset(
     {
         "in a numbered list item",
@@ -114,6 +132,11 @@ WRITTEN_AS_THE_FOLD: Final = [
     for context in FOLD_CONTEXTS
     if case not in WRITTEN_NATIVELY_BY.get(writer, frozenset())
     and case not in WRITTEN_IN_ITS_OWN_FORM.get(writer, frozenset())
+    and not (
+        writer == "slack"
+        and case in CASES_SLACK_WRITES_AS_A_BARE_URL_AT_THE_TOP
+        and context in CONTEXTS_WHERE_SLACK_WRITES_A_LINK_CARD_AS_A_BARE_URL
+    )
     and (
         writer != "adf"
         or context in ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN.get(case, frozenset(FOLD_CONTEXTS))
@@ -130,7 +153,7 @@ def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block
     assert _outcome(write, wrap((fold.named,))) == _outcome(write, wrap(fold.today))
 
 
-@pytest.mark.parametrize("case", ["cards", "fact strip", "timeline"])
+@pytest.mark.parametrize("case", ["cards", "fact strip", "timeline", "references"])
 def test_a_named_list_block_folds_to_exactly_the_nodes_it_lowered_to_before(case: str) -> None:
     fold = FOLD_CASES[case]
 

@@ -32,7 +32,8 @@ TOTAL_LABEL: Final = "Total"
 
 def _graph_node(key: str, step: FlowStep, lowering: Lowering, prefix: str = "") -> GraphNode:
     note = lowering.rich(step.note) if step.note else ()
-    return GraphNode(key, one_line(prefix + step.label), note, step.tone)
+    points = tuple(lowering.rich(point) for point in step.points)
+    return GraphNode(key, one_line(prefix + step.label), note, step.tone, points, lowering.chips(step.badges))
 
 
 def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
