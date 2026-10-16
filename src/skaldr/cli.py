@@ -155,6 +155,7 @@ def _run_auth(argv: list[str]) -> int:
 
 
 _NEW_KINDS = {"plan": "skill/plan-starter.yaml"}
+_REGION_READ_ERRORS = (ReportError, UnknownAnchorError, RegionOutsideFileError)
 
 
 def _fail(message: str) -> int:
@@ -220,7 +221,7 @@ def _run_show(arguments: list[str]) -> int:
         parser.error("name the region as FILE#ANCHOR; `skaldr outline FILE` lists the anchors")
     try:
         source = region_source(outline_file(Path(file)), file, anchor)
-    except (ReportError, UnknownAnchorError, RegionOutsideFileError) as err:
+    except _REGION_READ_ERRORS as err:
         return _region_read_failure(err)
     sys.stdout.flush()
     sys.stdout.buffer.write(source.encode("utf-8"))
@@ -228,7 +229,7 @@ def _run_show(arguments: list[str]) -> int:
     return 0
 
 
-def _region_read_failure(err: ReportError | UnknownAnchorError | RegionOutsideFileError) -> int:
+def _region_read_failure(err: Exception) -> int:
     print(f"error: {err}", file=sys.stderr)
     return 2 if isinstance(err, IndexDocumentOutlineError) else 1
 

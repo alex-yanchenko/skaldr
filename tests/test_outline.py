@@ -387,15 +387,48 @@ def test_an_index_document_is_refused(
     )
 
 
-def test_a_null_index_is_a_normal_document(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = _write(
-        tmp_path / "doc.yaml",
-        "version: 1\nmeta: {title: T}\nindex:\nblocks:\n  - type: heading\n    text: A\n",
-    )
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        pytest.param(
+            "version: 1\nmeta: {title: T}\nindex:\nblocks:\n  - type: heading\n    text: A\n",
+            (6, 19, (5, 6, 8)),
+            id="null",
+        ),
+        pytest.param(
+            "version: 1\nmeta: {title: T}\nblocks:\n"
+            "  - type: heading\n    id: &n ~\n    text: A\nindex: *n\n",
+            (7, 23, (4, 6, 11)),
+            id="alias-to-null",
+        ),
+    ],
+)
+def test_an_index_that_is_null_is_a_normal_document(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    text: str,
+    expected: tuple[int, int, tuple[int, int, int]],
+) -> None:
+    path = _write(tmp_path / "doc.yaml", text)
+    lines, tokens, span = expected
 
     assert _outlined(path, capsys) == (
         0,
-        {"file": str(path), "lines": 6, "tokens": 19, "regions": [_region("a", "A", 2, (5, 6, 8))]},
+        {"file": str(path), "lines": lines, "tokens": tokens, "regions": [_region("a", "A", 2, span)]},
+    )
+
+
+@pytest.mark.parametrize("template", OUTLINE_AND_SHOW)
+def test_an_empty_file_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], template: tuple[str, str]
+) -> None:
+    path = _write(tmp_path / "doc.yaml", "")
+
+    exit_code = main(_argv(template, path))
+
+    assert (exit_code, capsys.readouterr()) == (
+        1,
+        ("", "error: invalid content data: Input should be a valid dictionary or instance of Report\n"),
     )
 
 
@@ -532,14 +565,20 @@ def test_show_keeps_the_files_own_line_breaks(tmp_path: Path, capsys: pytest.Cap
     )
 
 
-def test_show_writes_the_region_s_bytes_unchanged_to_stdout(tmp_path: Path) -> None:
+def test_show_writes_the_region_bytes_unchanged_to_stdout(tmp_path: Path) -> None:
     path = tmp_path / "crlf.yaml"
     path.write_bytes(
         "version: 1\r\nmeta: {title: T}\r\nblocks:\r\n  - type: heading\r\n    text: Résumé\r\n".encode()
     )
 
     shown = subprocess.run(
-        [str(Path(sys.executable).with_name("skaldr")), "show", f"{path}#résumé"],
+        [
+            sys.executable,
+            "-c",
+            "from skaldr.cli import main; raise SystemExit(main())",
+            "show",
+            f"{path}#résumé",
+        ],
         capture_output=True,
         check=False,
     )
@@ -871,6 +910,137 @@ def test_show_refuses_a_region_an_include_brings_in(
 ) -> None:
     assert _shown(f"{document}#borrowed", capsys) == _none_of_its_lines(
         document, "borrowed", "comes from `!include fragment.yaml` at line 31"
+    )
+
+
+@pytest.mark.parametrize("written_type", ["", "    type: heading\n"], ids=["merged-type", "own-type"])
+def test_a_heading_with_a_merge_key_is_not_written_in_place(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], written_type: str
+) -> None:
+    path = _write(
+        tmp_path / "doc.yaml",
+        "version: 1\nmeta: {title: T}\nblocks:\n  - &h {type: heading, text: A}\n"
+        f"  - <<: *h\n{written_type}    text: B\n",
+    )
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [_region("a", "A", 2, (4, 4, 8)), _region("b", "B", 2, None)],
+    )
+    assert _shown(f"{path}#b", capsys) == _none_of_its_lines(path, "b", ALIAS_REASON)
+
+
+def test_a_section_with_a_merge_key_is_not_written_in_place(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(
+        tmp_path / "doc.yaml",
+        "version: 1\nmeta: {title: T}\nblocks:\n  - &s\n    type: section\n    title: S\n    blocks:\n"
+        "      - type: text\n        body: x\n  - <<: *s\n    type: section\n    title: T\n",
+    )
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [_region("s", "S", None, (4, 9, 22), kind="section"), _region("t", "T", None, None, kind="section")],
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "regions", "shown"),
+    [
+        pytest.param(
+            "version: 1\nmeta: {title: T}\nblocks:\n  - # note\n    type: heading\n    text: A\n"
+            "  - # other\n    type: text\n    body: z\n  - type: heading\n    text: B\n",
+            [_region("a", "A", 2, (4, 9, 20)), _region("b", "B", 2, (10, 11, 8))],
+            "  - # note\n    type: heading\n    text: A\n  - # other\n    type: text\n    body: z\n",
+            id="comment-on-the-dash",
+        ),
+        pytest.param(
+            "version: 1\nmeta: {title: T}\nblocks:\n"
+            "  - # note\n\n    # more\n    type: heading\n    text: A\n",
+            [_region("a", "A", 2, (4, 8, 14))],
+            "  - # note\n\n    # more\n    type: heading\n    text: A\n",
+            id="blank-and-comment-lines-after-the-dash",
+        ),
+    ],
+)
+def test_an_item_whose_dash_carries_a_comment_starts_on_the_dash_line(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    text: str,
+    regions: list[OutlineRegionJson],
+    shown: str,
+) -> None:
+    path = _write(tmp_path / "doc.yaml", text)
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (0, regions)
+    assert _shown(f"{path}#a", capsys) == (0, (shown, ""))
+
+
+def test_a_key_written_as_an_alias_never_stands_for_a_field(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(
+        tmp_path / "doc.yaml",
+        "version: 1\nmeta: {title: T}\nblocks:\n  - type: heading\n    &blocks id: my-id\n    text: A\n"
+        "  - type: section\n    title: S\n    blocks:\n      - type: heading\n        text: Inner\n"
+        "    *blocks : sect-id\n  - type: heading\n    text: Tail\n",
+    )
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [
+            _region("my-id", "A", 2, (4, 12, 40), author_set=True),
+            _region("sect-id", "S", None, (7, 12, 27), kind="section", author_set=True),
+            _region("inner", "Inner", 2, (10, 11, 11)),
+            _region("tail", "Tail", 2, (13, 14, 9)),
+        ],
+    )
+
+
+def test_a_kept_string_whose_anchor_stands_on_the_line_before_keeps_its_blank_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(
+        tmp_path / "doc.yaml",
+        "version: 1\nmeta: {title: T}\nblocks:\n  - type: heading\n    text: A\n  - type: text\n"
+        "    body: &k\n      |+\n      keep\n\n\n  - type: heading\n    text: B\n",
+    )
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [_region("a", "A", 2, (4, 11, 20)), _region("b", "B", 2, (12, 13, 8))],
+    )
+    assert _shown(f"{path}#a", capsys) == (
+        0,
+        ("  - type: heading\n    text: A\n  - type: text\n    body: &k\n      |+\n      keep\n\n\n", ""),
+    )
+
+
+def test_a_heading_ending_in_an_empty_value_keeps_its_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(
+        tmp_path / "doc.yaml",
+        "version: 1\nmeta: {title: T}\nblocks:\n  - type: heading\n    text: A\n    id:\n"
+        "  - type: heading\n    text: B\n",
+    )
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [_region("a", "A", 2, (4, 6, 10)), _region("b", "B", 2, (7, 8, 8))],
     )
 
 

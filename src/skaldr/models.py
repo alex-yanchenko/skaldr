@@ -3832,6 +3832,10 @@ def load_report_and_source(path: Path) -> tuple[Report, Any]:
         raise ReportError(f"{err}; {where}") from err
 
 
+def is_an_index_document(path: Path) -> bool:
+    return _index_of(_load_yaml_with_includes(path, (), [])) is not None
+
+
 def content_files(path: Path) -> tuple[Path, ...]:
     loaded: list[Path] = []
     index = _index_of(_load_yaml_with_includes(path, (), loaded))
