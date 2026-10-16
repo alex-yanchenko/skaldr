@@ -411,6 +411,17 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
     )
 
 
+def test_a_part_whose_index_key_is_not_an_index_is_refused_as_invalid_not_as_an_index(
+    tmp_path: Path,
+) -> None:
+    index = write_index_document(tmp_path, {"one.yaml": {**_part("A", "a"), "index": False}})
+
+    assert _refusal(index) == (
+        f"in part {tmp_path / 'one.yaml'}: invalid content data: index: "
+        "Input should be a valid dictionary or instance of Index"
+    )
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
@@ -435,6 +446,12 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
             {"index": {"parts": ["  "]}},
             "invalid content data: index.parts.0: String should match pattern '\\S'",
             id="blank-path",
+        ),
+        pytest.param(
+            {"index": {"parts": ["../elsewhere/one.yaml"]}},
+            "invalid content data: index.parts.0: Value error, a part path stays inside the index file's "
+            "folder, not above it: ../elsewhere/one.yaml",
+            id="above-the-index-folder",
         ),
         pytest.param(
             {"index": {"parts": ["one.yaml"], "layout": "child_pages"}},

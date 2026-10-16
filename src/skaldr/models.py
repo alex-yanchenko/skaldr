@@ -10,6 +10,7 @@ state glyphs for status lists and timelines.
 """
 
 import math
+import os
 import re
 import sys
 from collections import Counter, defaultdict
@@ -141,6 +142,20 @@ def _refuse_an_unusable_number(value: int | float, location: str) -> None:
 _NUMBER_GUARD = BeforeValidator(_reject_bool_and_non_finite)
 _NUMBER_BOUND_IN_SCHEMA = Field(json_schema_extra={"minimum": -LARGEST_NUMBER, "maximum": LARGEST_NUMBER})
 Number = Annotated[int | float, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
+
+
+def _refuse_a_negative_number(value: int | float) -> int | float:
+    if value < 0:
+        raise ValueError("must not be negative")
+    return value
+
+
+NonNegativeNumber = Annotated[
+    int | float,
+    _NUMBER_GUARD,
+    AfterValidator(_refuse_a_negative_number),
+    Field(json_schema_extra={"minimum": 0, "maximum": LARGEST_NUMBER}),
+]
 Count = Annotated[int, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
 SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
 
@@ -2881,7 +2896,7 @@ class SectionFields(FrozenModel):
     labels: Annotated[list[NonBlank], Field(min_length=1)] | None = Field(
         default=None, description="Labels, each shown as a chip."
     )
-    estimate: Number | None = Field(default=None, description="Effort estimate as a number.")
+    estimate: NonNegativeNumber | None = Field(default=None, description="Effort estimate as a number.")
     links: SectionLinks = Field(
         default_factory=SectionLinks,
         description="Links to other sections: a link type (`blocks`, `relates`, ...) mapped to the ids of "
@@ -3260,6 +3275,8 @@ def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
 def _relative_part_path(path: str) -> str:
     if Path(path).is_absolute():
         raise ValueError(f"a part path is relative to the index file, not absolute: {path}")
+    if Path(os.path.normpath(path)).parts[:1] == ("..",):
+        raise ValueError(f"a part path stays inside the index file's folder, not above it: {path}")
     return path
 
 
@@ -3293,7 +3310,12 @@ class Index(FrozenModel):
         return parts
 
 
+_BLOCKS_OR_AN_INDEX_IN_SCHEMA: Final = {"anyOf": [{"required": ["blocks"]}, {"required": ["index"]}]}
+
+
 class Report(FrozenModel):
+    model_config = ConfigDict(json_schema_extra=_BLOCKS_OR_AN_INDEX_IN_SCHEMA)
+
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
     badges: dict[str, Badge] = Field(
@@ -3587,7 +3609,7 @@ def _parsed_index(data: object) -> Index:
 
 def _loaded_part(path: Path) -> _LoadedPart:
     data = _load_yaml_with_includes(path, (), [])
-    if _index_of(data) is not None:
+    if isinstance(_index_of(data), Mapping):
         raise ReportError(f"part {path} is itself an index; an index lists document files, not other indexes")
     try:
         report = parse_report(data)

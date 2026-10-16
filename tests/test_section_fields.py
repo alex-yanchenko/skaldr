@@ -104,6 +104,11 @@ def test_a_section_without_fields_has_none() -> None:
             id="estimate-boolean",
         ),
         pytest.param(
+            {"estimate": -1},
+            "invalid content data: blocks.0.section.fields.estimate: Value error, must not be negative",
+            id="estimate-negative",
+        ),
+        pytest.param(
             {"labels": []},
             "invalid content data: blocks.0.section.fields.labels: List should have at least 1 item "
             "after validation, not 0",

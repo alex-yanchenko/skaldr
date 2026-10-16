@@ -147,6 +147,7 @@ def test_section_fields_pass_both_the_build_and_the_schema() -> None:
         pytest.param({"team": {"name": "ops"}}, id="extra-mapping"),
         pytest.param({"labels": []}, id="empty-labels"),
         pytest.param({"links": {"blocks": []}}, id="empty-link-list"),
+        pytest.param({"estimate": -1}, id="negative-estimate"),
     ],
 )
 def test_a_bad_section_field_is_refused_by_both_the_build_and_the_schema(fields: dict[str, Any]) -> None:
@@ -155,6 +156,25 @@ def test_a_bad_section_field_is_refused_by_both_the_build_and_the_schema(fields:
     with pytest.raises(ReportError):
         parse_report(document)
     assert not SCHEMA_VALIDATOR.is_valid(document)
+
+
+def test_a_document_with_neither_blocks_nor_an_index_is_refused_by_the_schema() -> None:
+    document = {"version": 1, "meta": {"title": "Test Report"}}
+
+    assert schema_errors(document) == [
+        "{'version': 1, 'meta': {'title': 'Test Report'}} is not valid under any of the given schemas"
+    ]
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param(make_report(), id="blocks"),
+        pytest.param({"version": 1, "meta": {"title": "T"}, "index": {"parts": ["a.yaml"]}}, id="index"),
+    ],
+)
+def test_a_document_with_blocks_or_an_index_passes_the_schema(document: dict[str, Any]) -> None:
+    assert schema_errors(document) == []
 
 
 SWIMLANE_STEP = {"lane": "Product", "col": "Sprint 1", "n": "1", "label": "Spec"}
