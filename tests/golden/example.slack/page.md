@@ -199,9 +199,9 @@ function pickWinner(a, b) {
 
 [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough.mp4)
 
-> **[Aggregate lot runbook](https://example.com/runbooks/aggregate-lots)**
->
-> *example.com · Revision 7*
+https://example.com/runbooks/aggregate-lots
+
+example.com · Revision 7
 
 > These bins are aggregate lots, so we can't split `AGG-07` into individual SKUs from the dock scan alone.
 >

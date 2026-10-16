@@ -84,7 +84,9 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
 
 
 WRITTEN_IN_ITS_OWN_FORM: Mapping[str, frozenset[str]] = {
-    "slack": frozenset({"table cell holding a list", "long list cell beside a short cell"}),
+    "slack": frozenset(
+        {"table cell holding a list", "long list cell beside a short cell", "link card", "link embed"}
+    ),
 }
 CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND: Final = frozenset(
     {

@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -14,7 +15,7 @@ from skaldr.export.capabilities import (
     TARGET_SUBJECTS,
     in_unicode_script_form,
 )
-from skaldr.export.folds import card_text, folded, quote_lines
+from skaldr.export.folds import LINK_CARD_SEPARATOR, card_text, folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import bold, plain
 from skaldr.export.lower.context import spaced as spaced_runs
@@ -52,6 +53,7 @@ from skaldr.export.tree import (
     FactStrip,
     GenericNode,
     Heading,
+    LinkCard,
     ListEntry,
     ListKind,
     ListNode,
@@ -76,6 +78,8 @@ from skaldr.typed_links import date_target_text
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
 CANVAS_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~"})
+ZERO_WIDTH_SPACE: Final = "​"
+EMOJI_SHORTCODE_COLON: Final = re.compile(r"(?<!\w):(?=[\w+-]+:)")
 CANVAS_FENCE: Final = ":::"
 CALLOUT_OPEN: Final = "::: {.callout}"
 LAYOUT_OPEN: Final = "::: {.layout}"
@@ -95,7 +99,7 @@ CELL_LIST_INDENT: Final = "  "
 FACT_SEPARATOR: Final = " · "
 COVER_LINK_LABEL: Final = "Cover image"
 Place = Literal["top", "callout", "column"]
-OwnFormNode = FactStrip | DefinitionList | Cards
+OwnFormNode = FactStrip | DefinitionList | Cards | LinkCard
 CanvasNode = GenericNode | OwnFormNode
 
 
@@ -120,7 +124,8 @@ class _SlackRuns(CommonMarkRuns):
         )
 
     def escape(self, text: str, /) -> str:
-        return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(CANVAS_ESCAPES))
+        broken = EMOJI_SHORTCODE_COLON.sub(f":{ZERO_WIDTH_SPACE}", text)
+        return ENTITY_LOOKALIKE.sub(r"\\&", broken.translate(CANVAS_ESCAPES))
 
     def date_mention(self, label: str, start: date, end: date | None, /) -> str:
         return label if label.strip() else date_target_text(start, end)
@@ -160,6 +165,11 @@ class _Title:
 
 
 @dataclass(frozen=True)
+class _BareUrl:
+    url: str
+
+
+@dataclass(frozen=True)
 class _CanvasCallout:
     icon: str | None
     blocks: "tuple[_CanvasBlock, ...]"
@@ -174,6 +184,7 @@ _CanvasBlock = (
     Heading
     | Paragraph
     | _Title
+    | _BareUrl
     | _List
     | TableNode
     | CodeBlock
@@ -310,9 +321,14 @@ def _canvas_cards(node: Cards) -> list[_CanvasBlock]:
     return blocks
 
 
+def _canvas_link_card(node: LinkCard) -> list[_CanvasBlock]:
+    detail = LINK_CARD_SEPARATOR.join(part for part in (node.domain, node.caption) if part)
+    return [_BareUrl(node.url), Paragraph(plain(detail), authored_at=node.authored_at)]
+
+
 def _written_in_its_own_form(node: Node, place: Place) -> TypeGuard[OwnFormNode]:
     match node:
-        case FactStrip() | DefinitionList():
+        case FactStrip() | DefinitionList() | LinkCard():
             return True
         case Cards():
             return place == "top"
@@ -332,6 +348,8 @@ def _canvas_block(node: CanvasNode, place: Place) -> list[_CanvasBlock]:
             return _canvas_definitions(node, place)
         case Cards():
             return _canvas_cards(node)
+        case LinkCard():
+            return _canvas_link_card(node)
         case _:
             return _canvas_generic_block(node, place)
 
@@ -571,6 +589,8 @@ class _CanvasWriter:
                 return self.paragraph_lines(block)
             case _Title():
                 return self.title_lines(block)
+            case _BareUrl():
+                return [encode_url(block.url)]
             case _List():
                 return self.list_lines(block)
             case TableNode():
