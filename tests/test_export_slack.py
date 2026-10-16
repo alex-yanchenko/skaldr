@@ -363,6 +363,24 @@ def test_a_numbered_list_in_a_table_cell_keeps_its_numbers_as_text() -> None:
     assert slack_of([block]) == "| N |\n| --- |\n| 3. a<br>4. b |\n"
 
 
+def test_a_bullet_list_in_a_table_cell_is_dash_items_joined_by_line_breaks() -> None:
+    block = {
+        "type": "table",
+        "columns": [{"key": "n", "label": "N", "kind": "text"}],
+        "rows": [{"n": "- a\n- b"}],
+    }
+
+    assert slack_of([block]) == "| N |\n| --- |\n| - a<br>- b |\n"
+
+
+def test_a_nested_list_in_a_table_cell_writes_every_item_with_its_own_kind_of_marker() -> None:
+    nested = make_bullets(make_list_entry("b"))
+    items = ListNode("number", (make_list_entry("a", nested), make_list_entry("c")))
+    table = TableNode((make_table_cell("N"),), (TableRow((TableCell((), blocks=(items,)),)),))
+
+    assert render_slack([table]) == "| N |\n| --- |\n| 1. a<br>- b<br>2. c |\n"
+
+
 def test_a_numbered_list_in_a_quote_is_refused_since_a_canvas_quote_holds_only_text() -> None:
     with pytest.raises(ExportRejectedError) as raised:
         slack_of([{"type": "quote", "body": "3. a\n4. b"}])

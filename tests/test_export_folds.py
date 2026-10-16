@@ -55,9 +55,19 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
     return list(feature_hits(report, LoweredDocument("Plan", (BlockRegion(0, tuple(nodes)),))))
 
 
+WRITTEN_IN_ITS_OWN_FORM: Mapping[str, frozenset[str]] = {
+    "slack": frozenset({"table cell holding a list", "long list cell beside a short cell"}),
+}
+FOLDED_CASES_OF_EACH_WRITER = [
+    pytest.param(writer, case, id=f"{writer}-{case}")
+    for writer in WRITERS
+    for case in FOLD_CASES
+    if case not in WRITTEN_IN_ITS_OWN_FORM.get(writer, frozenset())
+]
+
+
 @pytest.mark.parametrize("context", FOLD_CONTEXTS)
-@pytest.mark.parametrize("case", FOLD_CASES)
-@pytest.mark.parametrize("writer", WRITERS)
+@pytest.mark.parametrize(("writer", "case"), FOLDED_CASES_OF_EACH_WRITER)
 def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block_lowered_to_before(
     writer: str, case: str, context: str
 ) -> None:

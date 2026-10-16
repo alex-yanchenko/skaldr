@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Final
 
@@ -53,6 +53,8 @@ LINK_CARD_NAMES: Final[Mapping[LinkCardDisplay, AuthoredName]] = {
 }
 TEXT_BULLET: Final = "• "
 NESTED_TEXT_BULLET: Final = "◦ "
+DASH_BULLET: Final = "- "
+ItemMarker = Callable[[ListNode, int, int], str]
 
 
 def _item_marker(node: ListNode, number: int, depth: int) -> str:
@@ -61,15 +63,19 @@ def _item_marker(node: ListNode, number: int, depth: int) -> str:
     return TEXT_BULLET if depth == 0 else NESTED_TEXT_BULLET
 
 
-def _text_lines(nodes: Iterable[Node], depth: int) -> Iterator[ExportRich]:
+def dash_item_marker(node: ListNode, number: int, _depth: int) -> str:
+    return f"{number}. " if node.kind == "number" else DASH_BULLET
+
+
+def _text_lines(nodes: Iterable[Node], depth: int, marker: ItemMarker = _item_marker) -> Iterator[ExportRich]:
     for node in folded(nodes):
         match node:
             case Paragraph():
                 yield node.text
             case ListNode():
                 for number, entry in enumerate(node.entries, start=node.start):
-                    yield (Plain(_item_marker(node, number, depth)), *entry.text)
-                    yield from _text_lines(entry.children, depth + 1)
+                    yield (Plain(marker(node, number, depth)), *entry.text)
+                    yield from _text_lines(entry.children, depth + 1, marker)
             case _:
                 raise ExportInvariantError(
                     "a quote or a table cell holds only paragraphs and lists, "
@@ -81,8 +87,8 @@ def quote_lines(quote: Quote) -> tuple[ExportRich, ...]:
     return tuple(_text_lines(quote.body, 0))
 
 
-def cell_text(cell: TableCell) -> ExportRich:
-    return joined_by_breaks(_text_lines(cell.blocks, 0)) if cell.blocks else cell.text
+def cell_text(cell: TableCell, marker: ItemMarker = _item_marker) -> ExportRich:
+    return joined_by_breaks(_text_lines(cell.blocks, 0, marker)) if cell.blocks else cell.text
 
 
 def _bullets(entries: Iterable[ListEntry], path: str | None) -> ListNode:

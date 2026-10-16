@@ -13,7 +13,7 @@ from skaldr.export.capabilities import (
     TARGET_SUBJECTS,
     in_unicode_script_form,
 )
-from skaldr.export.folds import folded, quote_lines
+from skaldr.export.folds import dash_item_marker, folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -354,7 +354,7 @@ class _CanvasWriter:
                 f"a Slack canvas table holds at most {CANVAS_TABLE_CELL_LIMIT} cells, not {cells}; "
                 "the export check should have refused it"
             )
-        return pipe_table_lines(table, self.table_cell_runs)
+        return pipe_table_lines(table, self.table_cell_runs, dash_item_marker)
 
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)

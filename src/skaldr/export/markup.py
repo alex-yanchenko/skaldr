@@ -10,7 +10,7 @@ from typing_extensions import Self, assert_never
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, markers_flank
-from skaldr.export.folds import cell_text
+from skaldr.export.folds import ItemMarker, cell_text
 from skaldr.export.glyphs import gauge_bar, mark_glyph
 from skaldr.export.runs import (
     Chip,
@@ -411,9 +411,12 @@ class CommonMarkRuns(MarkupRuns, ABC):
         return code_span("{{" + name + "}}")
 
 
-def pipe_table_lines(table: TableNode, writer: CommonMarkRuns) -> list[str]:
+def pipe_table_lines(
+    table: TableNode, writer: CommonMarkRuns, item_marker: ItemMarker | None = None
+) -> list[str]:
     def cell_markup(cell: TableCell, tones: Sequence[ToneName]) -> str:
-        return writer.write_toned(tones, cell_text(cell)).replace("|", "\\|")
+        text = cell_text(cell) if item_marker is None else cell_text(cell, item_marker)
+        return writer.write_toned(tones, text).replace("|", "\\|")
 
     width = table_width(table)
     lines = [
