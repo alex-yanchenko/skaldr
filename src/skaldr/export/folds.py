@@ -130,6 +130,10 @@ def _event_entry(event: TimelineEvent, path: str | None) -> ListEntry:
     return ListEntry(text, children=body)
 
 
+def link_card_detail(card: LinkCard) -> str:
+    return LINK_CARD_SEPARATOR.join(part for part in (card.domain, card.caption) if part)
+
+
 def reference_runs(entry: ReferenceEntry) -> ExportRich:
     source: ExportRich = (Link((Plain("source"),), entry.url),) if entry.url else ()
     return spaced([entry.text, source]) if source else entry.text
@@ -141,7 +145,7 @@ def _reference_entry(entry: ReferenceEntry) -> ListEntry:
 
 def _link_card_quote(card: LinkCard) -> Quote:
     link = Link(plain(card.title), card.url)
-    detail = LINK_CARD_SEPARATOR.join(part for part in (card.domain, card.caption) if part)
+    detail = link_card_detail(card)
     return Quote(
         (Paragraph((Styled("bold", (link,)),), authored_at=card.authored_at),),
         plain(detail),

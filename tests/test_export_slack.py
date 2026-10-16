@@ -30,6 +30,7 @@ from skaldr.export.tree import (
     Heading,
     HeadingLevel,
     LabelledValue,
+    LinkCard,
     ListEntry,
     ListKind,
     ListNode,
@@ -1666,6 +1667,202 @@ def test_canvas_special_characters_and_pipes_are_escaped_in_a_table_cell() -> No
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(text: str, line: str) -> None:
     assert render_slack([make_paragraph(text)]) == f"{line}\n"
+
+
+ZERO_WIDTH_SPACE = "\N{ZERO WIDTH SPACE}"
+QUOTED_LINK_CARD = "> **[Runbook](https://example.com/runbook)**\n>\n> *example.com*\n"
+RUNBOOK_CARD = LinkCard("Runbook", "https://example.com/runbook", "card", "example.com")
+
+
+@pytest.mark.parametrize(
+    ("text", "written"),
+    [
+        pytest.param("plant :seedling: now", f"plant :{ZERO_WIDTH_SPACE}seedling: now", id="shortcode"),
+        pytest.param(
+            ":tada: and :rocket:",
+            f":{ZERO_WIDTH_SPACE}tada: and :{ZERO_WIDTH_SPACE}rocket:",
+            id="two-shortcodes",
+        ),
+        pytest.param(
+            "score :100: and :+1:",
+            f"score :{ZERO_WIDTH_SPACE}100: and :{ZERO_WIDTH_SPACE}+1:",
+            id="shortcodes-of-digits-and-a-plus",
+        ),
+        pytest.param(
+            "done :white_check_mark:",
+            f"done :{ZERO_WIDTH_SPACE}white\\_check\\_mark:",
+            id="shortcode-with-underscores",
+        ),
+        pytest.param("at 10:30:45 sharp", "at 10:30:45 sharp", id="clock-time"),
+        pytest.param("a:b:c", "a:b:c", id="colons-inside-a-word"),
+        pytest.param("see:tada:", "see:tada:", id="a-word-character-before-the-colon"),
+        pytest.param(
+            "open https://example.com/a/:tada:/b",
+            f"open https://example.com/a/:{ZERO_WIDTH_SPACE}tada:/b",
+            id="shortcode-inside-a-url-in-prose",
+        ),
+        pytest.param(
+            "open https://example.com/?q=:smile:",
+            f"open https://example.com/?q=:{ZERO_WIDTH_SPACE}smile:",
+            id="shortcode-in-a-query-in-prose",
+        ),
+        pytest.param("note: 5 items", "note: 5 items", id="single-colon"),
+    ],
+)
+def test_a_shortcode_in_prose_is_broken_after_its_first_colon_so_the_canvas_shows_text(
+    text: str, written: str
+) -> None:
+    assert render_slack([make_paragraph(text)]) == f"{written}\n"
+
+
+def test_a_shortcode_inside_a_code_span_is_left_as_written() -> None:
+    assert render_slack([Paragraph((Plain("run "), Code(":tada:")))]) == "run `:tada:`\n"
+
+
+def test_a_shortcode_in_a_link_label_is_broken_and_in_its_destination_is_left_as_written() -> None:
+    link = Link(make_rich_text(":tada:"), "https://example.com/?q=:smile:")
+
+    assert render_slack([Paragraph((link,))]) == (
+        f"[:{ZERO_WIDTH_SPACE}tada:](https://example.com/?q=:smile:)\n"
+    )
+
+
+def test_a_shortcode_in_a_heading_and_in_a_table_cell_is_broken() -> None:
+    table = TableNode((make_table_cell(":tada:"),), ())
+
+    assert render_slack([Heading(2, make_rich_text(":tada:")), table]) == (
+        f"# :{ZERO_WIDTH_SPACE}tada:\n\n| :{ZERO_WIDTH_SPACE}tada: |\n| --- |\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("card", "text"),
+    [
+        pytest.param(
+            LinkCard("Runbook", "https://example.com/runbook", "card", "example.com", "rev. 7"),
+            "https://example.com/runbook\n\nexample.com · rev. 7\n",
+            id="card-with-domain-and-caption",
+        ),
+        pytest.param(
+            LinkCard("Runbook", "https://example.com/runbook", "embed", "example.com"),
+            "https://example.com/runbook\n\nexample.com\n",
+            id="embed-with-a-domain",
+        ),
+        pytest.param(
+            LinkCard("example.com/runbook", "https://example.com/runbook", "card"),
+            "https://example.com/runbook\n",
+            id="card-without-detail",
+        ),
+        pytest.param(
+            LinkCard("Search", "https://example.com/a_b?q=x y", "card", "example.com"),
+            "https://example.com/a_b?q=x%20y\n\nexample.com\n",
+            id="url-is-encoded-not-escaped",
+        ),
+    ],
+)
+def test_a_link_card_is_its_bare_url_paragraph_then_its_detail(card: LinkCard, text: str) -> None:
+    assert render_slack([card]) == text
+
+
+def test_a_link_card_inside_a_toggle_is_still_at_the_top_of_the_canvas() -> None:
+    toggle = Toggle(make_rich_text("More"), None, (RUNBOOK_CARD,))
+
+    assert render_slack([toggle]) == "**More**\n\nhttps://example.com/runbook\n\nexample.com\n"
+
+
+def test_a_link_card_in_a_callout_keeps_the_quote_with_its_title() -> None:
+    assert render_slack([Callout("info", (RUNBOOK_CARD,))]) == (
+        "::: {.callout}\n💡\n\n" + QUOTED_LINK_CARD + ":::\n"
+    )
+
+
+def test_a_link_card_in_a_column_keeps_the_quote_with_its_title() -> None:
+    columns = Columns((GridColumn(50, (RUNBOOK_CARD,)), GridColumn(50, (make_paragraph("b"),))))
+
+    assert render_slack([columns]) == (
+        "::: {.layout}\n::: {.column}\n" + QUOTED_LINK_CARD + ":::\n::: {.column}\nb\n:::\n:::\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("url", "written"),
+    [
+        pytest.param(
+            "http://example.com/runbook",
+            "> **[Runbook](http://example.com/runbook)**\n>\n> *example.com*\n",
+            id="http",
+        ),
+        pytest.param(
+            "ftp://example.com/runbook",
+            "> **[Runbook](ftp://example.com/runbook)**\n>\n> *example.com*\n",
+            id="other-scheme",
+        ),
+        pytest.param(
+            "https://example.com/?a=1&b=2",
+            "> **[Runbook](https://example.com/?a=1&b=2)**\n>\n> *example.com*\n",
+            id="ampersand",
+        ),
+        pytest.param(
+            "https://example.com/a*b",
+            "> **[Runbook](https://example.com/a*b)**\n>\n> *example.com*\n",
+            id="asterisk",
+        ),
+        pytest.param(
+            "https://example.com/a~b",
+            "> **[Runbook](https://example.com/a~b)**\n>\n> *example.com*\n",
+            id="tilde",
+        ),
+        pytest.param(
+            "https://example.com/a\\b",
+            "> **[Runbook](https://example.com/a\\\\b)**\n>\n> *example.com*\n",
+            id="backslash",
+        ),
+        pytest.param(
+            "https://example.com/a<b",
+            "> **[Runbook](https://example.com/a%3Cb)**\n>\n> *example.com*\n",
+            id="angle-bracket-open",
+        ),
+        pytest.param(
+            "https://example.com/a>b",
+            "> **[Runbook](https://example.com/a%3Eb)**\n>\n> *example.com*\n",
+            id="angle-bracket-close",
+        ),
+        pytest.param(
+            "https://example.com/a[b",
+            "> **[Runbook](https://example.com/a[b)**\n>\n> *example.com*\n",
+            id="square-bracket-open",
+        ),
+        pytest.param(
+            "https://example.com/a]b",
+            "> **[Runbook](https://example.com/a]b)**\n>\n> *example.com*\n",
+            id="square-bracket-close",
+        ),
+        pytest.param(
+            "https://example.com/a(b",
+            "> **[Runbook](https://example.com/a%28b)**\n>\n> *example.com*\n",
+            id="parenthesis-open",
+        ),
+        pytest.param(
+            "https://example.com/a)b",
+            "> **[Runbook](https://example.com/a%29b)**\n>\n> *example.com*\n",
+            id="parenthesis-close",
+        ),
+        pytest.param(
+            "https://example.com/a`b",
+            "> **[Runbook](https://example.com/a%60b)**\n>\n> *example.com*\n",
+            id="backtick",
+        ),
+        pytest.param(
+            "https://example.com/:tada:/",
+            "> **[Runbook](https://example.com/:tada:/)**\n>\n> *example.com*\n",
+            id="shortcode",
+        ),
+    ],
+)
+def test_a_link_card_whose_url_a_canvas_would_not_keep_bare_keeps_the_quote_with_its_title(
+    url: str, written: str
+) -> None:
+    assert render_slack([LinkCard("Runbook", url, "card", "example.com")]) == written
 
 
 def test_a_list_item_that_starts_like_a_callout_fence_stays_text() -> None:
