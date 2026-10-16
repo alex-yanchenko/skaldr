@@ -10,10 +10,10 @@ from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, render_adf_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
 from skaldr.models import Report, Section
-from skaldr.publish.connector import ContentLimit, WriteGranularity
+from skaldr.publish.connector import ContentLimit, SectionDefaults, WriteGranularity
 from skaldr.publish.jira.client import JiraClient
 from skaldr.publish.jira.description import description_length, section_text, validated_blocks
-from skaldr.publish.jira.section_fields import jira_fields_of_section
+from skaldr.publish.jira.section_fields import jira_section_defaults
 from skaldr.publish.jira.transport import JiraTransport, not_a_jira_target
 from skaldr.publish_block import JiraTarget, TargetBase
 from skaldr.publish_block.target import JsonFields
@@ -72,8 +72,10 @@ class JiraConnector:
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return tuple(section_text(validated_blocks(blocks)) for blocks in render_adf_regions(page))
 
-    def default_fields(self, report: Report, section: Section, /) -> JsonFields:
-        return jira_fields_of_section(report, section)
+    def section_defaults(
+        self, report: Report, section: Section, source_index: int, target: TargetBase, /
+    ) -> SectionDefaults:
+        return jira_section_defaults(report, section, source_index, target)
 
     def existing_item_id(self, _target: TargetBase, /) -> str | None:
         return None

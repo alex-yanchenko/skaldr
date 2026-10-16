@@ -13,7 +13,14 @@ from skaldr.errors import PublishError
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import Lowering, assemble_item_page, lower_regions, lowering_for
 from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
-from skaldr.publish.connector import SPLIT_ADVICE, Connector, ConnectorRegistry, ContentLimit
+from skaldr.publish.connector import (
+    NO_SECTION_DEFAULTS,
+    SPLIT_ADVICE,
+    Connector,
+    ConnectorRegistry,
+    ContentLimit,
+    SectionDefaults,
+)
 from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
 from skaldr.publish_block.target import JsonFields
@@ -99,6 +106,8 @@ class ItemDraft:
     section_id: str | None
     content: ItemContent
     paths: Mapping[Part, str]
+    warnings: tuple[str, ...] = ()
+    left_alone: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -119,9 +128,14 @@ def published_targets(report: models.Report) -> Publish:
     return report.publish
 
 
-def _section_title(report: models.Report, region: BlockRegion) -> str:
+def _section_of(report: models.Report, region: BlockRegion) -> models.Section | None:
     block = report.blocks[region.source_index]
-    return block.title if isinstance(block, models.Section) else ""
+    return block if isinstance(block, models.Section) else None
+
+
+def _section_title(report: models.Report, region: BlockRegion) -> str:
+    section = _section_of(report, region)
+    return "" if section is None else section.title
 
 
 @dataclass(frozen=True)
@@ -133,12 +147,36 @@ class _TargetContext:
     connector: Connector
     position: int
 
-    def fields_path(self, section_id: str | None) -> str:
+    def fields_path(
+        self, section_id: str | None, section_defaults: SectionDefaults, fields: JsonFields
+    ) -> str:
         target_path = f"publish.targets[{self.position}]"
         override = None if section_id is None else self.target.overrides.get(section_id)
-        if override is not None and override.fields:
-            return f"{target_path}.overrides.{section_id}.fields"
-        return f"{target_path}.where.fields"
+        override_fields = {} if override is None else override.fields
+        target_fields = self.target.where_fields()
+        if not section_defaults.sources:
+            return (
+                f"{target_path}.overrides.{section_id}.fields"
+                if override_fields
+                else f"{target_path}.where.fields"
+            )
+        sources = {
+            name: (
+                f"{target_path}.overrides.{section_id}.fields.{name}"
+                if name in override_fields
+                else f"{target_path}.where.fields.{name}"
+                if name in target_fields
+                else section_defaults.sources[name]
+            )
+            for name in fields
+        }
+        return ", ".join(dict.fromkeys(sources.values()))
+
+    def section_defaults_of(self, region: BlockRegion) -> SectionDefaults:
+        section = _section_of(self.report, region)
+        if section is None:
+            return NO_SECTION_DEFAULTS
+        return self.connector.section_defaults(self.report, section, region.source_index, self.target)
 
 
 def _look_paths(section_id: str | None) -> dict[Part, str]:
@@ -150,37 +188,40 @@ def _item_draft(
     page: LoweredDocument,
     section_id: str | None,
     title_path: str,
-    authored_defaults: JsonFields,
+    section_defaults: SectionDefaults,
 ) -> ItemDraft:
     reject_what_the_target_cannot_show(context.report, page, context.connector.export_target)
+    if section_defaults.refusals:
+        raise PublishError(
+            f"{context.target.location_label()}, {item_label(section_id)}: {section_defaults.refusals[0]}"
+        )
     texts = context.connector.render_regions(context.report, page)
     keys = region_keys(context.authored_blocks, page.regions)
     carries_look = context.connector.carries_look
+    fields = {**section_defaults.values, **context.target.fields_for(section_id)}
     return ItemDraft(
         section_id,
         ItemContent(
             title=page.title,
             sections=dict(zip(keys, texts, strict=True)),
-            fields={**authored_defaults, **context.target.fields_for(section_id)},
+            fields=fields,
             icon=page.icon if carries_look else None,
             cover=page.cover if carries_look else None,
         ),
         {
             TITLE: title_path,
-            FIELDS: context.fields_path(section_id),
+            FIELDS: context.fields_path(section_id, section_defaults, fields),
             **(_look_paths(section_id) if carries_look else {}),
             **{
                 section_part(key): region_path(region) for key, region in zip(keys, page.regions, strict=True)
             },
         },
+        warnings=tuple(
+            f"warning: {context.target.location_label()}, {item_label(section_id)}: {warning}"
+            for warning in section_defaults.warnings
+        ),
+        left_alone=section_defaults.left_alone,
     )
-
-
-def _defaults_of_split_section(context: _TargetContext, region: BlockRegion) -> JsonFields:
-    block = context.report.blocks[region.source_index]
-    if not isinstance(block, models.Section):
-        return {}
-    return context.connector.default_fields(context.report, block)
 
 
 def _refuse_what_cannot_fit(
@@ -219,7 +260,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
         ),
         None,
         "meta.title",
-        {},
+        NO_SECTION_DEFAULTS,
     )
     children = tuple(
         _item_draft(
@@ -229,7 +270,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
             ),
             region.section_id,
             f"blocks[{region.source_index}].title",
-            _defaults_of_split_section(context, region),
+            context.section_defaults_of(region),
         )
         for region in chosen
         if region.section_id in target.split

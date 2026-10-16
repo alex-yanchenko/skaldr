@@ -100,6 +100,7 @@ def test_a_publish_block_reads_every_key_of_each_target() -> None:
                     "parent": "PLAN-100",
                     "site": "https://example.atlassian.net",
                     "fields": {"labels": ["team"]},
+                    "fields_from_sections": False,
                 },
                 "from": ["st1", "st2"],
                 "split": ["st1", "st2"],
@@ -241,6 +242,7 @@ def test_a_jira_project_key_may_hold_digits_and_underscores() -> None:
         "parent": "AB_1-7",
         "site": None,
         "fields": {},
+        "fields_from_sections": False,
     }
 
 
@@ -699,4 +701,5 @@ def test_a_jira_site_is_read_the_way_skaldr_auth_reads_it() -> None:
         "issue_type": "Task",
         "site": "https://example.atlassian.net",
         "fields": {},
+        "fields_from_sections": False,
     }

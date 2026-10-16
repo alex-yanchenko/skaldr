@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from pydantic import JsonValue
 
-from skaldr.publish.content import Part
+from skaldr.publish.content import FIELDS, Part
 from skaldr.publish.drafts import item_label, section_label
 from skaldr.publish.engine import ItemStatus, PublishDiff, RemoteEdit, YamlChange
 from skaldr.publish.plan import ItemRef
@@ -13,7 +13,12 @@ NO_VISIBLE_CHANGE = "(the service reports an edit here, and its text is unchange
 
 
 def _part_label(item: ItemRef, part: Part, path: str | None) -> str:
-    named = section_label(part.key, path) if part.kind == "section" else part.label
+    if part.kind == "section":
+        named = section_label(part.key, path)
+    elif part == FIELDS and path is not None:
+        named = f"{part.label} ({path})"
+    else:
+        named = part.label
     return f"{item.label}: {named}"
 
 

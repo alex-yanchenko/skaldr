@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Protocol
 
@@ -25,6 +25,18 @@ class ContentLimit:
     measure: Callable[[str], int] = len
 
 
+@dataclass(frozen=True)
+class SectionDefaults:
+    values: JsonFields = field(default_factory=JsonFields)
+    sources: Mapping[str, str] = field(default_factory=dict[str, str])
+    warnings: tuple[str, ...] = ()
+    refusals: tuple[str, ...] = ()
+    left_alone: tuple[str, ...] = ()
+
+
+NO_SECTION_DEFAULTS = SectionDefaults()
+
+
 class Connector(Protocol):
     @property
     def target_type(self) -> type[TargetBase]: ...
@@ -43,7 +55,9 @@ class Connector(Protocol):
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]: ...
 
-    def default_fields(self, report: Report, section: Section, /) -> JsonFields: ...
+    def section_defaults(
+        self, report: Report, section: Section, source_index: int, target: TargetBase, /
+    ) -> SectionDefaults: ...
 
     def existing_item_id(self, target: TargetBase, /) -> str | None: ...
 

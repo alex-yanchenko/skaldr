@@ -107,6 +107,10 @@ def _publish(prepared: Prepared, document: Path, *, apply: bool, overwrite: bool
 def _run(args: argparse.Namespace, registry: ConnectorRegistry) -> int:
     prepared = prepare_publish(args.document, registry)
     if args.command == "publish":
+        for target in prepared.drafts:
+            for draft in target.items:
+                for warning in draft.warnings:
+                    print(warning, file=sys.stderr)
         return _publish(prepared, args.document, apply=args.apply, overwrite=args.overwrite)
     if args.command == "diff":
         diff = diff_publish(prepared)
