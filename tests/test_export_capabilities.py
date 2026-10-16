@@ -81,6 +81,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table inside a callout": {"adf": "reject", "slack": "reject"},
     "callout inside a callout": {"adf": "reject", "slack": "reject"},
     "quote inside a callout": {"adf": "reject"},
+    "link card inside a callout": {},
     "toggle inside a callout": {"adf": "reject", "slack": "reject"},
     "table inside a toggle inside a toggle": {"adf": "reject"},
     "toggle inside a toggle inside a toggle": {"adf": "reject"},

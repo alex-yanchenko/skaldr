@@ -1562,15 +1562,25 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | a list | a bullet, ordered (with its start number) or task list, nested as written; a `number` list with `numbering: letters` or `roman` is refused, since ADF numbers a list only with digits |
 | `callout`, `note`, `panel` | a panel: info, success, warning, error (a danger tone) or note (neutral, muted and accent tones; teal and sky are info) |
 | `code` | a code block with its language; a `math` block is a code block in `latex`, since ADF has no math, and `` $`x_i`$ `` inline math is inline code holding the LaTeX |
-| `quote` | a block quote, the citation in italics |
+| `quote` | a block quote, the citation in italics; a list in the quote is a real list inside the block quote |
 | `divider` | a rule |
-| `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, and a `header_column` makes the first column header cells |
-| a collapsed `section`, a `toggle`, and each tab or request case | an expand with its title; an expand inside an expand is a nested expand; a tab's title is led by an icon when its tone is info, success, warning or danger, and a request case's by the icon of its status |
-| `grid` | its cells one after another |
+| `link` card or embed | a smart link card (`blockCard`) for a card and an embed card (`embedCard`) for an embed, then a grey caption line holding the domain and the caption, when it has either (Jira shows the page's title in the card itself). A card works inside a panel too. An embed in a panel, and either in a nested expand, stay a block quote of the bold linked title and the italic detail, an embed in a panel being refused as a quote in a panel; a card or embed in a list item or walkthrough step is refused, as a quote there always was |
+| `fact_strip` and a section's `fields` | a table of one row: the labels as header cells over the values; with no label on any fact, the row of values alone |
+| `key_value` | a table of two columns, the keys as header cells |
+| `def_list` | a table of two columns, the terms as header cells and each body as the paragraphs and lists of the cell |
+| `cards` | a table with a column per card: the label (a badge card's label is its lozenge) as a header cell, the value, and a grey note row when any card has a note; a card's tone is the background of its column. A derived card is a card |
+| `timeline` | a table of When, State and What: the time, the state as a lozenge, and the bold title and chips over the body. A column no event fills is left out |
+| `table`, `comparison`, `matrix`, `swimlane` | a table with a header row; a row, column or cell tone is the cell's background, a group row is a bold band, a total row is bold, a muted row is struck through, a `header_column` makes the first column header cells, and a cell holding several paragraphs or a list writes each paragraph as its own block and the list as a real list |
+| a collapsed `section`, a `toggle` (open or collapsed), and each tab or request case | an expand with its title, which Jira opens closed even for an open `toggle`; an expand inside an expand is a nested expand; a tab's title is led by an icon when its tone is info, success, warning or danger, and a request case's by the icon of its status. Where an expand cannot go, an open `toggle` is its bold title over its content |
+| `grid` of up to three cells with no tone, or a `grid` holding a table or a chart | its cells one after another |
+| `grid` of more than three cells, or with a toned cell, holding no table or chart | a table of one row, a cell per grid cell, and a toned cell is the cell's background; a cell holds paragraphs, lists, code, a callout or panel, a quote, a divider and a toggle as a nested expand, and a grid inside a cell is written as its cells one after another |
+| a `fact_strip`, `key_value`, `def_list`, `cards` or `timeline` where a table cannot go (a panel, a nested expand, a list item or a table cell) | the bullet list it was written as before |
 | `chart` | its data table in place of the chart, since ADF cannot draw one: a row per slice with its value and share and a total row for a donut, a row per series for a bar or line chart, and for stacked bars with several series a bold `Total` row of each category's stack |
 | badges, and the states of a `status_list` or `swimlane` | status lozenges in the nearest of ADF's six colours (neutral, purple, blue, red, yellow, green) |
 | `image` and `media` | a paragraph holding the kind (Image, Video, Audio, File or PDF), a colon and a link to the URL, named by the caption, else the description, else the URL; ADF media nodes need uploaded files, so nothing is embedded, and a URL with a scheme other than `http://`, `https://` or `mailto:` is written as its name alone |
 | a table of contents | nothing, because a Jira heading has no anchor for an entry to link to |
+| `meta.cover` | a first paragraph holding a link named "Cover image", in the single-file export; a publish to Jira writes it nowhere |
+| a citation `[^key]` | its number in brackets as a superscript, linked to the reference's `url` when it has one |
 | `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped; a link to anything but an `http://`, `https://` or `mailto:` address is written as its label alone |
 | `[text]{bg=…}`, alone or with a `tone` | refused, since a Jira description does not show a text highlight; write the text without the highlight |
 | an issue key of the target project, once a Jira site is known | a live issue card; a card carries no marks, so bold or a colour around a key is dropped, and a key in code or a link label stays text |
