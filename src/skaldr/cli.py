@@ -27,7 +27,7 @@ from skaldr.export import (
     render_export,
 )
 from skaldr.guide_lookup import is_topic, list_topics, lookup
-from skaldr.models import Report, content_files, load_report, package_path, package_text
+from skaldr.models import Part, Report, content_files, load_report, package_path, package_text
 from skaldr.pdf import html_to_pdf
 from skaldr.render import (
     RecordedRender,
@@ -501,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     for path in written:
         print(f"OK  {path}")
-    print(f"    {_plural(len(report.blocks), 'block')}, {_plural(len(report.badges), 'badge')}")
+    print(_build_summary(report))
     return 0
 
 
@@ -565,7 +565,7 @@ def _render_once(
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"OK  {out_path}")
-    print(f"    {_plural(len(report.blocks), 'block')}, {_plural(len(report.badges), 'badge')}")
+    print(_build_summary(report))
     return 0
 
 
@@ -934,6 +934,11 @@ def _install_plan_rule(claude_dir: Path) -> Literal["added", "updated"]:
 
 def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}{'' if count == 1 else 's'}"
+
+
+def _build_summary(report: Report) -> str:
+    authored_blocks = sum(len(block.blocks) if isinstance(block, Part) else 1 for block in report.blocks)
+    return f"    {_plural(authored_blocks, 'block')}, {_plural(len(report.badges), 'badge')}"
 
 
 if __name__ == "__main__":
