@@ -1083,6 +1083,28 @@ def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location
 
 
 @pytest.mark.parametrize(
+    ("block", "location"),
+    [
+        pytest.param(make_request(label=" "), "blocks.0.request.label", id="request"),
+        pytest.param(
+            make_request(cases=[{"label": "\t", "response": {"status": 200, "body": "[]"}}]),
+            "blocks.0.request.cases.0.label",
+            id="request-case",
+        ),
+        pytest.param(make_flow(label=" "), "blocks.0.request_flow.label", id="request-flow"),
+        pytest.param(
+            make_flow(steps=[make_step(label=" ")]), "blocks.0.request_flow.steps.0.label", id="flow-step"
+        ),
+    ],
+)
+def test_a_request_label_that_is_blank_is_rejected(block: dict[str, Any], location: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
+
+
+@pytest.mark.parametrize(
     ("definition", "field", "schema"),
     [
         pytest.param(
