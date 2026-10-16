@@ -62,7 +62,8 @@ _PALETTE_ONLY_NAMES: Final = tuple(
     name for name in get_args(BadgeColorLiteral) if name not in get_args(ToneLiteral)
 )
 _SCRIPT_TEXT: Final = re.compile(r"(?:[^\W_]|[-+=().,'*" + "\N{MINUS SIGN}\N{PRIME}" + r"])+")
-_SCRIPT_OPERATORS: Final = re.compile(r"[+=]")
+_SCRIPT_OPERATORS: Final = re.compile(r"[-+=*()\N{MINUS SIGN}]")
+_WRAPPED_IN_PARENTHESES: Final = re.compile(r"\([^()]*\)")
 _UNDERLINE_MARKER: Final = "+"
 
 
@@ -268,7 +269,12 @@ def _stray_attribute_list(state: StateInline, silent: bool) -> bool:
 def _is_an_equation_cut_short(state: StateInline, script_text: re.Match[str]) -> bool:
     after_closer = script_text.end() + 1
     runs_into_a_word = after_closer < state.posMax and state.src[after_closer].isalnum()
-    return runs_into_a_word and _SCRIPT_OPERATORS.search(script_text.group(0)) is not None
+    if not runs_into_a_word:
+        return False
+    content = script_text.group(0)
+    if _WRAPPED_IN_PARENTHESES.fullmatch(content):
+        return False
+    return _SCRIPT_OPERATORS.search(content, 1) is not None
 
 
 def _script_rule(marker: str, token_type: str, refused_after: str) -> Callable[[StateInline, bool], bool]:
