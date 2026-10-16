@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Final, Literal
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.tree import PanesKind, ToneName
+from skaldr.export.tree import Node, PanesKind, ToneName, uses_heading_level_1
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
 
@@ -47,6 +47,7 @@ GridCellFeature = Literal[
 GridCellsFeature = Literal["grid with more than three cells"]
 TonedCellFeature = Literal["toned grid cell"]
 GridInAGridCellFeature = Literal["grid inside a grid cell"]
+DeepHeadingFeature = Literal["heading deeper than a canvas holds"]
 DividerInAStepFeature = Literal["divider inside a walkthrough step"]
 PanesFeature = Literal["set of tabs", "request with several cases"]
 OccurrenceFeature = Literal[
@@ -79,6 +80,7 @@ Feature = Literal[
     GridCellsFeature,
     TonedCellFeature,
     GridInAGridCellFeature,
+    DeepHeadingFeature,
     DividerInAStepFeature,
     PanesFeature,
     OccurrenceFeature,
@@ -94,6 +96,7 @@ BACKTICK: Final = "`"
 CLOSING_TAG_OPENER: Final = "</"
 CANVAS_TABLE_CELL_LIMIT: Final = 300
 CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
+CANVAS_HEADING_LEVEL_LIMIT: Final = 3
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
     "superscript": str.maketrans(
         "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
@@ -229,6 +232,14 @@ class GridInAGridCell:
 
 
 @dataclass(frozen=True)
+class DeepHeading:
+    text: str
+    level: int
+    limit: int = CANVAS_HEADING_LEVEL_LIMIT
+    feature: DeepHeadingFeature = field(default="heading deeper than a canvas holds", init=False)
+
+
+@dataclass(frozen=True)
 class DividerInAStep:
     feature: DividerInAStepFeature = field(default="divider inside a walkthrough step", init=False)
 
@@ -261,6 +272,7 @@ Details = (
     | GridCells
     | TonedCell
     | GridInAGridCell
+    | DeepHeading
     | DividerInAStep
     | Panes
     | Occurrence
@@ -550,6 +562,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "heading deeper than a canvas holds": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas holds headings down to level {limit}, "
+                "so it cannot show the heading '{text}' at level {level}",
+                "write the heading as bold text, or export the document elsewhere",
+            )
+        }
+    ),
     "divider inside a walkthrough step": _kept_except(
         {
             "adf": Rejection(
@@ -630,6 +651,10 @@ GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
     "callout": "callout inside a grid cell",
     "divider": "divider inside a grid cell",
 }
+
+
+def canvas_heading_shift(body: Iterable[Node]) -> int:
+    return 0 if uses_heading_level_1(body) else 1
 
 
 def swaps(feature: Feature, target: ExportTarget) -> bool:

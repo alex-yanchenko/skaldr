@@ -253,17 +253,88 @@ def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack
 @pytest.mark.parametrize(
     ("level", "line"),
     [
-        pytest.param(1, "# Counts", id="level-1"),
-        pytest.param(2, "## Counts", id="level-2"),
-        pytest.param(3, "### Counts", id="level-3"),
-        pytest.param(4, "### Counts", id="level-4-folds-to-3"),
-        pytest.param(6, "### Counts", id="level-6-folds-to-3"),
+        pytest.param(2, "# Counts", id="level-2"),
+        pytest.param(3, "## Counts", id="level-3"),
+        pytest.param(4, "### Counts", id="level-4"),
     ],
 )
-def test_a_heading_keeps_its_level_up_to_three_and_deeper_ones_fold_to_three(
+def test_headings_move_up_one_level_when_the_document_has_no_level_1_heading(
     level: HeadingLevel, line: str
 ) -> None:
     assert render_slack([Heading(level, make_rich_text("Counts"), "counts")]) == f"{line}\n"
+
+
+def test_headings_keep_their_levels_when_the_document_has_a_level_1_heading() -> None:
+    headings = [
+        Heading(1, make_rich_text("A")),
+        Heading(2, make_rich_text("B")),
+        Heading(3, make_rich_text("C")),
+    ]
+
+    assert render_slack(headings) == "# A\n\n## B\n\n### C\n"
+
+
+def test_a_level_1_heading_inside_a_toggle_stops_the_shift_for_the_whole_document() -> None:
+    part = Toggle(make_rich_text("Part"), 1, (make_paragraph("p"),))
+
+    assert render_slack([Heading(2, make_rich_text("B")), part]) == "## B\n\n# Part\n\np\n"
+
+
+def test_a_toggle_heading_moves_up_like_a_heading() -> None:
+    section = Toggle(make_rich_text("Section"), 2, (make_paragraph("p"),))
+
+    assert render_slack([section]) == "# Section\n\np\n"
+
+
+@pytest.mark.parametrize(
+    ("nodes", "level"),
+    [
+        pytest.param([Heading(5, make_rich_text("Deep"))], 4, id="level-5-shifted-to-4"),
+        pytest.param(
+            [Heading(1, make_rich_text("Top")), Heading(4, make_rich_text("Deep"))], 4, id="level-4"
+        ),
+    ],
+)
+def test_a_heading_a_canvas_still_cannot_hold_after_the_shift_is_rejected(
+    nodes: list[Node], level: int
+) -> None:
+    assert vars(refusal_of(nodes, "slack")) == _canvas_rejection(
+        "a Slack canvas holds headings down to level 3, "
+        f"so it cannot show the heading 'Deep' at level {level}",
+        "write the heading as bold text, or export the document elsewhere",
+    )
+
+
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_heading_too_deep_to_hold() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Heading(5, make_rich_text("Deep"))])
+
+    assert str(raised.value) == (
+        "a Slack canvas holds headings down to level 3, so it has no form for 'Deep' at level 4; "
+        "the export check should have refused it"
+    )
+
+
+def test_a_toggle_heading_a_canvas_cannot_hold_is_rejected_like_a_heading() -> None:
+    section = Toggle(make_rich_text("Raw"), 5, (make_paragraph("x"),))
+
+    assert vars(refusal_of([section], "slack")) == _canvas_rejection(
+        "a Slack canvas holds headings down to level 3, so it cannot show the heading 'Raw' at level 4",
+        "write the heading as bold text, or export the document elsewhere",
+    )
+
+
+def test_a_heading_block_too_deep_in_a_section_is_rejected_naming_its_yaml_path() -> None:
+    blocks = [{"type": "section", "title": "S", "blocks": [{"type": "heading", "text": "Deep", "level": 4}]}]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        slack_of(blocks)
+
+    assert vars(raised.value) == _canvas_rejection(
+        "a Slack canvas holds headings down to level 3, so it cannot show the heading 'Deep' at level 4",
+        "write the heading as bold text, or export the document elsewhere",
+        "at blocks.0.section.blocks.0.heading",
+    )
 
 
 def test_a_paragraph_is_its_inline_text_and_drops_its_tone() -> None:
@@ -286,7 +357,7 @@ def _broken_line(second: str) -> tuple[ExportRun, ...]:
             "::: {.callout}\n💡 one\\\n\\:::\n:::\n",
             id="callout-paragraph-line-after-the-break-is-not-a-fence",
         ),
-        pytest.param(Heading(2, _broken_line("two")), "## one two\n", id="heading-space"),
+        pytest.param(Heading(2, _broken_line("two")), "# one two\n", id="heading-space"),
         pytest.param(make_bullets(ListEntry(_broken_line("two"))), "* one two\n", id="list-item-space"),
         pytest.param(Quote((Paragraph(_broken_line("two")),)), "> one two\n", id="quote-space"),
         pytest.param(Toggle(_broken_line("two"), None, ()), "**one two**\n", id="title-space"),
@@ -1082,12 +1153,7 @@ def test_a_divider_stays_at_the_top_level() -> None:
     ("node", "text"),
     [
         pytest.param(
-            Toggle(make_rich_text("Raw"), 2, (make_paragraph("x"),)), "## Raw\n\nx\n", id="heading-level-2"
-        ),
-        pytest.param(
-            Toggle(make_rich_text("Raw"), 5, (make_paragraph("x"),)),
-            "### Raw\n\nx\n",
-            id="heading-level-5-folds",
+            Toggle(make_rich_text("Raw"), 2, (make_paragraph("x"),)), "# Raw\n\nx\n", id="heading-level-2"
         ),
         pytest.param(
             Toggle(make_rich_text("Raw"), None, (make_paragraph("x"),)), "**Raw**\n\nx\n", id="no-heading"
@@ -1110,7 +1176,7 @@ def test_up_to_three_columns_are_a_column_layout() -> None:
 
     assert render_slack([node]) == (
         "::: {.layout}\n"
-        "::: {.column}\n### Left\n\nleft\n:::\n"
+        "::: {.column}\n## Left\n\nleft\n:::\n"
         "::: {.column}\n* a\n:::\n"
         "::: {.column}\n**T**\n\nx\n:::\n"
         ":::\n"
@@ -1440,7 +1506,7 @@ COUNTS_HEADING: dict[str, Any] = {"type": "heading", "text": "Counts", "id": "co
     ],
 )
 def test_emphasis_inside_a_link_label_inside_emphasis_on_a_canvas(body: str, written: str) -> None:
-    assert slack_of([COUNTS_HEADING, {"type": "text", "body": body}]) == f"## Counts\n\n{written}\n"
+    assert slack_of([COUNTS_HEADING, {"type": "text", "body": body}]) == f"# Counts\n\n{written}\n"
 
 
 @pytest.mark.parametrize(
@@ -1551,13 +1617,40 @@ def test_a_document_exports_its_body_without_the_title_since_the_canvas_takes_th
     )
 
 
+def _exported_with_meta(tmp_path: Path, **meta: str) -> dict[str, str]:
+    path = write_report(tmp_path, make_report(meta={"title": "Test Report", **meta}))
+    out_dir = tmp_path / "out"
+
+    export_slack(load_report(path), out_dir)
+
+    return folder_texts(out_dir)
+
+
+def test_the_page_icon_leads_the_canvas_title_in_the_manifest(tmp_path: Path) -> None:
+    written = _exported_with_meta(tmp_path, icon="📊")
+
+    assert (json.loads(written[EXPORT_MANIFEST])["title"], written["page.md"]) == (
+        "📊 Test Report",
+        "Hello.\n",
+    )
+
+
+def test_the_page_cover_is_a_link_paragraph_before_the_body(tmp_path: Path) -> None:
+    written = _exported_with_meta(tmp_path, cover="https://example.com/cover.png")
+
+    assert (json.loads(written[EXPORT_MANIFEST])["title"], written["page.md"]) == (
+        "Test Report",
+        "[Cover image](https://example.com/cover.png)\n\nHello.\n",
+    )
+
+
 def test_a_document_built_from_yaml_exports_through_the_lowering() -> None:
     blocks = [
         {"type": "heading", "text": "Counts"},
         {"type": "callout", "tone": "warning", "title": "Recount", "body": "Aisle 4 by **Friday**."},
     ]
 
-    assert slack_of(blocks) == "## Counts\n\n::: {.callout}\n⚠️ **Recount**\n\nAisle 4 by **Friday**.\n:::\n"
+    assert slack_of(blocks) == "# Counts\n\n::: {.callout}\n⚠️ **Recount**\n\nAisle 4 by **Friday**.\n:::\n"
 
 
 def _code_report(tmp_path: Path, code_length: int, character: str = "x") -> Report:
@@ -1864,7 +1957,7 @@ def test_each_region_is_written_on_its_own_and_together_they_read_as_the_whole_c
             "* Spade.\n* Rake.\n",
             "&nbsp;\n\n* Sow in spring.\n",
             "",
-            "## Notes\n",
+            "# Notes\n",
         ),
         render_slack(document.body),
     )

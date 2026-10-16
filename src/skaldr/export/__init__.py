@@ -14,7 +14,7 @@ from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
-from skaldr.export.slack import render_slack
+from skaldr.export.slack import canvas_title, render_slack_document
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.frozen_model import FrozenModel
@@ -166,7 +166,9 @@ def render_export(report: Report, target: ExportTarget) -> RenderedExport:
         case "adf":
             return _adf_pages(document)
         case "slack":
-            return RenderedExport(document.title, {MARKDOWN_PAGE_NAME: render_slack(document.body)})
+            return RenderedExport(
+                canvas_title(document), {MARKDOWN_PAGE_NAME: render_slack_document(document)}
+            )
         case _:
             assert_never(target)
 

@@ -97,6 +97,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "divider inside a grid cell": {"slack": "reject"},
     "toned grid cell": {"slack": "reject"},
     "grid inside a grid cell": {"slack": "reject"},
+    "heading deeper than a canvas holds": {"slack": "reject"},
     "divider inside a walkthrough step": {"adf": "reject"},
     "set of tabs": {"notion": "swap", "adf": "swap"},
     "request with several cases": {"notion": "swap", "adf": "swap"},

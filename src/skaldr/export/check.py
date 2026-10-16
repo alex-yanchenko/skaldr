@@ -1,5 +1,5 @@
 from collections import deque
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import chain
 from typing import Final
@@ -10,6 +10,7 @@ from skaldr import models
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
     BACKTICK,
+    CANVAS_HEADING_LEVEL_LIMIT,
     CANVAS_LAYOUT_COLUMN_LIMIT,
     CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
@@ -21,6 +22,7 @@ from skaldr.export.capabilities import (
     RICH_STEP_NOTE,
     CellCount,
     Container,
+    DeepHeading,
     Details,
     DividerInAStep,
     FencedInAListItem,
@@ -45,6 +47,7 @@ from skaldr.export.capabilities import (
     TextMarkFeature,
     TextNumbering,
     TonedCell,
+    canvas_heading_shift,
     character_without_a_unicode_form,
 )
 from skaldr.export.folds import cell_text, folded, quote_lines
@@ -467,6 +470,7 @@ def _document_position(path: str) -> DocumentPosition:
 class _TreeWalk:
     def __init__(self, located: Iterable[LocatedDetails]) -> None:
         self.heading = ""
+        self.heading_shift = 0
         self.located = deque(located)
 
     def note_heading(self, text: ExportRich) -> None:
@@ -483,7 +487,13 @@ class _TreeWalk:
             path, details = self.located.popleft()
             yield self.hit(details, path)
 
-    def document(self, body: Iterable[Node]) -> Iterator[FeatureHit]:
+    def deep_heading_hits(self, node: Node, level: int, text: ExportRich) -> Iterator[FeatureHit]:
+        canvas_level = level - self.heading_shift
+        if canvas_level > CANVAS_HEADING_LEVEL_LIMIT:
+            yield self.hit(DeepHeading(_visible_text(text), canvas_level), node.authored_at)
+
+    def document(self, body: Sequence[Node]) -> Iterator[FeatureHit]:
+        self.heading_shift = canvas_heading_shift(body)
         yield from self.nodes(body, _Place())
         while self.located:
             path, details = self.located.popleft()
@@ -514,6 +524,7 @@ class _TreeWalk:
         yield from self.inline_hits(node, _own_texts(node))
         match node:
             case Heading():
+                yield from self.deep_heading_hits(node, node.level, node.text)
                 self.note_heading(node.text)
             case ListNode():
                 yield from self.list_hits(node, place)
@@ -523,6 +534,7 @@ class _TreeWalk:
                 yield from self.nodes(node.children, place.in_a_callout(_term(node)))
             case Toggle():
                 if node.heading_level is not None:
+                    yield from self.deep_heading_hits(node, node.heading_level, node.title)
                     self.note_heading(node.title)
                 yield from self.nodes(node.children, place.in_a_toggle(_term(node)))
             case Tabs():

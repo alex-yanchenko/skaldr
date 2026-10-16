@@ -7,10 +7,12 @@ from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import (
+    CANVAS_HEADING_LEVEL_LIMIT,
     CANVAS_LAYOUT_COLUMN_LIMIT,
     CANVAS_TABLE_CELL_LIMIT,
     FIRST_LIST_NUMBER,
     TARGET_SUBJECTS,
+    canvas_heading_shift,
     in_unicode_script_form,
 )
 from skaldr.export.folds import card_text, dash_item_marker, folded, quote_lines
@@ -36,7 +38,7 @@ from skaldr.export.markup import (
     styled,
     table_width,
 )
-from skaldr.export.runs import ExportRich
+from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
 from skaldr.export.tree import (
     Callout,
@@ -66,12 +68,11 @@ from skaldr.export.tree import (
 )
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import MEDIA_KIND_LABELS, Person
-from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
+from skaldr.richtext import Link, MarkerStyle, Plain, ScriptPosition
 from skaldr.typed_links import date_target_text
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
-DEEPEST_CANVAS_HEADING: Final = 3
 CANVAS_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~"})
 CANVAS_FENCE: Final = ":::"
 CALLOUT_OPEN: Final = "::: {.callout}"
@@ -84,6 +85,7 @@ LIST_SEPARATOR: Final = "&nbsp;"
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
 FACT_SEPARATOR: Final = " · "
+COVER_LINK_LABEL: Final = "Cover image"
 Place = Literal["top", "callout", "column"]
 OwnFormNode = FactStrip | DefinitionList | Cards
 CanvasNode = GenericNode | OwnFormNode
@@ -386,7 +388,8 @@ def _with_lists_kept_apart(
 
 
 class _CanvasWriter:
-    def __init__(self) -> None:
+    def __init__(self, heading_shift: int) -> None:
+        self.heading_shift = heading_shift
         self.runs = _SlackRuns(LINE_BREAK_ON_ONE_LINE)
         self.paragraph_runs = _SlackRuns(HARD_LINE_BREAK)
         self.table_cell_runs = _SlackRuns(HTML_LINE_BREAK)
@@ -422,6 +425,16 @@ class _CanvasWriter:
                 "the export check should have refused it"
             )
         return pipe_table_lines(table, self.table_cell_runs, dash_item_marker)
+
+    def heading_line(self, heading: Heading) -> str:
+        level = heading.level - self.heading_shift
+        if level > CANVAS_HEADING_LEVEL_LIMIT:
+            raise ExportInvariantError(
+                f"a Slack canvas holds headings down to level {CANVAS_HEADING_LEVEL_LIMIT}, "
+                f"so it has no form for '{export_visible_text(heading.text)}' at level {level}; "
+                "the export check should have refused it"
+            )
+        return heading_line(level, self.inline(heading.text))
 
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)
@@ -461,7 +474,7 @@ class _CanvasWriter:
     def lines(self, block: _CanvasBlock) -> list[str]:
         match block:
             case Heading():
-                return [heading_line(min(block.level, DEEPEST_CANVAS_HEADING), self.inline(block.text))]
+                return [self.heading_line(block)]
             case Paragraph():
                 return self.paragraph_lines(block)
             case _Title():
@@ -505,7 +518,7 @@ def _with_a_list_separator_where_lists_meet(
 
 
 def render_slack_regions(document: LoweredDocument) -> tuple[str, ...]:
-    writer = _CanvasWriter()
+    writer = _CanvasWriter(canvas_heading_shift(document.body))
     texts: list[str] = []
     last_block: _CanvasBlock | None = None
     for region in document.regions:
@@ -516,9 +529,18 @@ def render_slack_regions(document: LoweredDocument) -> tuple[str, ...]:
     return tuple(texts)
 
 
+def canvas_title(document: LoweredDocument) -> str:
+    return f"{document.icon} {document.title}" if document.icon else document.title
+
+
+def render_slack_document(document: LoweredDocument) -> str:
+    cover = (Paragraph((Link(plain(COVER_LINK_LABEL), document.cover),)),) if document.cover else ()
+    return render_slack((*cover, *document.body))
+
+
 def render_slack(nodes: Sequence[Node]) -> str:
     blocks = _canvas_blocks(nodes, "top")
-    text = "\n".join(_CanvasWriter().blocks(blocks)) + "\n"
+    text = "\n".join(_CanvasWriter(canvas_heading_shift(nodes)).blocks(blocks)) + "\n"
     if len(text) > SLACK_CANVAS_CHARACTER_LIMIT:
         raise _canvas_over_the_size_limit(len(text))
     return text

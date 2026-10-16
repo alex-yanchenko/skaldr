@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
@@ -384,6 +385,14 @@ def heading_of(node: Node) -> Heading | None:
     if isinstance(node, Toggle) and node.heading_level is not None:
         return Heading(node.heading_level, node.title, node.anchor)
     return None
+
+
+def uses_heading_level_1(nodes: Iterable[Node]) -> bool:
+    for node in nodes:
+        heading = heading_of(node)
+        if (heading is not None and heading.level == 1) or uses_heading_level_1(nested_nodes(node)):
+            return True
+    return False
 
 
 def _all_authored_at(nodes: tuple[Node, ...], path: str) -> tuple[Node, ...]:
