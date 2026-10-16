@@ -4729,7 +4729,10 @@ def test_a_muted_or_toned_row_paints_opaque_cells_over_a_column_tint() -> None:
         )
     } == {
         "& tbody tr.row.muted": [],
-        "& tbody tr.row.muted td": ["position:relative;background-color:var(--surface)"],
+        "& tbody tr.row.muted td": [
+            "position:relative;background-color:var(--surface);"
+            "border-block-end-color:color-mix(insrgb,var(--line)55%,var(--surface))"
+        ],
         "& tbody tr.row.muted td::after": [
             'content:"";position:absolute;inset:0;background:var(--surface);opacity:0.45;pointer-events:none'
         ],

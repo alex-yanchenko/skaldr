@@ -497,7 +497,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& tbody tr.row:hover td{background-image:linear-gradient(var(--row-hover),var(--row-hover))}
 		/* Row emphasis (reserved row key `tone`): muted = a struck, dimmed "rejected" row; danger = a
 		   red-tinted "bad" row. The strike sits on the title only — struck numbers read as edits. */
-		& tbody tr.row.muted td{position:relative; background-color:var(--surface)}
+		& tbody tr.row.muted td{position:relative; background-color:var(--surface);
+			border-block-end-color:color-mix(in srgb, var(--line) 55%, var(--surface))}
 		& tbody tr.row.muted td::after{content:""; position:absolute; inset:0; background:var(--surface); opacity:0.45; pointer-events:none}
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
 		& tbody tr.row.danger td{background:var(--danger-bg)}
