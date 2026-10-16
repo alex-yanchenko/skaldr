@@ -14,16 +14,22 @@ from skaldr.export.slack import render_slack, render_slack_regions
 from skaldr.export.tree import (
     BlockRegion,
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     Graph,
     GraphNode,
     GridColumn,
     Heading,
     HeadingLevel,
+    LabelledValue,
     ListEntry,
     ListKind,
     ListNode,
@@ -379,6 +385,110 @@ def test_a_nested_list_in_a_table_cell_writes_every_item_with_its_own_kind_of_ma
     table = TableNode((make_table_cell("N"),), (TableRow((TableCell((), blocks=(items,)),)),))
 
     assert render_slack([table]) == "| N |\n| --- |\n| 1. a<br>- b<br>2. c |\n"
+
+
+def test_a_fact_strip_is_one_paragraph_of_its_facts_joined_by_middle_dots() -> None:
+    strip = FactStrip(
+        (
+            LabelledValue("Site:", make_rich_text("West")),
+            LabelledValue(None, make_rich_text("Q3")),
+            LabelledValue("Owner", make_rich_text("Ops")),
+        )
+    )
+
+    assert render_slack([strip]) == "**Site**: West · Q3 · **Owner**: Ops\n"
+
+
+def test_a_fact_strip_beside_a_list_needs_no_list_separator() -> None:
+    strip = FactStrip((LabelledValue("Site", make_rich_text("West")),))
+
+    assert render_slack([strip, make_bullets(make_list_entry("a"))]) == "**Site**: West\n\n* a\n"
+
+
+def test_a_definition_list_is_a_bold_term_paragraph_then_its_body_blocks() -> None:
+    steps = make_bullets(make_list_entry("a"))
+    definitions = DefinitionList(
+        (
+            Definition("Fix", (Paragraph(make_rich_text("Recount twice.")), steps)),
+            Definition("Gap", ()),
+            Definition("Late", (Paragraph(make_rich_text("Friday.")),)),
+        )
+    )
+
+    assert render_slack([definitions]) == (
+        "**Fix**\n\nRecount twice.\n\n* a\n\n**Gap**\n\n**Late**\n\nFriday.\n"
+    )
+
+
+def test_a_definition_body_with_text_after_its_list_is_written_since_it_sits_in_no_list_item() -> None:
+    body = "first\n\nsecond\n\n- x\n- y\n\nthird"
+    block = {"type": "def_list", "items": [{"term": "Fix", "body": body}]}
+
+    assert slack_of([block]) == "**Fix**\n\nfirst\n\nsecond\n\n* x\n* y\n\nthird\n"
+
+
+def test_a_definition_body_with_two_lists_keeps_them_apart_with_the_list_separator() -> None:
+    block = {"type": "def_list", "items": [{"term": "Scan", "body": "Lead.\n\n- a\n- b\n\n1. c\n2. d"}]}
+
+    assert slack_of([block]) == f"**Scan**\n\nLead.\n\n* a\n* b\n\n{LIST_SEPARATOR}\n\n1. c\n2. d\n"
+
+
+def test_cards_are_a_column_layout_with_each_value_and_its_note_in_its_own_column() -> None:
+    cards = Cards(
+        (
+            Card("Clean", make_rich_text("9"), note="since Monday"),
+            Card("Late", make_rich_text("2"), tone="danger"),
+        )
+    )
+
+    assert render_slack([cards]) == (
+        "::: {.layout}\n"
+        "::: {.column}\n"
+        "**Clean**: 9\n"
+        "\n"
+        "since Monday\n"
+        ":::\n"
+        "::: {.column}\n"
+        "🔴 **Late**: 2\n"
+        ":::\n"
+        ":::\n"
+    )
+
+
+def test_more_than_three_cards_continue_in_a_next_layout_and_a_lone_card_is_its_own_blocks() -> None:
+    cards = Cards(tuple(Card(name, make_rich_text("1")) for name in "ABCD"))
+
+    assert render_slack([cards]) == (
+        "::: {.layout}\n"
+        "::: {.column}\n**A**: 1\n:::\n"
+        "::: {.column}\n**B**: 1\n:::\n"
+        "::: {.column}\n**C**: 1\n:::\n"
+        ":::\n"
+        "\n"
+        "**D**: 1\n"
+    )
+
+
+def test_cards_inside_a_callout_or_a_column_are_bullets_since_a_layout_cannot_nest() -> None:
+    cards = Cards((Card("Clean", make_rich_text("9"), note="since Monday"),))
+    column = Columns((GridColumn(50, (cards,)), GridColumn(50, (make_paragraph("b"),))))
+
+    assert render_slack([Callout("info", (cards,)), column]) == (
+        "::: {.callout}\n"
+        "💡\n"
+        "\n"
+        "* **Clean**: 9 since Monday\n"
+        ":::\n"
+        "\n"
+        "::: {.layout}\n"
+        "::: {.column}\n"
+        "* **Clean**: 9 since Monday\n"
+        ":::\n"
+        "::: {.column}\n"
+        "b\n"
+        ":::\n"
+        ":::\n"
+    )
 
 
 def test_a_numbered_list_in_a_quote_is_refused_since_a_canvas_quote_holds_only_text() -> None:
@@ -1637,18 +1747,6 @@ def test_a_walkthrough_step_holding_a_block_a_canvas_list_item_cannot_hold_is_re
 @pytest.mark.parametrize(
     ("blocks", "what", "path"),
     [
-        pytest.param(
-            [{"type": "def_list", "items": [{"term": "Scan", "body": "Lead.\n\n- a\n- b\n\n1. c\n2. d"}]}],
-            "a second nested list",
-            "blocks.0.def_list",
-            id="definition-with-two-lists",
-        ),
-        pytest.param(
-            [{"type": "def_list", "items": [{"term": "Scan", "body": "Lead.\n\n- a\n- b\n\nTail."}]}],
-            "a paragraph after its nested list",
-            "blocks.0.def_list",
-            id="definition-with-a-paragraph-after-its-list",
-        ),
         pytest.param(
             [{"type": "text", "body": "- a\n  - b\n  - c\n\n  1. d\n  2. e\n- f"}],
             "a second nested list",

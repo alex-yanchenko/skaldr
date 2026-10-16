@@ -75,6 +75,7 @@ from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Columns,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
@@ -450,6 +451,15 @@ def _nodes_adf_cannot_place_in_a_list_item(child: GenericNode) -> Iterator[Gener
             return
 
 
+def _nodes_as_checked(nodes: Iterable[Node]) -> Iterator[GenericNode]:
+    for node in nodes:
+        if isinstance(node, DefinitionList):
+            for definition in node.definitions:
+                yield from _nodes_as_checked(definition.body)
+        else:
+            yield from folded([node])
+
+
 def _document_position(path: str) -> DocumentPosition:
     return tuple((0, int(part), "") if part.isdigit() else (1, 0, part) for part in path.split("."))
 
@@ -480,7 +490,7 @@ class _TreeWalk:
             yield self.hit(details, path)
 
     def nodes(self, nodes: Iterable[Node], place: _Place) -> Iterator[FeatureHit]:
-        for node in folded(nodes):
+        for node in _nodes_as_checked(nodes):
             yield from self.node(node, place)
 
     def inline_hits(self, node: Node, texts: Iterable[ExportRich]) -> Iterator[FeatureHit]:

@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Final, Literal, NoReturn
+from typing import Final, Literal, NoReturn, TypeGuard
 
 from typing_extensions import assert_never
 
@@ -13,8 +13,11 @@ from skaldr.export.capabilities import (
     TARGET_SUBJECTS,
     in_unicode_script_form,
 )
-from skaldr.export.folds import dash_item_marker, folded, quote_lines
+from skaldr.export.folds import card_text, dash_item_marker, folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
+from skaldr.export.inline import bold, plain
+from skaldr.export.lower.context import spaced as spaced_runs
+from skaldr.export.lower.context import with_bold_label
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
@@ -37,11 +40,15 @@ from skaldr.export.runs import ExportRich
 from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
 from skaldr.export.tree import (
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     GenericNode,
     Heading,
     ListEntry,
@@ -76,7 +83,10 @@ BULLET_INDENT: Final = len(BULLET_MARKER) + 1
 LIST_SEPARATOR: Final = "&nbsp;"
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
+FACT_SEPARATOR: Final = " · "
 Place = Literal["top", "callout", "column"]
+OwnFormNode = FactStrip | DefinitionList | Cards
+CanvasNode = GenericNode | OwnFormNode
 
 
 class _SlackRuns(CommonMarkRuns):
@@ -256,7 +266,62 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
     ]
 
 
-def _canvas_block(node: GenericNode, place: Place) -> list[_CanvasBlock]:
+def _fact_strip_paragraph(strip: FactStrip) -> Paragraph:
+    facts = [with_bold_label(fact.label, fact.value) for fact in strip.facts]
+    return Paragraph(spaced_runs([fact for fact in facts if fact], FACT_SEPARATOR))
+
+
+def _canvas_definitions(node: DefinitionList, place: Place) -> list[_CanvasBlock]:
+    return [
+        block
+        for definition in node.definitions
+        for block in (Paragraph(bold(definition.term)), *_canvas_blocks(definition.body, place))
+    ]
+
+
+def _card_column(card: Card) -> tuple[_CanvasBlock, ...]:
+    note = (Paragraph(plain(card.note)),) if card.note else ()
+    return (Paragraph(card_text(card)), *note)
+
+
+def _canvas_cards(node: Cards) -> list[_CanvasBlock]:
+    blocks: list[_CanvasBlock] = []
+    for start in range(0, len(node.cards), CANVAS_LAYOUT_COLUMN_LIMIT):
+        row = node.cards[start : start + CANVAS_LAYOUT_COLUMN_LIMIT]
+        if len(row) == 1:
+            blocks.extend(_card_column(row[0]))
+        else:
+            blocks.append(_Layout(tuple(_card_column(card) for card in row)))
+    return blocks
+
+
+def _written_in_its_own_form(node: Node, place: Place) -> TypeGuard[OwnFormNode]:
+    match node:
+        case FactStrip() | DefinitionList():
+            return True
+        case Cards():
+            return place == "top"
+        case _:
+            return False
+
+
+def _canvas_forms(node: Node, place: Place) -> tuple[CanvasNode, ...]:
+    return (node,) if _written_in_its_own_form(node, place) else folded([node])
+
+
+def _canvas_block(node: CanvasNode, place: Place) -> list[_CanvasBlock]:
+    match node:
+        case FactStrip():
+            return [_fact_strip_paragraph(node)]
+        case DefinitionList():
+            return _canvas_definitions(node, place)
+        case Cards():
+            return _canvas_cards(node)
+        case _:
+            return _canvas_generic_block(node, place)
+
+
+def _canvas_generic_block(node: GenericNode, place: Place) -> list[_CanvasBlock]:
     _require_the_place_can_hold(node, place)
     match node:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
@@ -282,7 +347,9 @@ def _canvas_block(node: GenericNode, place: Place) -> list[_CanvasBlock]:
 
 
 def _canvas_blocks(nodes: Sequence[Node], place: Place) -> list[_CanvasBlock]:
-    return [block for node in folded(nodes) for block in _canvas_block(node, place)]
+    return [
+        block for node in nodes for form in _canvas_forms(node, place) for block in _canvas_block(form, place)
+    ]
 
 
 def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:

@@ -2,10 +2,7 @@ Reconciled review of the 10,000-unit cycle count: what didn't match, why, and th
 
 Mixed audience: ops reads the impact, the floor team reads the fix.
 
-* **Source**: WMS export
-* **Period**: Q3 2026
-* **Site**: DC-West
-* **Owner**: Inventory Ops
+**Source**: WMS export · **Period**: Q3 2026 · **Site**: DC-West · **Owner**: Inventory Ops
 
 ## Overview
 
@@ -16,13 +13,28 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 * **Method**: `full cycle count`
 * **Mode**: strict
 
-&nbsp;
+::: {.layout}
+::: {.column}
+**Matched cleanly**: 8,500 (85.0%) 🟢 **▲ +3%**
+:::
+::: {.column}
+**Floor: fixable**: 1,100 (11.0%) 🟡 **Floor**
 
-* **Matched cleanly**: 8,500 (85.0%) 🟢 **▲ +3%**
-* **Floor: fixable**: 1,100 (11.0%) 🟡 **Floor** Miscounts + mislabeled bins we can correct.
-* **Vendor: escalate**: 400 (4.0%) 🟢 **▼ −90** 🔴 **Vendor**
-* 🟣 **Count status**: HEALTHY
-* ⚪ **Total units**: 10,000
+Miscounts + mislabeled bins we can correct.
+:::
+::: {.column}
+**Vendor: escalate**: 400 (4.0%) 🟢 **▼ −90** 🔴 **Vendor**
+:::
+:::
+
+::: {.layout}
+::: {.column}
+🟣 **Count status**: HEALTHY
+:::
+::: {.column}
+⚪ **Total units**: 10,000
+:::
+:::
 
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
@@ -112,8 +124,13 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 ### Sign-off and rollback
 
-* **Owner**: Inventory Ops. **@site-lead** signs off each fix.
-* **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+**Owner**
+
+Inventory Ops. **@site-lead** signs off each fix.
+
+**Rollback**
+
+Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 
 ---
 
@@ -212,14 +229,7 @@ The cards on the left summarise; the panels below break down count progress and 
 
 ## Recount Zone C
 
-* **Status**: In Progress
-* **Priority**: High
-* **Assignee**: ada
-* **Due**: 2026-10-15
-* **Labels**: recount, bins
-* **Estimate**: 3
-* **Relates**: Appendix: discrepancy-reason raw counts
-* **team**: Floor ops
+**Status**: In Progress · **Priority**: High · **Assignee**: ada · **Due**: 2026-10-15 · **Labels**: recount, bins · **Estimate**: 3 · **Relates**: Appendix: discrepancy-reason raw counts · **team**: Floor ops
 
 Zone C holds most of the mislabeled bins, so it is recounted first.
 
@@ -276,9 +286,19 @@ One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reaso
 
 ## Readiness by zone
 
-* 🟡 **Floor**: 7 (43.8%)
-* 🔵 **System**: 2 (12.5%)
-* 🔴 **Vendor**: 2 (12.5%) Awaiting the vendor's corrected ASN.
+::: {.layout}
+::: {.column}
+🟡 **Floor**: 7 (43.8%)
+:::
+::: {.column}
+🔵 **System**: 2 (12.5%)
+:::
+::: {.column}
+🔴 **Vendor**: 2 (12.5%)
+
+Awaiting the vendor's corrected ASN.
+:::
+:::
 
 |  | Scanned | Reconciled | Re-labeled | Signed off |
 | --- | --- | --- | --- | --- |

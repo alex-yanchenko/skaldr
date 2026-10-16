@@ -106,7 +106,7 @@ def _definition_entry(definition: Definition) -> ListEntry:
     return ListEntry(with_bold_label(definition.term, ()), children=body)
 
 
-def _card_text(card: Card) -> ExportRich:
+def card_text(card: Card) -> ExportRich:
     if card.badge is None:
         return with_bold_label(card.label, card.value, card.tone)
     chip = Chip.on_one_line(card.label or "", card.badge)
@@ -121,7 +121,7 @@ def _card_text(card: Card) -> ExportRich:
 
 def _card_entry(card: Card, path: str | None) -> ListEntry:
     note: tuple[Node, ...] = (Paragraph(plain(card.note), "muted", authored_at=path),) if card.note else ()
-    return ListEntry(_card_text(card), children=note)
+    return ListEntry(card_text(card), children=note)
 
 
 def _event_entry(event: TimelineEvent, path: str | None) -> ListEntry:
