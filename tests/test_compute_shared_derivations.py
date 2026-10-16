@@ -4,8 +4,6 @@ from typing import Any
 import pytest
 
 from skaldr.compute import (
-    DerivedCardTally,
-    MatrixCellDisplay,
     RecordedBody,
     ResponseCaption,
     derived_card_tally,
@@ -17,7 +15,7 @@ from skaldr.compute import (
     swimlane_totals,
     table_tallies,
 )
-from skaldr.models import Cards, Comparison, MatrixCell, Request, Swimlane, Table, parse_report
+from skaldr.models import Card, Cards, Comparison, MatrixCell, Request, Swimlane, Table, parse_report
 from tests.factories import (
     API_BADGES,
     make_command_request,
@@ -101,10 +99,17 @@ def test_a_derived_card_tally_reads_a_matrix_or_sums_its_tables() -> None:
     assert isinstance(cards, Cards)
     matrices, tables = matrix_tallies(report), table_tallies(report)
 
-    assert [derived_card_tally(card, "API", matrices, tables) for card in cards.items] == [
-        DerivedCardTally(counted=1, total=2),
-        DerivedCardTally(counted=2, total=3),
+    assert [derived_card_tally(card, matrices, tables)._asdict() for card in cards.items] == [
+        {"counted": 1, "total": 2},
+        {"counted": 2, "total": 3},
     ]
+
+
+def test_a_card_that_is_not_derived_counts_no_badge() -> None:
+    card = Card.model_validate({"label": "Plain", "value": 3})
+
+    with pytest.raises(ValueError, match="a card that is not derived counts no badge"):
+        _ = card.counted_badge
 
 
 def test_a_table_titles_its_first_text_column_and_sums_its_reconcile_or_totals_column() -> None:
@@ -249,11 +254,11 @@ def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() 
         MatrixCell(row="r", col="c", label="n/a"),
     ]
 
-    assert [matrix_cell_display(cell, badges) for cell in cells] == [
-        MatrixCellDisplay(tone="blue", text="api"),
-        MatrixCellDisplay(tone="blue", text="yes"),
-        MatrixCellDisplay(tone="amber", text=""),
-        MatrixCellDisplay(tone=None, text="n/a"),
+    assert [matrix_cell_display(cell, badges)._asdict() for cell in cells] == [
+        {"tone": "blue", "text": "api"},
+        {"tone": "blue", "text": "yes"},
+        {"tone": "amber", "text": ""},
+        {"tone": None, "text": "n/a"},
     ]
 
 

@@ -39,6 +39,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    JsonValue,
     StrictBool,
     StringConstraints,
     Tag,
@@ -652,6 +653,12 @@ class Card(FrozenModel):
     def derived(self) -> bool:
         return self.of_matrix is not None or self.of_tables is not None
 
+    @property
+    def counted_badge(self) -> str:
+        if not self.derived or self.badge is None:
+            raise ValueError("a card that is not derived counts no badge")
+        return self.badge
+
     @model_validator(mode="after")
     def _shape(self) -> "Card":
         if self.of_matrix is not None and self.of_tables is not None:
@@ -1213,7 +1220,6 @@ class RowGroup:
 
 
 def col_sum(rows: Sequence[Row], key: str) -> float:
-    """Sum a number column's values (ints stay ints; floats are not truncated)."""
     return sum(row.numbers[key] for row in rows)
 
 
@@ -1258,7 +1264,7 @@ def _badge_cell(value: object, placement: ColumnPlacement, loc: str) -> tuple[st
         keys = _as_badge_list(value)
         if not keys or not all(isinstance(key, str) for key in keys):
             raise ValueError(f"{loc}: cell badge needs a key or a non-empty list of keys")
-    return tuple(key.strip() for key in cast("list[str]", keys) if key.strip())
+    return tuple(trimmed for key in cast("list[str]", keys) if (trimmed := key.strip()))
 
 
 def _indicator_cell(value: object, loc: str) -> ToneLiteral | None:
@@ -1400,11 +1406,6 @@ class Table(_Block):
     @model_validator(mode="before")
     @classmethod
     def _expand_positional_rows(cls, data: Any) -> Any:
-        """Normalise a positional (list) row to a mapping before field validation: zip its values with
-        the column keys in declared order. A list whose length doesn't match the columns is an error
-        (a silent zip would drop or blank cells). Every mapping row, expanded or authored, then has its
-        row tone and indicator values read through the palette aliases (red → danger), so the model and
-        the typed rows hold canonical tones."""
         if not isinstance(data, dict):
             return data
         fields = cast("dict[str, Any]", data)
@@ -3244,8 +3245,8 @@ def _badge_keys_in_cell(path: str, value: Any) -> Iterator[tuple[str, str]]:
         else [(path, value)]
     )
     for place, candidate in placed:
-        if isinstance(candidate, str) and candidate.strip():
-            yield place, candidate.strip()
+        if isinstance(candidate, str) and (trimmed := candidate.strip()):
+            yield place, trimmed
 
 
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
@@ -3310,7 +3311,9 @@ class Index(FrozenModel):
         return parts
 
 
-_BLOCKS_OR_AN_INDEX_IN_SCHEMA: Final = {"anyOf": [{"required": ["blocks"]}, {"required": ["index"]}]}
+_BLOCKS_OR_AN_INDEX_IN_SCHEMA: Final[dict[str, JsonValue]] = {
+    "anyOf": [{"required": ["blocks"]}, {"required": ["index"]}]
+}
 
 
 class Report(FrozenModel):
