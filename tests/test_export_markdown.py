@@ -1074,10 +1074,10 @@ def test_a_subtitle_led_by_spaces_and_a_dash_stays_a_paragraph() -> None:
     )
 
 
-def test_a_callout_led_by_a_list_puts_its_icon_on_a_line_of_its_own() -> None:
-    callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),))
+def test_a_callout_led_by_a_list_has_a_blank_line_between_its_alert_line_and_the_list() -> None:
+    callout = Callout("info", (ListNode("number", (ListEntry((Plain("a"),)),), start=3),))
 
-    assert render_markdown([callout]) == "> 💡\n>\n> - a\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n>\n> 3. a\n"
 
 
 def test_a_table_of_contents_entry_with_no_heading_is_its_title_alone() -> None:
@@ -1187,15 +1187,15 @@ def test_lists_around_an_authored_grid_stay_separate_lists_in_github() -> None:
 
 
 def test_a_callout_whose_first_paragraph_is_empty_keeps_its_icon_off_the_list_that_follows() -> None:
-    callout = Callout("info", (Paragraph(()), make_bullets("first", "second")))
+    callout = Callout("info", (Paragraph(()), make_bullets("first", "second")), icon="💡")
 
-    assert render_markdown([callout]) == "> 💡\n>\n> - first\n> - second\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n> 💡\n>\n> - first\n> - second\n"
 
 
 def test_a_callout_with_an_empty_first_paragraph_puts_its_icon_before_a_later_paragraph() -> None:
-    callout = Callout("info", (Paragraph(()), make_paragraph("later")))
+    callout = Callout("info", (Paragraph(()), make_paragraph("later")), icon="💡")
 
-    assert render_markdown([callout]) == "> 💡 later\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n> 💡 later\n"
 
 
 def _github_html(markdown: str) -> str:
@@ -1601,9 +1601,13 @@ def test_a_paragraph_nested_in_callouts_is_rendered_once(monkeypatch: pytest.Mon
 @pytest.mark.parametrize(
     ("node", "markdown"),
     [
-        pytest.param(Callout("info", (ListNode("bullet", ()),)), "> 💡\n", id="callout-with-nothing-to-say"),
         pytest.param(
-            Callout("warning", (Paragraph((Plain("careful"),)),)), "> ⚠️ careful\n", id="callout-paragraph"
+            Callout("info", (ListNode("bullet", ()),)), "> [!NOTE]\n", id="callout-with-nothing-to-say"
+        ),
+        pytest.param(
+            Callout("warning", (Paragraph((Plain("careful"),)),)),
+            "> [!WARNING]\n> careful\n",
+            id="callout-paragraph",
         ),
         pytest.param(Quote((Paragraph((Plain("said"),)),)), "> said\n", id="quote"),
         pytest.param(
@@ -1753,25 +1757,69 @@ def test_a_web_image_and_a_media_block_nest_in_a_section_or_a_grid_cell(
     )
 
 
-def test_a_callout_is_a_blockquote_led_by_its_icon_and_bold_title() -> None:
+def test_a_callout_is_an_alert_over_its_bold_title_and_body() -> None:
     callout = {"type": "callout", "tone": "warning", "title": "Heads up", "body": "one\n\ntwo"}
 
-    assert markdown_of([callout]) == "> ⚠️ **Heads up**\n>\n> one\n>\n> two\n"
+    assert markdown_of([callout]) == "> [!WARNING]\n> **Heads up**\n>\n> one\n>\n> two\n"
 
 
-def test_a_callout_and_a_note_icon_take_the_place_of_the_tone_icon() -> None:
+@pytest.mark.parametrize(
+    ("tone", "alert"),
+    [
+        pytest.param("info", "NOTE", id="info"),
+        pytest.param("sky", "NOTE", id="sky"),
+        pytest.param("neutral", "NOTE", id="neutral"),
+        pytest.param("success", "TIP", id="success"),
+        pytest.param("teal", "TIP", id="teal"),
+        pytest.param("warning", "WARNING", id="warning"),
+        pytest.param("danger", "CAUTION", id="danger"),
+        pytest.param("accent", "IMPORTANT", id="accent"),
+    ],
+)
+def test_a_callout_tone_picks_its_alert_type(tone: ToneName, alert: str) -> None:
+    assert render_markdown([Callout(tone, (Paragraph((Plain("x"),)),))]) == f"> [!{alert}]\n> x\n"
+
+
+def test_a_note_is_a_note_alert() -> None:
+    assert markdown_of([{"type": "note", "title": "Aside", "body": "text"}]) == (
+        "> [!NOTE]\n> **Aside**\n>\n> text\n"
+    )
+
+
+def test_a_callout_and_a_note_icon_lead_the_alert_body() -> None:
     blocks = [
         {"type": "callout", "tone": "warning", "icon": "🚧", "title": "Heads up", "body": "one"},
         {"type": "note", "icon": "📌", "body": "aside"},
     ]
 
-    assert markdown_of(blocks) == "> 🚧 **Heads up**\n>\n> one\n\n> 📌 aside\n"
+    assert markdown_of(blocks) == ("> [!WARNING]\n> 🚧 **Heads up**\n>\n> one\n\n> [!NOTE]\n> 📌 aside\n")
 
 
-def test_an_icon_leads_a_callout_whose_first_block_is_a_list_on_a_line_of_its_own() -> None:
+def test_an_icon_leads_an_alert_whose_first_block_is_a_list_on_a_line_of_its_own() -> None:
     callout = Callout("info", (ListNode("bullet", (ListEntry((Plain("a"),)),)),), icon="🚀")
 
-    assert render_markdown([callout]) == "> 🚀\n>\n> - a\n"
+    assert render_markdown([callout]) == "> [!NOTE]\n> 🚀\n>\n> - a\n"
+
+
+def test_a_callout_with_nothing_inside_is_its_alert_line_alone() -> None:
+    assert render_markdown([Callout("danger", ())]) == "> [!CAUTION]\n"
+
+
+def test_a_callout_inside_a_list_item_or_a_callout_is_a_quote_led_by_its_icon() -> None:
+    inner = Callout("success", (Paragraph((Plain("done"),)),))
+    nodes = [
+        ListNode("bullet", (ListEntry((Plain("step"),), children=(inner,)),)),
+        Callout("warning", (Paragraph((Plain("outer"),)), inner)),
+    ]
+
+    assert render_markdown(nodes) == ("- step\n\n  > ✅ done\n\n> [!WARNING]\n> outer\n>\n> > ✅ done\n")
+
+
+def test_a_callout_after_one_that_held_a_callout_is_an_alert_again() -> None:
+    inner = Callout("success", (Paragraph((Plain("done"),)),))
+    nodes = [Callout("warning", (inner,)), Callout("info", (Paragraph((Plain("later"),)),))]
+
+    assert render_markdown(nodes) == "> [!WARNING]\n>\n> > ✅ done\n\n> [!NOTE]\n> later\n"
 
 
 def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:
@@ -1780,10 +1828,10 @@ def test_a_quote_keeps_its_paragraphs_and_italic_cite() -> None:
     assert markdown_of([quote]) == "> first\n>\n> second\n>\n> *Ops lead*\n"
 
 
-def test_list_lines_in_a_callout_body_become_a_list_inside_the_quote() -> None:
+def test_list_lines_in_a_callout_body_become_a_list_inside_the_alert() -> None:
     callout = {"type": "callout", "tone": "info", "body": "Checks:\n- lint\n- test"}
 
-    assert markdown_of([callout]) == "> 💡 Checks:\n>\n> - lint\n> - test\n"
+    assert markdown_of([callout]) == "> [!NOTE]\n> Checks:\n>\n> - lint\n> - test\n"
 
 
 def test_list_lines_in_a_quote_are_lines_led_by_their_marker() -> None:

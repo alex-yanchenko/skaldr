@@ -1498,10 +1498,10 @@ case, where the page is shared as a URL an agent later has to read back.
 | --- | --- | --- |
 | `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points or badges it cannot show | the same |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series, stacked or not, is a Mermaid xy chart over its data table; a chart with several series is its data table alone, with a `Total` row of each category's stack for stacked bars | the same |
-| `callout`, `note`, a toned `grid` cell | a quote led by an icon | a native callout |
+| `callout`, `note`, a toned `grid` cell | a GitHub alert, `> [!NOTE]` for `info`, `sky` and `neutral` (a `note` is neutral), `> [!TIP]` for `success` and `teal`, `> [!IMPORTANT]` for `accent`, `> [!WARNING]` for `warning` and `> [!CAUTION]` for `danger`; a callout inside a list item, a `grid` cell or another callout, and a toned `grid` cell itself, stays a quote led by its icon, since an alert cannot nest | a native callout |
 | `panel` | a quote led by its bold title and no icon, as on the page | a native callout |
 | a list inside a set-apart body | a Markdown list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number | a native list, nested as written; inside a table cell or a `quote`, each item is a line led by `• ` (`◦ ` when nested) or its number, since a Notion cell or quote holds only text; a list in a muted `text` body keeps the normal text colour |
-| a `callout` or `note` `icon` | the icon that leads the quote | the callout's icon |
+| a `callout` or `note` `icon` | the icon that leads the alert's body, or the quote when the callout is nested; an alert with no `icon` shows GitHub's own | the callout's icon |
 | a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour; a marker holds at most nine digits, so an item past 999999999 is written as 999999999 and still shows its own number, since a reader counts on from the start | a native numbered list when it starts at 1; a list whose `start` is not 1, or a numbered list in prose such as `3. a`, is refused, since Notion numbers every list from 1; number it from 1 |
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
 | a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |

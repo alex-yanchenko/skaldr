@@ -1,6 +1,7 @@
 import unicodedata
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, Literal, NoReturn
@@ -54,6 +55,7 @@ from skaldr.export.tree import (
     TableOfContents,
     Tabs,
     Toggle,
+    ToneName,
     heading_of,
     nested_nodes,
 )
@@ -68,6 +70,17 @@ OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x1F170, 0x1F18A),
 )
 MARKDOWN_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~$"})
+GITHUB_ALERT_TYPE: Final[Mapping[ToneName, str]] = {
+    "info": "NOTE",
+    "sky": "NOTE",
+    "neutral": "NOTE",
+    "muted": "NOTE",
+    "success": "TIP",
+    "teal": "TIP",
+    "warning": "WARNING",
+    "danger": "CAUTION",
+    "accent": "IMPORTANT",
+}
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
     "bullet": "dash",
@@ -191,6 +204,7 @@ def _must_alternate_markers(family: MarkerFamily | None, after: _ListTail | None
 class _MarkdownWriter:
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.runs = _MarkdownRuns(heading_slugs)
+        self.container_depth = 0
 
     def inline(self, runs: ExportRich) -> str:
         return self.runs.write(runs)
@@ -226,7 +240,8 @@ class _MarkdownWriter:
 
     def entry_children(self, entry: ListEntry, width: int, after_a_bare_marker: bool) -> list[str]:
         nodes = folded(entry.children)
-        children = self.blocks(nodes)
+        with self.inside_a_container():
+            children = self.blocks(nodes)
         if not children:
             return []
         gap = [] if after_a_bare_marker or isinstance(nodes[0], ListNode) else [""]
@@ -238,16 +253,34 @@ class _MarkdownWriter:
         body = self.blocks_after(children, None)
         return _Written.of([title, *spaced(body.lines)], body.tail)
 
+    @contextmanager
+    def inside_a_container(self) -> Generator[None]:
+        self.container_depth += 1
+        try:
+            yield
+        finally:
+            self.container_depth -= 1
+
+    def is_an_alert(self, node: Callout) -> bool:
+        return node.shows_icon and node.authored_as != "grid cell" and self.container_depth == 0
+
     def callout_lines(self, node: Callout) -> list[str]:
-        icon = callout_icon(node)
-        body = self.blocks_after(node.children, None)
+        alert = self.is_an_alert(node)
+        icon = node.icon if alert else callout_icon(node)
+        with self.inside_a_container():
+            body = self.blocks_after(node.children, None)
         lines = list(body.lines)
-        if icon is None:
-            return quoted(lines)
-        if lines and body.opens_with_a_paragraph:
-            lines[0] = f"{icon} {lines[0]}"
-        else:
-            lines = [icon, *spaced(lines)]
+        if icon is not None:
+            if lines and body.opens_with_a_paragraph:
+                lines[0] = f"{icon} {lines[0]}"
+            else:
+                lines = [icon, *spaced(lines)]
+        if alert:
+            opens_with_a_paragraph = icon is not None or body.opens_with_a_paragraph
+            lines = [
+                f"[!{GITHUB_ALERT_TYPE[node.tone]}]",
+                *(lines if opens_with_a_paragraph else spaced(lines)),
+            ]
         return quoted(lines)
 
     def media_lines(self, node: Media) -> list[str]:
@@ -315,7 +348,8 @@ class _MarkdownWriter:
                     )
                 return self.titled(styled("bold", self.inline(node.title)), node.children, after)
             case Columns():
-                columns = self.blocks_after(nested_nodes(node), after)
+                with self.inside_a_container():
+                    columns = self.blocks_after(nested_nodes(node), after)
                 return _Written.of(columns.lines, columns.tail)
             case Tabs():
                 return self.tabs_written(node, after)

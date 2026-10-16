@@ -88,10 +88,12 @@ flowchart LR
 
 ✅ done · 🔵 current · ⛔ blocked · ⏸️ deferred
 
-> ⚠️ **Action needed before the next count**
+> [!WARNING]
+> **Action needed before the next count**
 >
 > The `bin > 12` scan rule skipped 260 valid units in overflow aisles. Confirm the rule with the site lead before re-counting.
 
+> [!NOTE]
 > 📏 Counts below are per distinct discrepancy class, not per unit.
 
 ## Discrepancies & fixes
@@ -155,6 +157,7 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 ---
 
+> [!NOTE]
 > 🎤 **For the read-out**
 >
 > Lead with the reconciliation gate: it is the one number leadership tracks.
@@ -349,7 +352,8 @@ Widen the bin-code field to nine digits, then rescan the 500 truncated bins from
 
 **🛑 Vendor**
 
-> 🛑 Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
+> [!CAUTION]
+> Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
 
 ## Where the count comes from
 
@@ -423,7 +427,8 @@ content-type: application/json
 }
 ```
 
-> ✅ **Verdict**: Expected and counted agree, so the bin needs no recount.
+> [!TIP]
+> **Verdict**: Expected and counted agree, so the bin needs no recount.
 
 **✅ an overflow bin**
 
@@ -447,7 +452,8 @@ content-type: application/json
 }
 ```
 
-> ✅ **Verdict**: A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.
+> [!TIP]
+> **Verdict**: A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.
 
 **⚠️ a bin the token cannot read**
 
@@ -468,7 +474,8 @@ content-type: application/json
 }
 ```
 
-> ⚠️ **Verdict**: The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.
+> [!WARNING]
+> **Verdict**: The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.
 
 Overflow bins are the one place the export and the WMS disagree by design. The command below pulls every flagged bin with its gap already worked out. The team's secrets wrapper supplies the token, so there is nothing to fill in: copy it, run it, compare.
 
@@ -497,7 +504,8 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 ]
 ```
 
-> ⚠️ **Verdict**: Two overflow bins short, 26 units between them, matching the manual-path queue.
+> [!WARNING]
+> **Verdict**: Two overflow bins short, 26 units between them, matching the manual-path queue.
 
 **✅ NW-02, the control**
 
@@ -518,7 +526,8 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 ]
 ```
 
-> ✅ **Verdict**: A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.
+> [!TIP]
+> **Verdict**: A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.
 
 ## Reconciling a bin against the live system
 
@@ -553,7 +562,8 @@ content-type: application/json
 }
 ```
 
-> ✅ **Verdict**: Tokens last fifteen minutes, so a long recount needs this step again partway through.
+> [!TIP]
+> **Verdict**: Tokens last fifteen minutes, so a long recount needs this step again partway through.
 
 **Step 2 of 2: Read the bins that did not balance**
 
@@ -580,7 +590,8 @@ x-total-count: 3
 }
 ```
 
-> ✅ **Verdict**: The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.
+> [!TIP]
+> **Verdict**: The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.
 
 **⚠️ once the token has expired**
 
@@ -602,7 +613,8 @@ content-type: application/json
 }
 ```
 
-> ⚠️ **Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
+> [!WARNING]
+> **Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
 
 > **Before the next count**
 >
