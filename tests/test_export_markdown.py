@@ -857,16 +857,69 @@ def test_a_swimlane_group_color_shows_no_dot() -> None:
     assert markdown_of([swimlane]) == "| Lane | Plan<br>Q1 |\n| --- | --- |\n| **Ops** | ⛔ **1** Draft |\n"
 
 
-def test_a_grid_becomes_its_cells_in_order() -> None:
-    grid = {
-        "type": "grid",
-        "cells": [
-            {"span": 2, "blocks": [{"type": "text", "body": "a"}]},
-            {"span": 4, "blocks": [{"type": "text", "body": "b"}]},
-        ],
-    }
+def _text_cell(span: int, body: str, **overrides: Any) -> dict[str, Any]:
+    return {"span": span, "blocks": [{"type": "text", "body": body}], **overrides}
 
-    assert markdown_of([grid]) == "a\n\nb\n"
+
+def test_a_grid_of_up_to_three_plain_cells_is_a_raw_table_with_each_cell_width() -> None:
+    grid = {"type": "grid", "cells": [_text_cell(2, "a"), _text_cell(4, "**b**")]}
+
+    assert markdown_of([grid]) == (
+        '<table>\n<tr>\n<td width="33%">\n\na\n\n</td>\n<td width="67%">\n\n**b**\n\n</td>\n</tr>\n</table>\n'
+    )
+
+
+def test_a_grid_of_four_cells_is_a_raw_table_without_widths() -> None:
+    grid = {"type": "grid", "cells": [_text_cell(1, letter) for letter in "abcd"]}
+
+    assert markdown_of([grid]) == (
+        "<table>\n<tr>\n"
+        "<td>\n\na\n\n</td>\n<td>\n\nb\n\n</td>\n<td>\n\nc\n\n</td>\n<td>\n\nd\n\n</td>\n"
+        "</tr>\n</table>\n"
+    )
+
+
+def test_a_grid_cell_holding_a_table_is_a_raw_table_without_widths_around_a_pipe_table() -> None:
+    inner = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A"}],
+        "rows": [{"a": "x"}],
+    }
+    grid = {"type": "grid", "cells": [{"span": 3, "blocks": [inner]}, _text_cell(3, "b")]}
+
+    assert markdown_of([grid]) == (
+        "<table>\n<tr>\n<td>\n\n| A |\n| --- |\n| x |\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+    )
+
+
+def test_a_toned_grid_cell_is_a_raw_table_without_widths_around_an_icon_led_quote() -> None:
+    grid = {"type": "grid", "cells": [_text_cell(3, "a", tone="warning"), _text_cell(3, "b")]}
+
+    assert markdown_of([grid]) == (
+        "<table>\n<tr>\n<td>\n\n> ⚠️ a\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+    )
+
+
+def test_a_callout_in_a_grid_cell_is_an_icon_led_quote_and_an_empty_cell_is_an_empty_td() -> None:
+    callout = Callout("success", (Paragraph((Plain("done"),)),))
+    grid = Columns((GridColumn(50, (callout,)), GridColumn(50, ())))
+
+    assert render_markdown([grid]) == (
+        '<table>\n<tr>\n<td width="50%">\n\n> ✅ done\n\n</td>\n<td width="50%"></td>\n</tr>\n</table>\n'
+    )
+
+
+def test_a_grid_inside_a_grid_cell_is_a_table_inside_the_td() -> None:
+    inner = Columns(
+        (GridColumn(50, (Paragraph((Plain("i"),)),)), GridColumn(50, (Paragraph((Plain("j"),)),)))
+    )
+    outer = Columns((GridColumn(50, (inner,)), GridColumn(50, (Paragraph((Plain("o"),)),))))
+
+    assert render_markdown([outer]) == (
+        '<table>\n<tr>\n<td width="50%">\n\n'
+        '<table>\n<tr>\n<td width="50%">\n\ni\n\n</td>\n<td width="50%">\n\nj\n\n</td>\n</tr>\n</table>\n\n'
+        '</td>\n<td width="50%">\n\no\n\n</td>\n</tr>\n</table>\n'
+    )
 
 
 @pytest.mark.parametrize(
@@ -1142,7 +1195,13 @@ def test_back_to_back_lists_switch_markers_so_they_stay_separate_lists() -> None
 
 
 def _columns(*cells: tuple[Node, ...]) -> Columns:
-    return Columns(tuple(GridColumn(1, cell) for cell in cells))
+    return Columns(tuple(GridColumn(100 // len(cells), cell) for cell in cells))
+
+
+def _table_of(*cells: str) -> str:
+    width = f' width="{100 // len(cells)}%"'
+    opened = "".join(f"<td{width}>\n\n{cell}\n\n</td>\n" for cell in cells)
+    return f"<table>\n<tr>\n{opened}</tr>\n</table>"
 
 
 @pytest.mark.parametrize(
@@ -1150,17 +1209,17 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
     [
         pytest.param(
             [make_bullets("a", "b"), _columns((make_bullets("c", "d"),), (make_paragraph("t"),))],
-            "- a\n- b\n\n* c\n* d\n\nt\n",
+            "- a\n- b\n\n" + _table_of("- c\n- d", "t") + "\n",
             id="list-then-a-grid-opening-with-a-list",
         ),
         pytest.param(
             [_columns((make_paragraph("t"),), (make_bullets("c"),)), make_bullets("d")],
-            "t\n\n- c\n\n* d\n",
+            _table_of("t", "- c") + "\n\n- d\n",
             id="grid-ending-with-a-list-then-a-list",
         ),
         pytest.param(
             [_columns((make_bullets("a"),)), _columns((make_bullets("b"),)), make_bullets("c")],
-            "- a\n\n* b\n\n- c\n",
+            _table_of("- a") + "\n\n" + _table_of("- b") + "\n\n- c\n",
             id="a-chain-of-lists-through-grids",
         ),
         pytest.param(
@@ -1204,12 +1263,12 @@ def _columns(*cells: tuple[Node, ...]) -> Columns:
                 ListNode("number", (ListEntry((Plain("a"),)),)),
                 _columns((ListNode("number", (ListEntry((Plain("b"),)),)),)),
             ],
-            "1. a\n\n1) b\n",
+            "1. a\n\n" + _table_of("1. b") + "\n",
             id="ordered-lists-either-side-of-a-grid",
         ),
         pytest.param(
             [make_bullets("a"), _columns((Callout("info", (make_bullets("b"),)),)), make_bullets("c")],
-            "- a\n\n> 💡\n>\n> - b\n\n- c\n",
+            "- a\n\n" + _table_of("> 💡\n>\n> - b") + "\n\n- c\n",
             id="a-quoted-list-in-a-grid-separates-the-lists-around-it",
         ),
     ],
@@ -1230,7 +1289,7 @@ def test_lists_around_an_authored_grid_stay_separate_lists_in_github() -> None:
     }
     blocks = [{"type": "list", "items": ["a", "b"]}, grid, {"type": "list", "items": ["e"]}]
 
-    assert markdown_of(blocks) == "- a\n- b\n\n* c\n* d\n\nt\n\n- e\n"
+    assert markdown_of(blocks) == "- a\n- b\n\n" + _table_of("- c\n- d", "t") + "\n\n- e\n"
 
 
 def test_a_callout_whose_first_paragraph_is_empty_keeps_its_icon_off_the_list_that_follows() -> None:

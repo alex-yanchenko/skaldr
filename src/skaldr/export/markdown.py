@@ -48,6 +48,7 @@ from skaldr.export.tree import (
     DisplayMath,
     Divider,
     FactStrip,
+    GridColumn,
     Heading,
     HeadingLevel,
     KeyValueList,
@@ -94,6 +95,7 @@ GITHUB_ALERT_TYPE: Final[Mapping[ToneName, str]] = {
     "accent": "IMPORTANT",
 }
 ORDERED_LIST_TYPE: Final[Mapping[TextNumbering, str]] = {"letters": "a", "roman": "i"}
+MOST_COLUMNS_THAT_KEEP_THEIR_WIDTH: Final = 3
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
     "bullet": "dash",
@@ -257,6 +259,20 @@ def _is_written_natively(node: Node) -> bool:
             return False
 
 
+def _holds_a_table_or_a_tone(column: GridColumn) -> bool:
+    return any(
+        isinstance(child, TableNode) or (isinstance(child, Callout) and child.authored_as == "grid cell")
+        for child in column.children
+    )
+
+
+def _cell_widths(node: Columns) -> list[int | None]:
+    sized = len(node.columns) <= MOST_COLUMNS_THAT_KEEP_THEIR_WIDTH and not any(
+        map(_holds_a_table_or_a_tone, node.columns)
+    )
+    return [column.ratio if sized else None for column in node.columns]
+
+
 def _label_text(label: str | None) -> str:
     return one_line(label or "").removesuffix(":").rstrip()
 
@@ -379,6 +395,20 @@ class _MarkdownWriter:
         cite = [styled("italic", self.inline(node.cite))] if node.cite else []
         return quoted(joined([body, cite]))
 
+    def columns_lines(self, node: Columns) -> list[str]:
+        cells: list[list[str]] = []
+        for column in node.columns:
+            with self.inside_a_container():
+                cells.append(self.blocks(column.children))
+        if not any(cells):
+            return []
+        sizes = _cell_widths(node)
+        lines = ["<table>", "<tr>"]
+        for width, body in zip(sizes, cells, strict=True):
+            opening = f'<td width="{width}%">' if width is not None else "<td>"
+            lines += [opening, "", *body, "", "</td>"] if body else [f"{opening}</td>"]
+        return [*lines, "</tr>", "</table>"]
+
     def fact_strip_lines(self, node: FactStrip) -> list[str]:
         header = tuple(TableCell(plain(_label_text(fact.label))) for fact in node.facts)
         row = TableRow(tuple(TableCell(fact.value) for fact in node.facts))
@@ -471,9 +501,7 @@ class _MarkdownWriter:
                     )
                 return self.details_written(node.title, node.children, after, opened=node.open)
             case Columns():
-                with self.inside_a_container():
-                    columns = self.blocks_after(nested_nodes(node), after)
-                return _Written.of(columns.lines, columns.tail)
+                return _Written.of(self.columns_lines(node))
             case Tabs():
                 return self.tabs_written(node, after)
             case Diagram() if swaps_the_figure(node, "markdown"):

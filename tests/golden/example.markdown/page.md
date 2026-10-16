@@ -266,11 +266,18 @@ Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough
 
 ## At a glance
 
+<table>
+<tr>
+<td>
+
 > 📌
 >
 > | 🟢 Matched cleanly | 🟡 Needs work |
 > | --- | --- |
 > | 8,500 (85.0%) | 1,500 (15.0%) |
+
+</td>
+<td>
 
 > 💡 **Reading this section**
 >
@@ -280,6 +287,10 @@ Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough
 
 * ✅ Reconciliation gate passes.
 * ⏸️ Awaiting `OPS-1234`.
+
+</td>
+</tr>
+</table>
 
 ## Recount Zone C
 
