@@ -188,7 +188,8 @@ def _run_outline(arguments: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="skaldr outline",
         description="List every heading and section of a content file with its anchor, its line range in "
-        "the file and an approximate token count (characters / 4), so one region can be read alone with "
+        "the file and an approximate token count (characters / 4, rounded up), so one region can be read "
+        "alone with "
         "`skaldr show FILE#ANCHOR`. Content an `!include` brings in has no lines in FILE and shows `-`.",
     )
     parser.add_argument("file", metavar="FILE", help="the content YAML to outline (not an index document)")
@@ -196,11 +197,8 @@ def _run_outline(arguments: list[str]) -> int:
     args = parser.parse_args(arguments)
     try:
         outline = outline_file(Path(args.file))
-    except IndexDocumentOutlineError as err:
-        print(f"error: {err}", file=sys.stderr)
-        return 2
     except ReportError as err:
-        return _fail(str(err))
+        return _fail_to_outline(err)
     print(
         json.dumps(outline_json(outline, args.file), indent=2)
         if args.json
@@ -217,18 +215,22 @@ def _run_show(arguments: list[str]) -> int:
     )
     parser.add_argument("region", metavar="FILE#ANCHOR", help="the content file and the region's anchor")
     args = parser.parse_args(arguments)
-    file, _, anchor = str(args.region).rpartition("#")
+    file, _, anchor = args.region.rpartition("#")
     if not file or not anchor:
         parser.error("name the region as FILE#ANCHOR; `skaldr outline FILE` lists the anchors")
     try:
         source = region_source(outline_file(Path(file)), file, anchor)
-    except IndexDocumentOutlineError as err:
-        print(f"error: {err}", file=sys.stderr)
-        return 2
     except (ReportError, UnknownAnchorError, RegionOutsideFileError) as err:
-        return _fail(str(err))
-    print(source, end="")
+        return _fail_to_outline(err)
+    sys.stdout.flush()
+    sys.stdout.buffer.write(source.encode("utf-8"))
+    sys.stdout.buffer.flush()
     return 0
+
+
+def _fail_to_outline(err: ReportError | UnknownAnchorError | RegionOutsideFileError) -> int:
+    print(f"error: {err}", file=sys.stderr)
+    return 2 if isinstance(err, IndexDocumentOutlineError) else 1
 
 
 def _run_publish(argv: list[str]) -> int:

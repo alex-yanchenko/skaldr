@@ -2,10 +2,11 @@ import difflib
 import functools
 import math
 import re
+from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict
 
 import yaml
 
@@ -22,6 +23,7 @@ from skaldr.models import (
 
 _YAML_LINE_BREAKS = "".join(map(chr, (0x0D, 0x0A, 0x85, 0x2028, 0x2029)))
 _YAML_LINE = re.compile(f".*?(?:\r\n|[{_YAML_LINE_BREAKS}])|.+\\Z", re.DOTALL)
+_BLOCK_SCALAR_HEADER = re.compile(r"[|>][1-9+-]*")
 _INCLUDE_TAG = "!include"
 _NULL_TAG = "tag:yaml.org,2002:null"
 _CHARACTERS_PER_TOKEN = 4
@@ -35,9 +37,10 @@ class OutsideFile:
 
 
 _NOT_WRITTEN_IN_PLACE = OutsideFile("is not written in place (it comes through a YAML alias or merge key)")
+_SHARES_WITH_THE_NEXT_BLOCK = OutsideFile("shares its lines with the next block")
+_SHARES_WITH_THE_BLOCK_BEFORE = OutsideFile("shares its lines with the block before it")
 
 Origin = yaml.Node | OutsideFile
-ItemNodes = tuple[yaml.Node, ...] | OutsideFile
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,24 @@ class Region:
         return None if isinstance(self.lines, OutsideFile) else self.lines[1]
 
 
+class OutlineRegionJson(TypedDict):
+    anchor: str
+    kind: Literal["heading", "section"]
+    level: int | None
+    title: str
+    author_set: bool
+    start_line: int | None
+    end_line: int | None
+    tokens: int | None
+
+
+class OutlineJson(TypedDict):
+    file: str
+    lines: int
+    tokens: int
+    regions: list[OutlineRegionJson]
+
+
 @dataclass(frozen=True)
 class Outline:
     source_lines: tuple[str, ...]
@@ -75,13 +96,17 @@ class Outline:
 
 @dataclass(frozen=True)
 class _Placed:
-    items: ItemNodes
+    items: tuple[Origin, ...]
     siblings: Sequence[AnyBlock]
     position: int
 
 
 def approximate_tokens(text: str) -> int:
     return math.ceil(len(text) / _CHARACTERS_PER_TOKEN)
+
+
+def _starts_before(node: yaml.Node, other: yaml.Node) -> bool:
+    return node.start_mark.index < other.start_mark.index
 
 
 def _unless_included(node: yaml.Node) -> Origin:
@@ -91,40 +116,57 @@ def _unless_included(node: yaml.Node) -> Origin:
     return OutsideFile(f"comes from `!include {target}` at line {node.start_mark.line + 1}")
 
 
+def _value_of(mapping: yaml.MappingNode, key: str) -> yaml.Node | None:
+    return next((value for name, value in mapping.value if name.value == key), None)
+
+
 def _child(origin: Origin, step: str) -> Origin:
     if isinstance(origin, OutsideFile):
         return origin
     found: yaml.Node | None = None
     if isinstance(origin, yaml.MappingNode):
-        found = next((value for key, value in origin.value if key.value == step), None)
+        found = _value_of(origin, step)
     elif isinstance(origin, yaml.SequenceNode) and step.isdigit() and int(step) < len(origin.value):
         found = origin.value[int(step)]
-    return _NOT_WRITTEN_IN_PLACE if found is None else _unless_included(found)
-
-
-def _item_nodes(sequence: Origin, count: int) -> ItemNodes:
-    if isinstance(sequence, OutsideFile):
-        return sequence
-    if not isinstance(sequence, yaml.SequenceNode) or len(sequence.value) != count:
+    if found is None or _starts_before(found, origin):
         return _NOT_WRITTEN_IN_PLACE
-    return tuple(sequence.value)
+    return _unless_included(found)
+
+
+def _written_in_place(sequence: yaml.SequenceNode) -> list[Origin]:
+    items: list[Origin] = []
+    floor = sequence.start_mark.index
+    for item in sequence.value:
+        if item.start_mark.index < floor:
+            items.append(_NOT_WRITTEN_IN_PLACE)
+            continue
+        items.append(item)
+        floor = item.start_mark.index + 1
+    return items
+
+
+def _item_origins(sequence: Origin, count: int) -> tuple[Origin, ...]:
+    if isinstance(sequence, OutsideFile):
+        return (sequence,) * count
+    if not isinstance(sequence, yaml.SequenceNode) or len(sequence.value) != count:
+        return (_NOT_WRITTEN_IN_PLACE,) * count
+    return tuple(_written_in_place(sequence))
 
 
 def _origin_of(placed: _Placed) -> Origin:
-    if isinstance(placed.items, OutsideFile):
-        return placed.items
-    return _unless_included(placed.items[placed.position])
+    item = placed.items[placed.position]
+    return item if isinstance(item, OutsideFile) else _unless_included(item)
 
 
 def _child_lists(block: AnyBlock) -> dict[tuple[str, ...], list[AnyBlock]]:
-    lists: dict[tuple[str, ...], list[AnyBlock]] = {}
+    lists: defaultdict[tuple[str, ...], list[AnyBlock]] = defaultdict(list)
     for path, inner in located_child_blocks(block):
-        lists.setdefault(tuple(path.split("."))[:-1], []).append(inner)
+        lists[tuple(path.split("."))[:-1]].append(inner)
     return lists
 
 
 def _placements(blocks: Sequence[AnyBlock], sequence: Origin) -> Iterator[tuple[AnyBlock, _Placed]]:
-    items = _item_nodes(sequence, len(blocks))
+    items = _item_origins(sequence, len(blocks))
     for position, block in enumerate(blocks):
         placed = _Placed(items, blocks, position)
         yield block, placed
@@ -136,12 +178,31 @@ def _is_blank_plain_scalar(node: yaml.Node) -> bool:
     return isinstance(node, yaml.ScalarNode) and node.value == "" and not node.style
 
 
-def _last_line(node: yaml.Node) -> int:
+def _keeps_trailing_blank_lines(scalar: yaml.ScalarNode, source_lines: Sequence[str]) -> bool:
+    mark = scalar.start_mark
+    header = _BLOCK_SCALAR_HEADER.match(source_lines[mark.line], mark.column)
+    return header is not None and "+" in header.group()
+
+
+def _scalar_last_line(scalar: yaml.ScalarNode, source_lines: Sequence[str]) -> int:
+    end, start = scalar.end_mark, scalar.start_mark.line
+    last = min(end.line - 1 if end.column == 0 and end.line > start else end.line, len(source_lines) - 1)
+    if scalar.style in ("|", ">") and not _keeps_trailing_blank_lines(scalar, source_lines):
+        while last > start and not source_lines[last].strip():
+            last -= 1
+    return last
+
+
+def _last_line(node: yaml.Node, source_lines: Sequence[str]) -> int:
     if isinstance(node, yaml.MappingNode) and node.value and not node.flow_style:
         key, value = node.value[-1]
-        return _last_line(key if _is_blank_plain_scalar(value) else value)
+        written = not _is_blank_plain_scalar(value) and not _starts_before(value, key)
+        return _last_line(value if written else key, source_lines)
     if isinstance(node, yaml.SequenceNode) and node.value and not node.flow_style:
-        return _last_line(node.value[-1])
+        written = [item for item in _written_in_place(node) if isinstance(item, yaml.Node)]
+        return _last_line(written[-1], source_lines) if written else node.start_mark.line
+    if isinstance(node, yaml.ScalarNode):
+        return _scalar_last_line(node, source_lines)
     end = node.end_mark
     return end.line - 1 if end.column == 0 and end.line > node.start_mark.line else end.line
 
@@ -150,34 +211,33 @@ def _closes_a_heading_of(level: int, block: AnyBlock) -> bool:
     return isinstance(block, Heading) and block.level <= level
 
 
-def _heading_last_line(heading: Heading, placed: _Placed, items: tuple[yaml.Node, ...]) -> int:
+def _first_sibling_after_region(block: Heading | Section, placed: _Placed) -> int:
+    if isinstance(block, Section):
+        return placed.position + 1
     following = range(placed.position + 1, len(placed.siblings))
-    closing = next(
-        (index for index in following if _closes_a_heading_of(heading.level, placed.siblings[index])), None
+    return next(
+        (index for index in following if _closes_a_heading_of(block.level, placed.siblings[index])),
+        len(placed.siblings),
     )
-    return _last_line(items[-1]) if closing is None else items[closing].start_mark.line - 1
-
-
-def _without_trailing_blank_lines(source_lines: Sequence[str], start: int, end: int) -> int:
-    end = min(end, len(source_lines) - 1)
-    while end > start and not source_lines[end].strip():
-        end -= 1
-    return end
 
 
 def _region_lines(
     block: Heading | Section, placed: _Placed, source_lines: Sequence[str]
 ) -> tuple[int, int] | OutsideFile:
-    if isinstance(placed.items, OutsideFile):
-        return placed.items
     origin = _origin_of(placed)
     if isinstance(origin, OutsideFile):
         return origin
     start = origin.start_mark.line
-    last = (
-        _heading_last_line(block, placed, placed.items) if isinstance(block, Heading) else _last_line(origin)
-    )
-    return start + 1, _without_trailing_blank_lines(source_lines, start, last) + 1
+    after = _first_sibling_after_region(block, placed)
+    covered = [item for item in placed.items[placed.position : after] if isinstance(item, yaml.Node)]
+    end = _last_line(covered[-1], source_lines)
+    before = placed.items[placed.position - 1] if placed.position else None
+    if isinstance(before, yaml.Node) and _last_line(before, source_lines) >= start:
+        return _SHARES_WITH_THE_BLOCK_BEFORE
+    following = placed.items[after] if after < len(placed.items) else None
+    if end < start or (isinstance(following, yaml.Node) and following.start_mark.line <= end):
+        return _SHARES_WITH_THE_NEXT_BLOCK
+    return start + 1, end + 1
 
 
 def _region(block: Heading | Section, anchor: str, placed: _Placed, source_lines: Sequence[str]) -> Region:
@@ -188,8 +248,34 @@ def _region(block: Heading | Section, anchor: str, placed: _Placed, source_lines
         else approximate_tokens("".join(source_lines[lines[0] - 1 : lines[1]]))
     )
     if isinstance(block, Heading):
-        return Region(anchor, "heading", block.level, block.text, block.id is not None, lines, tokens)
-    return Region(anchor, "section", None, block.title, block.id is not None, lines, tokens)
+        return Region(
+            anchor=anchor,
+            kind="heading",
+            level=block.level,
+            title=block.text,
+            author_set=block.id is not None,
+            lines=lines,
+            tokens=tokens,
+        )
+    return Region(
+        anchor=anchor,
+        kind="section",
+        level=None,
+        title=block.title,
+        author_set=block.id is not None,
+        lines=lines,
+        tokens=tokens,
+    )
+
+
+def _text_with_its_own_line_breaks(path: Path) -> str:
+    if not path.exists():
+        raise ReportError(f"file not found: {path}")
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            return source.read()
+    except (OSError, UnicodeDecodeError) as err:
+        raise ReportError(f"could not read {path}: {err}") from err
 
 
 def _composed(path: Path, text: str) -> Origin:
@@ -201,16 +287,8 @@ def _composed(path: Path, text: str) -> Origin:
 
 
 def _is_an_index_document(root: Origin) -> bool:
-    index = _child(root, "index") if isinstance(root, yaml.MappingNode) else None
-    return isinstance(index, yaml.Node) and index.tag != _NULL_TAG
-
-
-def _text_with_its_own_line_breaks(path: Path) -> str:
-    try:
-        with path.open(encoding="utf-8", newline="") as source:
-            return source.read()
-    except (OSError, UnicodeDecodeError) as err:
-        raise ReportError(f"could not read {path}: {err}") from err
+    index = _value_of(root, "index") if isinstance(root, yaml.MappingNode) else None
+    return index is not None and index.tag != _NULL_TAG
 
 
 def outline_file(path: Path) -> Outline:
@@ -251,17 +329,17 @@ def _table_row(region: Region) -> tuple[str, ...]:
 
 def outline_table(outline: Outline, file: str) -> str:
     rows = [_COLUMNS, *map(_table_row, outline.regions)]
-    widths = [max(len(row[column]) for row in rows) for column in range(len(_COLUMNS) - 1)]
+    widths = [max(map(len, column)) for column in zip(*rows, strict=True)]
     lines = [
         "  ".join(
-            [*(cell.ljust(width) for cell, width in zip(row[:-1], widths, strict=True)), row[-1]]
+            [*(cell.ljust(width) for cell, width in zip(row[:-1], widths[:-1], strict=True)), row[-1]]
         ).rstrip()
         for row in rows
     ]
     return "\n".join([*lines, f"{file}: {len(outline.source_lines)} lines, ~{outline.tokens} tokens"])
 
 
-def outline_json(outline: Outline, file: str) -> dict[str, object]:
+def outline_json(outline: Outline, file: str) -> OutlineJson:
     return {
         "file": file,
         "lines": len(outline.source_lines),
