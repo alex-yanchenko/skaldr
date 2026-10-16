@@ -1280,16 +1280,16 @@ blocks:                       # optional: an intro shown before the first part
 
 ## Reading one region: `outline` and `show`
 
-A large document does not have to be read whole. `skaldr outline FILE` prints one row per heading (at any level) and per section, in document order: its anchor (the same id the page and its table of contents use), its kind and level, whether the anchor is an author-set `id` (`set`) or derived from the text (`derived`), the first and last line of its region in FILE, and an approximate token count (characters / 4). The last line gives the file's total lines and approximate tokens. `--json` prints the same as `{file, lines, tokens, regions}`.
+A large document does not have to be read whole. `skaldr outline FILE` prints one row per heading (at any level) and per section, in document order: its anchor (the same id the page and its table of contents use), its kind and level, whether the anchor is an author-set `id` (`set`) or derived from the text (`derived`), the first and last line of its region in FILE, and an approximate token count (characters / 4, rounded up). The last line gives the file's total lines and approximate tokens. `--json` prints the same as `{file, lines, tokens, regions}`.
 
 ```bash
 skaldr outline plan.yaml            # find the anchor and the size of each region
 skaldr show plan.yaml#risks         # print that region word for word
 ```
 
-`skaldr show FILE#ANCHOR` prints the region's lines exactly as FILE holds them, comments and indentation included, and nothing else. A section's region is its own item. A heading's region runs up to the next heading in the same list at its level or above, so the blocks and sections after it belong to it; a heading inside a section, grid cell, tab or panel is measured within that list. An unknown anchor fails, naming the closest anchors.
+`skaldr show FILE#ANCHOR` prints the region's lines exactly as FILE holds them, comments and indentation included, and nothing else. A section's region is the section alone, from its first line to its last. A heading's region runs from the heading to the last line of the last block before the next heading in the same list at the same level or a shallower one, so the blocks and sections after it belong to it, and comments or blank lines just before that next heading belong to no region; a heading inside a section, grid cell, tab or panel is measured within that list. An unknown anchor fails; the error names the closest anchors when there are some, and otherwise points to `skaldr outline FILE`.
 
-Content an `!include` brings in is outlined at its include point only: its rows show `-` for lines and tokens, and `show` refuses it, naming the include, so read the included file instead. An index document is refused; outline each part file.
+Content an `!include` brings in is outlined at its include point only: its rows show `-` for lines and tokens, and `show` refuses it, naming the include, so read the included file instead. A block reached through a YAML alias, or written on the same line as another block (a one-line flow list), shows `-` too. An index document is refused; outline each part file.
 
 ## Where it publishes: `publish`
 
