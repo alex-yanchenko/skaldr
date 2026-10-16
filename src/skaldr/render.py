@@ -114,13 +114,13 @@ def recorded_render(html: str) -> RecordedRender:
     return RecordedRender(None, _body_live(reader.body_live))
 
 
+@dataclass(frozen=True)
 class _HtmlRuns(TextRunWriter):
-    def __init__(self, cited: set[str], placeholders: set[str] | None) -> None:
-        self.cited = cited
-        self.placeholders = placeholders
+    cited: set[str]
+    placeholders: set[str] | None
 
     def text(self, text: str, /) -> str:
-        return str(escape(text))
+        return escape(text)
 
     def code(self, text: str, /) -> str:
         return f"<code>{escape(text)}</code>"
@@ -372,7 +372,9 @@ def hide_script_close(source: str) -> str:
     `<` being `/`, so one backslash there closes all of them. Backslashes already in front of the slash
     are doubled first, taking a run of n to 2n+1, which is what lets `show_script_close` recover the
     original exactly. A source holding no `</script` comes back unchanged."""
-    return _SCRIPT_CLOSE.sub(lambda m: "<" + "\\" * (2 * len(m.group(1)) + 1) + m.group(2), source)
+    return _SCRIPT_CLOSE.sub(
+        lambda match: "<" + "\\" * (2 * len(match.group(1)) + 1) + match.group(2), source
+    )
 
 
 def show_script_close(source: str) -> str:
