@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, NoReturn, cast
+from typing import Any, Final, NoReturn, cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from markupsafe import Markup, escape
@@ -50,7 +50,12 @@ from skaldr.richtext import (
 )
 from skaldr.version import skaldr_version
 
-_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del", "underline": "u"}
+_HTML_STYLE_TAG: Final[Mapping[StyleName, str]] = {
+    "bold": "strong",
+    "italic": "em",
+    "strike": "del",
+    "underline": "u",
+}
 
 RENDER_STAMP_NAME = "skaldr-render"
 _EMBED_TEMPLATE = "embed.html.j2"

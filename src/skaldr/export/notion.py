@@ -72,6 +72,7 @@ from skaldr.export.tree import (
     ToneName,
     heading_of,
 )
+from skaldr.mathml import NOTION_EQUATION_FENCE
 from skaldr.models import BADGE_COLOR_TONE, BadgeColorLiteral, NotionWidth, Person, ToneLiteral
 from skaldr.richtext import Code, Placeholder, ScriptPosition, Styled, Tinted
 
@@ -83,7 +84,7 @@ CHUNK_BOUNDARY_LEVEL: Final = 2
 DEEPEST_NOTION_HEADING: Final = 4
 OPENING_SECTION_LABEL: Final = "the opening section, before the first level 1 or 2 heading"
 EMPTY_BLOCK: Final = "<empty-block/>"
-EQUATION_FENCE: Final = "$$"
+EQUATION_FENCE: Final = NOTION_EQUATION_FENCE
 CODE_FENCE_RUN: Final = re.compile(r"`{3,}")
 LINE_INSIDE_A_BLOCK: Final = re.compile(
     r"</[a-z_]+>|<colgroup>|<col\b[^>]*>|<td\b.*</td>|<summary>.*</summary>"
