@@ -470,6 +470,15 @@ def test_a_fact_strip_is_one_paragraph_of_its_facts_joined_by_middle_dots() -> N
     assert render_slack([strip]) == "**Site**: West · Q3 · **Owner**: Ops\n"
 
 
+def test_a_sections_fields_are_one_paragraph_under_its_heading() -> None:
+    fields = {"status": "In Progress", "priority": "High"}
+    section = make_section("st2", title="Widen the bin code", collapsed=False, fields=fields)
+
+    assert (
+        slack_of([section]) == "# Widen the bin code\n\n**Status**: In Progress · **Priority**: High\n\nx\n"
+    )
+
+
 def test_a_fact_strip_beside_a_list_needs_no_list_separator() -> None:
     strip = FactStrip((LabelledValue("Site", make_rich_text("West")),))
 

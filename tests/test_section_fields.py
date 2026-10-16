@@ -303,7 +303,7 @@ def test_the_notion_markdown_lists_the_facts_under_the_section_heading() -> None
         ),
         pytest.param(
             "slack",
-            "## Widen the bin code\n\n* **Blocks**: Relabel the aisles\n\nx\n\n## Relabel the aisles\n\nx\n",
+            "# Widen the bin code\n\n**Blocks**: Relabel the aisles\n\nx\n\n# Relabel the aisles\n\nx\n",
             id="slack",
         ),
     ],
