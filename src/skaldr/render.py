@@ -10,9 +10,10 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from functools import partial
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, NoReturn, cast
+from typing import Any, Final, NoReturn, cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from markupsafe import Markup, escape
@@ -22,7 +23,12 @@ from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
-from skaldr.highlight import highlighted_code, highlighted_diff_lines, highlighted_query_keeping_slots_whole
+from skaldr.highlight import (
+    HighlightBudget,
+    highlighted_code,
+    highlighted_diff_lines,
+    highlighted_query_keeping_slots_whole,
+)
 from skaldr.mathml import mathml
 from skaldr.models import (
     MEDIA_KIND_LABELS,
@@ -50,7 +56,12 @@ from skaldr.richtext import (
 )
 from skaldr.version import skaldr_version
 
-_HTML_STYLE_TAG: dict[StyleName, str] = {"bold": "strong", "italic": "em", "strike": "del", "underline": "u"}
+_HTML_STYLE_TAG: Final[Mapping[StyleName, str]] = {
+    "bold": "strong",
+    "italic": "em",
+    "strike": "del",
+    "underline": "u",
+}
 
 RENDER_STAMP_NAME = "skaldr-render"
 _EMBED_TEMPLATE = "embed.html.j2"
@@ -114,13 +125,13 @@ def recorded_render(html: str) -> RecordedRender:
     return RecordedRender(None, _body_live(reader.body_live))
 
 
+@dataclass(frozen=True)
 class _HtmlRuns(TextRunWriter):
-    def __init__(self, cited: set[str], placeholders: set[str] | None) -> None:
-        self.cited = cited
-        self.placeholders = placeholders
+    cited: set[str]
+    placeholders: set[str] | None
 
     def text(self, text: str, /) -> str:
-        return str(escape(text))
+        return escape(text)
 
     def code(self, text: str, /) -> str:
         return f"<code>{escape(text)}</code>"
@@ -253,9 +264,6 @@ def html_environment() -> Environment:
         chart_legend=chart_legend,
         display_math=display_math,
         query_text_for=compute.query_text_for,
-        highlighted_query=highlighted_query_keeping_slots_whole,
-        highlighted_code=highlighted_code,
-        highlighted_diff_lines=highlighted_diff_lines,
         settings_menu_id=compute.SETTINGS_MENU_ID,
         unhandled_block=unhandled_block,
     )
@@ -316,6 +324,10 @@ def _render(
     globals_["badges"] = report.badges
     globals_["anchor_id"] = anchor_id
     globals_["strip_of"] = strip_of
+    highlight_budget = HighlightBudget()
+    globals_["highlighted_code"] = partial(highlighted_code, budget=highlight_budget)
+    globals_["highlighted_diff_lines"] = partial(highlighted_diff_lines, budget=highlight_budget)
+    globals_["highlighted_query"] = partial(highlighted_query_keeping_slots_whole, budget=highlight_budget)
     section_titles = compute.section_titles_by_id(report)
 
     def section_facts_of(fields: SectionFields) -> tuple[compute.SectionFact, ...]:
@@ -335,7 +347,7 @@ def _render(
         toc=compute.toc_entries(report, slugs),
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
-        first_table_index=compute.first_table_index(report),
+        badge_legend_slot=compute.badge_legend_slot(report),
         has_requests=any(iter_requests(report.blocks)),
         has_strips=bool(strips),
         source_block=source_block(embedded_source) if embedded_source else None,
@@ -372,7 +384,9 @@ def hide_script_close(source: str) -> str:
     `<` being `/`, so one backslash there closes all of them. Backslashes already in front of the slash
     are doubled first, taking a run of n to 2n+1, which is what lets `show_script_close` recover the
     original exactly. A source holding no `</script` comes back unchanged."""
-    return _SCRIPT_CLOSE.sub(lambda m: "<" + "\\" * (2 * len(m.group(1)) + 1) + m.group(2), source)
+    return _SCRIPT_CLOSE.sub(
+        lambda match: "<" + "\\" * (2 * len(match.group(1)) + 1) + match.group(2), source
+    )
 
 
 def show_script_close(source: str) -> str:
