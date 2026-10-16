@@ -7,7 +7,7 @@ import pytest
 from markdown_it import MarkdownIt
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
-from skaldr.export import ExportResult, export_markdown
+from skaldr.export import ExportResult, export_markdown, render_export
 from skaldr.export import markdown as markdown_module
 from skaldr.export.flanking import markers_flank
 from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
@@ -206,6 +206,16 @@ def test_the_page_starts_with_the_title_as_its_only_top_level_heading(tmp_path: 
 
     assert result == ExportResult("Q3 *count*", (tmp_path / "page.md",))
     assert (tmp_path / "page.md").read_text(encoding="utf-8") == "# Q3 \\*count\\*\n\nHello.\n"
+
+
+def test_a_page_cover_is_an_image_under_the_icon_led_title() -> None:
+    report = parse_report(
+        make_report(meta={"title": "Q3", "icon": "📦", "cover": "https://example.com/covers/q3.png"})
+    )
+
+    assert render_export(report, "markdown").pages["page.md"] == (
+        "# 📦 Q3\n\n![Cover](https://example.com/covers/q3.png)\n\nHello.\n"
+    )
 
 
 def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link_urls() -> None:

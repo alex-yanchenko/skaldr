@@ -58,7 +58,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import SCRIPT_HTML_TAG, Link, MarkerStyle, ScriptPosition
+from skaldr.richtext import SCRIPT_HTML_TAG, MarkerStyle, ScriptPosition
 from skaldr.typed_links import date_target_text
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
@@ -353,10 +353,10 @@ def render_markdown(nodes: Sequence[Node]) -> str:
     return "\n".join(_MarkdownWriter(github_heading_slugs(nodes)).blocks(nodes)) + "\n"
 
 
-def _cover_link(cover: str | None) -> tuple[Paragraph, ...]:
-    return (Paragraph((Link(plain("Cover image"), cover),)),) if cover else ()
+def _cover_image(cover: str | None) -> tuple[Media, ...]:
+    return (Media("image", cover, plain("Cover")),) if cover else ()
 
 
 def render_markdown_document(document: LoweredDocument) -> str:
     title = plain(f"{document.icon} {document.title}" if document.icon else document.title)
-    return render_markdown((Heading(1, title), *_cover_link(document.cover), *document.body))
+    return render_markdown((Heading(1, title), *_cover_image(document.cover), *document.body))
