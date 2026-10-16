@@ -9,11 +9,12 @@ from skaldr.errors import AuthError, ConnectorError
 from skaldr.export.slack import SLACK_CANVAS_CHARACTER_LIMIT, render_slack_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
-from skaldr.models import Report
+from skaldr.models import Report, Section
 from skaldr.publish.connector import ContentLimit, WriteGranularity
 from skaldr.publish.slack.api import SlackApi, Sleep
 from skaldr.publish.slack.transport import SlackTransport, Warn, warn_on_stderr
 from skaldr.publish_block import SlackTarget, TargetBase
+from skaldr.publish_block.target import JsonFields
 
 CANVAS_LIMIT = ContentLimit("item", SLACK_CANVAS_CHARACTER_LIMIT, "characters of canvas Markdown")
 
@@ -36,6 +37,9 @@ class SlackConnector:
 
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_slack_regions(page)
+
+    def default_fields(self, _report: Report, _section: Section, /) -> JsonFields:
+        return {}
 
     def existing_item_id(self, target: TargetBase, /) -> str | None:
         return target.where.canvas if isinstance(target, SlackTarget) else None

@@ -6,9 +6,10 @@ from typing import Literal, Protocol
 from skaldr.errors import ConnectorError
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
-from skaldr.models import Report
+from skaldr.models import Report, Section
 from skaldr.publish.transport import Transport
 from skaldr.publish_block import PUBLISH_TARGET_TYPES, TargetBase
+from skaldr.publish_block.target import JsonFields
 from skaldr.services import Service
 
 SPLIT_ADVICE = "split the document further with `split`, or shorten it"
@@ -41,6 +42,8 @@ class Connector(Protocol):
     def export_target(self) -> ExportTarget: ...
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]: ...
+
+    def default_fields(self, report: Report, section: Section, /) -> JsonFields: ...
 
     def existing_item_id(self, target: TargetBase, /) -> str | None: ...
 

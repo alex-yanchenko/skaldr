@@ -16,6 +16,7 @@ from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
 from skaldr.publish.connector import SPLIT_ADVICE, Connector, ConnectorRegistry, ContentLimit
 from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
+from skaldr.publish_block.target import JsonFields
 from skaldr.services import SERVICE_NAMES
 
 DOCUMENT_ITEM_LABEL = "document"
@@ -145,7 +146,11 @@ def _look_paths(section_id: str | None) -> dict[Part, str]:
 
 
 def _item_draft(
-    context: _TargetContext, page: LoweredDocument, section_id: str | None, title_path: str
+    context: _TargetContext,
+    page: LoweredDocument,
+    section_id: str | None,
+    title_path: str,
+    authored_defaults: JsonFields,
 ) -> ItemDraft:
     reject_what_the_target_cannot_show(context.report, page, context.connector.export_target)
     texts = context.connector.render_regions(context.report, page)
@@ -156,7 +161,7 @@ def _item_draft(
         ItemContent(
             title=page.title,
             sections=dict(zip(keys, texts, strict=True)),
-            fields=context.target.fields_for(section_id),
+            fields={**authored_defaults, **context.target.fields_for(section_id)},
             icon=page.icon if carries_look else None,
             cover=page.cover if carries_look else None,
         ),
@@ -169,6 +174,13 @@ def _item_draft(
             },
         },
     )
+
+
+def _defaults_of_split_section(context: _TargetContext, region: BlockRegion) -> JsonFields:
+    block = context.report.blocks[region.source_index]
+    if not isinstance(block, models.Section):
+        return {}
+    return context.connector.default_fields(context.report, block)
 
 
 def _refuse_what_cannot_fit(
@@ -207,6 +219,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
         ),
         None,
         "meta.title",
+        {},
     )
     children = tuple(
         _item_draft(
@@ -216,6 +229,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
             ),
             region.section_id,
             f"blocks[{region.source_index}].title",
+            _defaults_of_split_section(context, region),
         )
         for region in chosen
         if region.section_id in target.split
