@@ -7,7 +7,7 @@ meta:
   title: "Q3 Warehouse Inventory Count: Discrepancies & Fixes"
   subtitle:
     - "Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category."
-    - "Mixed audience: ops reads the impact, the floor team reads the fix."
+    - "Ops can read the impact of each category; the floor team can read the fix."
   source: "WMS export"
   date: "Q3 2026"
   updated: "18 Jul 2026"
@@ -271,7 +271,7 @@ blocks:
       }
   - type: image
     alt: "Discrepancy volume by zone"
-    caption: "Fig 1: discrepancy volume by zone (embedded as a data: URI; skaldr embeds images, it does not generate charts)."
+    caption: "Fig 1: discrepancy volume by zone."
     src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2Y4ZmFmYyIvPjxyZWN0IHg9IjQwIiB5PSI3MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjMwIiBmaWxsPSIjMTU4MDNkIi8+PHJlY3QgeD0iMTEwIiB5PSI1MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PHJlY3QgeD0iMTgwIiB5PSIzMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjYjQ1MzA5Ii8+PHJlY3QgeD0iMjUwIiB5PSI2MCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjYjkxYzFjIi8+PHJlY3QgeD0iMzIwIiB5PSIyMCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjN2MzYWVkIi8+PC9zdmc+"
   - type: image
     alt: "Aisle 12 with overflow bins"

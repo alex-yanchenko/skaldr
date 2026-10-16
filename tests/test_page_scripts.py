@@ -134,4 +134,4 @@ def test_the_live_response_pane_lays_out_a_body_as_the_recorded_pane_does(body: 
     html = render_html(parse_report(make_report(blocks=[make_request()])))
     script = script_containing(html, "function prettyBody")
 
-    assert call_script_function(script, "prettyBody", body) == compute.recorded_body(body)
+    assert call_script_function(script, "prettyBody", body) == compute.read_recorded_body(body).text

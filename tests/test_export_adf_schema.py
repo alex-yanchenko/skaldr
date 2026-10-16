@@ -7,8 +7,24 @@ import pytest
 from jsonschema import Draft4Validator, ValidationError
 
 from skaldr.export.adf import IssueLinks, render_adf, render_adf_document
+from skaldr.export.inline import plain
 from skaldr.export.lower import lower_report
-from skaldr.export.tree import Node, Paragraph
+from skaldr.export.tree import (
+    Callout,
+    Columns,
+    Divider,
+    GridColumn,
+    LinkCard,
+    ListEntry,
+    ListNode,
+    Node,
+    Paragraph,
+    Quote,
+    TableCell,
+    TableNode,
+    TableRow,
+    Toggle,
+)
 from skaldr.models import parse_report
 from skaldr.richtext import DateMention, Plain, Styled
 from tests.conftest import REPO_ROOT
@@ -90,6 +106,62 @@ def test_the_schema_check_refuses_documents_atlassian_would_refuse(document: Map
 
 @pytest.mark.parametrize("node", minimal_nodes().values(), ids=lambda node: type(node).__name__)
 def test_every_lowered_node_type_writes_a_document_the_adf_schema_accepts(node: Node) -> None:
+    assert _problems(render_adf((node,))) == []
+
+
+UPGRADED_FORMS = [
+    pytest.param(LinkCard("Runbook", "https://example.com/runbook", "embed"), id="embed-card"),
+    pytest.param(Toggle(plain("More"), None, (Paragraph(plain("body")),), open=True), id="open-toggle"),
+    pytest.param(
+        Callout("info", (LinkCard("Runbook", "https://example.com/runbook", "card", domain="example.com"),)),
+        id="block-card-in-a-panel",
+    ),
+    pytest.param(
+        Quote(
+            (Paragraph(plain("Said:")), ListNode("number", (ListEntry(plain("a")),), start=3)), plain("Ana")
+        ),
+        id="quote-holding-a-list",
+    ),
+    pytest.param(
+        TableNode(
+            (TableCell(plain("Steps")),),
+            (
+                TableRow(
+                    (
+                        TableCell(
+                            (),
+                            blocks=(Paragraph(plain("Fix:")), ListNode("bullet", (ListEntry(plain("a")),))),
+                        ),
+                    ),
+                    tone="muted",
+                ),
+            ),
+        ),
+        id="muted-row-holding-a-list",
+    ),
+    pytest.param(
+        Columns(
+            (
+                GridColumn(50, (Paragraph(plain("left")),)),
+                GridColumn(
+                    50,
+                    (
+                        Callout(
+                            "warning",
+                            (Toggle(plain("t"), None, (Paragraph(plain("c")),)), Divider()),
+                            authored_as="grid cell",
+                        ),
+                    ),
+                ),
+            )
+        ),
+        id="toned-grid",
+    ),
+]
+
+
+@pytest.mark.parametrize("node", UPGRADED_FORMS)
+def test_each_upgraded_form_writes_a_document_the_adf_schema_accepts(node: Node) -> None:
     assert _problems(render_adf((node,))) == []
 
 

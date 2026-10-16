@@ -4,7 +4,8 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError
-from skaldr.publish.engine import Applied, ApplyOutcome, apply_publish, prepare_publish
+from skaldr.publish.engine import Applied, ApplyOutcome, apply_publish, diff_publish, prepare_publish
+from skaldr.publish.output import diff_lines
 from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish_block.target import JsonFields
 from tests.factories.publish_factory import (
@@ -86,3 +87,17 @@ def test_a_page_whose_properties_the_service_reports_as_unset_is_empty(tmp_path:
         Applied((f'create   document "Garden handbook" into {NOTION_PAGE_ID}',)),
         [INTO_LABEL],
     )
+
+
+def test_the_diff_text_names_a_changed_fields_part_plainly(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path, **_with_fields({"Area": "Shed"}))
+    _publish(path, transport)
+    write_garden_report(tmp_path, **_with_fields({"Area": "Barn"}))
+
+    lines = diff_lines(diff_publish(prepare_publish(path, fake_registry(transport))))
+
+    assert [line for line in lines if "fields" in line] == [
+        f"--- {TARGET_LABEL}, document: fields, as published",
+        f"+++ {TARGET_LABEL}, document: fields, in the YAML",
+    ]

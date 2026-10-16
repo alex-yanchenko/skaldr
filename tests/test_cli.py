@@ -1283,11 +1283,10 @@ def test_watch_re_renders_a_save_that_leaves_the_yaml_unreadable_so_its_error_sh
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     data_path = _write(tmp_path, make_report())
-    sleeps = {"n": 0}
+    sleep_numbers = itertools.count(1)
 
     def save_broken_yaml_then_stop(_seconds: float) -> None:
-        sleeps["n"] += 1
-        if sleeps["n"] > 1:
+        if next(sleep_numbers) > 1:
             raise KeyboardInterrupt
         mtime = data_path.stat().st_mtime
         data_path.write_text("blocks: [unclosed\n", encoding="utf-8")
@@ -1339,11 +1338,10 @@ def test_watch_re_renders_only_when_the_file_changes(
         return next(mtimes)
 
     monkeypatch.setattr("skaldr.cli._mtime", fake_mtime)
-    sleeps = {"n": 0}
+    sleep_numbers = itertools.count(1)
 
     def fake_sleep(_seconds: float) -> None:
-        sleeps["n"] += 1
-        if sleeps["n"] >= 4:  # let the same / missing / changed iterations all run first
+        if next(sleep_numbers) >= 4:  # let the same / missing / changed iterations all run first
             raise KeyboardInterrupt
 
     monkeypatch.setattr("time.sleep", fake_sleep)
@@ -1380,11 +1378,10 @@ def test_watch_honours_no_source_on_the_start_render_and_every_re_render(
         return next(mtimes)
 
     monkeypatch.setattr("skaldr.cli._mtime", fake_mtime)
-    sleeps = {"n": 0}
+    sleep_numbers = itertools.count(1)
 
     def fake_sleep(_seconds: float) -> None:
-        sleeps["n"] += 1
-        if sleeps["n"] >= 2:
+        if next(sleep_numbers) >= 2:
             raise KeyboardInterrupt
 
     monkeypatch.setattr("time.sleep", fake_sleep)

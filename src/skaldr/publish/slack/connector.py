@@ -9,8 +9,8 @@ from skaldr.errors import AuthError, ConnectorError
 from skaldr.export.slack import SLACK_CANVAS_CHARACTER_LIMIT, render_slack_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
-from skaldr.models import Report
-from skaldr.publish.connector import ContentLimit, WriteGranularity
+from skaldr.models import Report, Section
+from skaldr.publish.connector import NO_SECTION_DEFAULTS, ContentLimit, SectionDefaults, WriteGranularity
 from skaldr.publish.slack.api import SlackApi, Sleep
 from skaldr.publish.slack.transport import SlackTransport, Warn, warn_on_stderr
 from skaldr.publish_block import SlackTarget, TargetBase
@@ -36,6 +36,11 @@ class SlackConnector:
 
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_slack_regions(page)
+
+    def section_defaults(
+        self, _report: Report, _section: Section, _source_index: int, _target: TargetBase, /
+    ) -> SectionDefaults:
+        return NO_SECTION_DEFAULTS
 
     def existing_item_id(self, target: TargetBase, /) -> str | None:
         return target.where.canvas if isinstance(target, SlackTarget) else None

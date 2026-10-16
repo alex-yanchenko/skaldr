@@ -1,7 +1,6 @@
 import re
 import subprocess
 from http import HTTPStatus
-from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -42,6 +41,7 @@ from skaldr.models import (
     Table,
     parse_report,
 )
+from tests.conftest import REPO_ROOT
 from tests.factories import (
     make_cell,
     make_command_request,
@@ -1339,7 +1339,7 @@ _PHRASES_PYTHON_RENAMED: dict[int, frozenset[str]] = {
 
 
 def test_the_reason_table_in_the_browser_script_agrees_with_the_phrases_the_page_renders() -> None:
-    script = Path("src/skaldr/components/_request.html.j2").read_text(encoding="utf-8")
+    script = (REPO_ROOT / "src/skaldr/components/_request.html.j2").read_text(encoding="utf-8")
     literal = re.search(r"var REASONS = \{(.*?)\};", script, re.DOTALL)
     assert literal is not None
 

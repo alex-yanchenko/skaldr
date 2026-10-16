@@ -1,4 +1,3 @@
-import _thread
 import errno
 import json
 import os
@@ -41,6 +40,7 @@ from tests.factories.auth_factory import (
     forged,
     forged_refusal,
     free_port,
+    interrupt_the_keychain_wait_once_the_keychain_is_stuck,
     make_notion_credentials,
     needs_ipv6_loopback,
     notion_token_answer,
@@ -532,12 +532,12 @@ def test_a_keychain_timeout_during_the_save_does_not_revoke_the_token_the_save_m
 
 
 def test_an_interrupt_while_waiting_for_the_save_does_not_revoke_the_token_the_save_may_still_store(
-    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     slow = SlowSaveKeyring()
     keyring.set_keyring(slow)
     seen: list[httpx2.Request] = []
-    threading.Timer(0.3, _thread.interrupt_main).start()
+    interrupt_the_keychain_wait_once_the_keychain_is_stuck(monkeypatch, slow.entered)
 
     try:
         with pytest.raises(KeyboardInterrupt):

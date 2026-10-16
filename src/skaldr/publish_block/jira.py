@@ -47,6 +47,13 @@ class JiraWhere(FrozenModel):
         "`overrides` changes them for one item.",
     )
 
+    fields_from_sections: bool = Field(
+        default=False,
+        description="Whether each split section's own `fields` (priority, due, labels, assignee) set the "
+        "Jira fields of its issue, under this target's `fields` and the section's `overrides`. Off by "
+        "default; turning it on makes skaldr own those fields on every split issue.",
+    )
+
     @field_validator("site")
     @classmethod
     def _site_as_a_jira_cloud_https_origin(cls, site: str | None) -> str | None:
