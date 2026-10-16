@@ -43,6 +43,13 @@ WRITERS: Mapping[str, Write] = {
 }
 
 
+WRITTEN_NATIVELY_BY: Mapping[str, frozenset[str]] = {
+    writer: frozenset({"fact strip", "key-value list", "definition list", "cards"})
+    for writer in WRITERS
+    if writer.startswith("notion")
+}
+
+
 def _outcome(write: Write, nodes: Sequence[Node]) -> str:
     try:
         return write(nodes)
@@ -56,8 +63,15 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
 
 
 @pytest.mark.parametrize("context", FOLD_CONTEXTS)
-@pytest.mark.parametrize("case", FOLD_CASES)
-@pytest.mark.parametrize("writer", WRITERS)
+@pytest.mark.parametrize(
+    ("writer", "case"),
+    [
+        (writer, case)
+        for writer in WRITERS
+        for case in FOLD_CASES
+        if case not in WRITTEN_NATIVELY_BY.get(writer, frozenset())
+    ],
+)
 def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block_lowered_to_before(
     writer: str, case: str, context: str
 ) -> None:
