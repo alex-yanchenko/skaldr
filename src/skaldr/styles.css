@@ -111,7 +111,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
 		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
-	h4:not(.rq-case-hd){font-size:14px; font-weight:650; margin:var(--s4) 0 var(--s2)}
+	h4:not(.tab-pane-hd){font-size:14px; font-weight:650; margin:var(--s4) 0 var(--s2)}
 	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
 	   heading's own weight/size so it reads as a subtitle, not part of the title. */
 	.hsub{display:block; margin-block-start:3px; color:var(--muted); font-size:13.5px; font-weight:400;
@@ -874,66 +874,66 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		/* One strip with shared edges, so a selection reads as part of the control rather than a loose
 		   tag. It only has to hold one line: a generated container query per block turns it into a rail
 		   below the width its own labels need. */
-		& .rq-tabs{display:flex; flex-wrap:nowrap; margin:var(--s3) var(--s4) 0;
+		& .tab-list{display:flex; flex-wrap:nowrap; margin:var(--s3) var(--s4) 0;
 			border:1px solid var(--rule); border-radius:var(--r-sm); overflow:hidden;
 			background:var(--surface)}
-		& .rq-tabs label{flex:0 1 auto; min-width:0; cursor:pointer; white-space:nowrap;
+		& .tab-list label{flex:0 1 auto; min-width:0; cursor:pointer; white-space:nowrap;
 			overflow:hidden; text-overflow:ellipsis;
 			font-family:var(--mono); font-size:12px; color:var(--muted); padding:5px 11px;
 			border:0; border-inline-end:1px solid var(--line)}
-		& .rq-tabs label:last-child{border-inline-end:0}
-		& .rq-tabs label:hover{color:var(--ink); background:var(--hover)}
-		& .rq-tabs > *{--rq-on-bg:var(--info-bg); --rq-on-bd:transparent}
+		& .tab-list label:last-child{border-inline-end:0}
+		& .tab-list label:hover{color:var(--ink); background:var(--hover)}
+		& .tab-list > *{--rq-on-bg:var(--info-bg); --rq-on-bd:transparent}
 		/* The strip renders after the panes and is ordered above them, so each radio can reach its own
 		   label with a sibling combinator. Only the highlight needs the index; showing the pane does
 		   not, because a radio sits immediately before the pane it selects. RequestCase count is capped
 		   to the number of pairs written here. */
-		& .rq-pick:nth-of-type(1):checked ~ .rq-tabs > :nth-child(1),
-		& .rq-pick:nth-of-type(2):checked ~ .rq-tabs > :nth-child(2),
-		& .rq-pick:nth-of-type(3):checked ~ .rq-tabs > :nth-child(3),
-		& .rq-pick:nth-of-type(4):checked ~ .rq-tabs > :nth-child(4),
-		& .rq-pick:nth-of-type(5):checked ~ .rq-tabs > :nth-child(5),
-		& .rq-pick:nth-of-type(6):checked ~ .rq-tabs > :nth-child(6),
-		& .rq-pick:nth-of-type(7):checked ~ .rq-tabs > :nth-child(7),
-		& .rq-pick:nth-of-type(8):checked ~ .rq-tabs > :nth-child(8),
-		& .rq-pick:nth-of-type(9):checked ~ .rq-tabs > :nth-child(9),
-		& .rq-pick:nth-of-type(10):checked ~ .rq-tabs > :nth-child(10),
-		& .rq-pick:nth-of-type(11):checked ~ .rq-tabs > :nth-child(11),
-		& .rq-pick:nth-of-type(12):checked ~ .rq-tabs > :nth-child(12),
-		& .rq-pick:nth-of-type(13):checked ~ .rq-tabs > :nth-child(13),
-		& .rq-pick:nth-of-type(14):checked ~ .rq-tabs > :nth-child(14),
-		& .rq-pick:nth-of-type(15):checked ~ .rq-tabs > :nth-child(15),
-		& .rq-pick:nth-of-type(16):checked ~ .rq-tabs > :nth-child(16),
-		& .rq-pick:nth-of-type(17):checked ~ .rq-tabs > :nth-child(17),
-		& .rq-pick:nth-of-type(18):checked ~ .rq-tabs > :nth-child(18),
-		& .rq-pick:nth-of-type(19):checked ~ .rq-tabs > :nth-child(19),
-		& .rq-pick:nth-of-type(20):checked ~ .rq-tabs > :nth-child(20),
-		& .rq-pick:nth-of-type(21):checked ~ .rq-tabs > :nth-child(21),
-		& .rq-pick:nth-of-type(22):checked ~ .rq-tabs > :nth-child(22),
-		& .rq-pick:nth-of-type(23):checked ~ .rq-tabs > :nth-child(23),
-		& .rq-pick:nth-of-type(24):checked ~ .rq-tabs > :nth-child(24){
+		& .tab-pick:nth-of-type(1):checked ~ .tab-list > :nth-child(1),
+		& .tab-pick:nth-of-type(2):checked ~ .tab-list > :nth-child(2),
+		& .tab-pick:nth-of-type(3):checked ~ .tab-list > :nth-child(3),
+		& .tab-pick:nth-of-type(4):checked ~ .tab-list > :nth-child(4),
+		& .tab-pick:nth-of-type(5):checked ~ .tab-list > :nth-child(5),
+		& .tab-pick:nth-of-type(6):checked ~ .tab-list > :nth-child(6),
+		& .tab-pick:nth-of-type(7):checked ~ .tab-list > :nth-child(7),
+		& .tab-pick:nth-of-type(8):checked ~ .tab-list > :nth-child(8),
+		& .tab-pick:nth-of-type(9):checked ~ .tab-list > :nth-child(9),
+		& .tab-pick:nth-of-type(10):checked ~ .tab-list > :nth-child(10),
+		& .tab-pick:nth-of-type(11):checked ~ .tab-list > :nth-child(11),
+		& .tab-pick:nth-of-type(12):checked ~ .tab-list > :nth-child(12),
+		& .tab-pick:nth-of-type(13):checked ~ .tab-list > :nth-child(13),
+		& .tab-pick:nth-of-type(14):checked ~ .tab-list > :nth-child(14),
+		& .tab-pick:nth-of-type(15):checked ~ .tab-list > :nth-child(15),
+		& .tab-pick:nth-of-type(16):checked ~ .tab-list > :nth-child(16),
+		& .tab-pick:nth-of-type(17):checked ~ .tab-list > :nth-child(17),
+		& .tab-pick:nth-of-type(18):checked ~ .tab-list > :nth-child(18),
+		& .tab-pick:nth-of-type(19):checked ~ .tab-list > :nth-child(19),
+		& .tab-pick:nth-of-type(20):checked ~ .tab-list > :nth-child(20),
+		& .tab-pick:nth-of-type(21):checked ~ .tab-list > :nth-child(21),
+		& .tab-pick:nth-of-type(22):checked ~ .tab-list > :nth-child(22),
+		& .tab-pick:nth-of-type(23):checked ~ .tab-list > :nth-child(23),
+		& .tab-pick:nth-of-type(24):checked ~ .tab-list > :nth-child(24){
 			color:var(--info-fg); font-weight:700;
 			background:var(--rq-on-bg); border-color:var(--rq-on-bd)}
-		& .rq-dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-inline-end:6px;
+		& .tab-dot{display:inline-block; width:6px; height:6px; border-radius:50%; margin-inline-end:6px;
 			background:var(--neutral-fg)}
-		& .rq-dot.success{background:var(--success-fg)} & .rq-dot.warning{background:var(--warning-fg)}
-		& .rq-dot.danger{background:var(--danger-fg)} & .rq-dot.info{background:var(--info-fg)}
-		& .rq-dot.accent{background:var(--accent-fg)} & .rq-dot.teal{background:var(--teal-fg)}
-		& .rq-dot.sky{background:var(--sky-fg)}
+		& .tab-dot.success{background:var(--success-fg)} & .tab-dot.warning{background:var(--warning-fg)}
+		& .tab-dot.danger{background:var(--danger-fg)} & .tab-dot.info{background:var(--info-fg)}
+		& .tab-dot.accent{background:var(--accent-fg)} & .tab-dot.teal{background:var(--teal-fg)}
+		& .tab-dot.sky{background:var(--sky-fg)}
 		/* One radio per case, each immediately before its own pane, so `:checked +` picks the pane
 		   without an index to keep in step. The strip is ordered above them rather than placed there,
 		   which is what lets the pair stay adjacent. */
-		& .rq-cases{display:flex; flex-direction:column}
-		& .rq-tabs{order:-1}
-		& .rq-pick{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none}
-		& .rq-pick:focus-visible + .rq-case{outline:2px solid var(--info-fg); outline-offset:-2px}
-		& .rq-case{display:none; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4)}
-		& .rq-pick:checked + .rq-case{display:flex}
-		& .rq-case-hd{display:none; font-size:12.5px; font-weight:650}}
+		& .tab-cases{display:flex; flex-direction:column}
+		& .tab-list{order:-1}
+		& .tab-pick{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none}
+		& .tab-pick:focus-visible + .tab-pane{outline:2px solid var(--info-fg); outline-offset:-2px}
+		& .tab-pane{display:none; flex-direction:column; gap:var(--s3); padding:var(--s3) var(--s4)}
+		& .tab-pick:checked + .tab-pane{display:flex}
+		& .tab-pane-hd{display:none; font-size:12.5px; font-weight:650}}
 
 	.tabs{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4);
 		background:var(--surface); box-shadow:var(--shadow); container-type:inline-size;
-		& .rq-pick:checked + .rq-case{display:block}}
+		& .tab-pick:checked + .tab-pane{display:block}}
 
 	.rq{
 		& .rq-step-body{container-type:inline-size}
@@ -993,7 +993,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			text-transform:uppercase; color:var(--muted)}
 		& .rq-step-t{font-size:13px; font-weight:650}
 		& .rq-step-body{padding:0 var(--s3) var(--s3)}
-		& .rq-step-body .rq-case{padding-inline:0; padding-bottom:0}
+		& .rq-step-body .tab-pane{padding-inline:0; padding-bottom:0}
 		& .rq-cap{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:1px 6px;
 			border-radius:var(--r-xs); background:var(--info-bg); color:var(--info-fg)}
 		& .rq-cap[data-rq-got]{background:var(--success-bg); color:var(--success-fg)}
@@ -1019,10 +1019,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		/* A tab hides a case on screen only: on paper every recorded case prints, each under its own
 		   heading, because a tab must not hide evidence. The form and the copy button are interactive
 		   and drop out; the command stays, since that is what a reader reproduces the call from. */
-		.rq .rq-case{display:flex}
-		.tabs .rq-case{display:block}
-		:is(.rq,.tabs) .rq-case-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); break-after:avoid}
-		:is(.rq,.tabs) .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}
+		.rq .tab-pane{display:flex}
+		.tabs .tab-pane{display:block}
+		:is(.rq,.tabs) .tab-pane-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); break-after:avoid}
+		:is(.rq,.tabs) .tab-list,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}
 		.rq .rq-vars input{border:0; padding-inline:0}
 		.rq pre{white-space:pre-wrap; overflow-wrap:anywhere}
 		.rq .rq-pane,.rq .rq-verdict{break-inside:avoid}

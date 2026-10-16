@@ -237,13 +237,13 @@
 {% macro verbatim_command(command) %}<pre class="rq-cmd"><span class="rq-pipe" hidden>{{ "{\n" }}</span>{{ variable_slots(command) }}<span class="rq-pipe" hidden>{{ "\n}" }} | tee /dev/tty | <span class="rq-cliptool">pbcopy</span></span></pre>{% endmacro %}
 
 {% macro tab_strip(strip, aria_label) %}
-<div class="rq-cases {{ strip.name }}"{% if strip.labels | length > 1 %} role="group" aria-label="{{ aria_label }}"{% endif %}>
+<div class="tab-cases {{ strip.name }}"{% if strip.labels | length > 1 %} role="group" aria-label="{{ aria_label }}"{% endif %}>
 {% for index in range(strip.labels | length) %}
-<input type="radio" class="rq-pick" name="{{ strip.name }}" id="{{ strip.name }}_{{ index }}"{% if index == 0 %} checked{% endif %}>
+<input type="radio" class="tab-pick" name="{{ strip.name }}" id="{{ strip.name }}_{{ index }}"{% if index == 0 %} checked{% endif %}>
 {{ caller(index) }}
 {% endfor %}
 {% if strip.labels | length > 1 %}
-<div class="rq-tabs">{% for entry in strip.labels %}<label for="{{ strip.name }}_{{ loop.index0 }}">{% if entry.tone %}<span class="rq-dot {{ entry.tone }}"></span>{% endif %}{{ entry.label }}</label>{% endfor %}</div>
+<div class="tab-list">{% for entry in strip.labels %}<label for="{{ strip.name }}_{{ loop.index0 }}">{% if entry.tone %}<span class="tab-dot {{ entry.tone }}"></span>{% endif %}{{ entry.label }}</label>{% endfor %}</div>
 {% endif %}
 </div>
 {% endmacro %}
@@ -257,8 +257,8 @@
 {% macro request_cases(core) %}
 {% call(index) tab_strip(strip_of(core), "Recorded cases") %}
 {% set case = core.cases[index] %}
-<section class="rq-case" data-rq-case="{{ index }}"{% if core.command is not none %} data-rq-command{% endif %}>
-<h4 class="rq-case-hd">{{ case.label }}</h4>
+<section class="tab-pane" data-rq-case="{{ index }}"{% if core.command is not none %} data-rq-command{% endif %}>
+<h4 class="tab-pane-hd">{{ case.label }}</h4>
 {% if core.query is not none %}{{ query_pane(core, case) }}{% else %}
 {% set runs_command = core.command is not none %}
 {% set command = command_for(core, case) %}
@@ -378,8 +378,8 @@
 <details class="toggle"{% if not block.collapsed or expand_details %} open{% endif %}><summary>{{ block.title }}</summary><div class="section-body">{% for inner in block.blocks %}{{ render_block(inner) }}{% endfor %}</div></details>
 {% elif block.type == "tabs" %}
 <div class="tabs">{% call(index) tab_strip(strip_of(block), "Tabs") %}
-<section class="rq-case">
-<h4 class="rq-case-hd">{{ block.tabs[index].label }}</h4>
+<section class="tab-pane">
+<h4 class="tab-pane-hd">{{ block.tabs[index].label }}</h4>
 {% for inner in block.tabs[index].blocks %}{{ render_block(inner) }}{% endfor %}</section>{% endcall %}
 </div>
 {% elif block.type == "panel" %}

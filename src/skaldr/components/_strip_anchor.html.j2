@@ -2,9 +2,9 @@
 (function () {
 	function picksAround(target) {
 		var picks = [];
-		for (var pane = target.closest(".rq-case"); pane; pane = pane.parentElement.closest(".rq-case")) {
+		for (var pane = target.closest(".tab-pane"); pane; pane = pane.parentElement.closest(".tab-pane")) {
 			var pick = pane.previousElementSibling;
-			if (pick && pick.classList.contains("rq-pick")) picks.unshift(pick);
+			if (pick && pick.classList.contains("tab-pick")) picks.unshift(pick);
 		}
 		return picks;
 	}
