@@ -225,7 +225,22 @@ blocks:
     text: A
 """
 
+SPACES_KEPT_AS_CONTENT = (
+    "version: 1\nmeta: {title: T}\nblocks:\n  - type: heading\n    text: A\n  - type: text\n"
+    "    body: |\n      text\n" + " " * 9 + "\n  - type: heading\n    text: B\n"
+)
+
+ALIASED_TYPE = """version: 1
+meta: {title: T}
+blocks:
+  - type: &t heading
+    text: A
+  - type: *t
+    text: B
+"""
+
 ALIAS_REASON = "is not written in place (it comes through a YAML alias or merge key)"
+UNCHECKED_REASON = "could not be checked against the file"
 OUTLINE_AND_SHOW = [
     pytest.param(("outline", "{path}"), id="outline"),
     pytest.param(("show", "{path}#a"), id="show"),
@@ -638,6 +653,33 @@ def test_an_item_whose_dash_stands_alone_starts_on_the_dash_line(
         [_region("a", "A", 2, (4, 7, 15)), _region("b", "B", 2, (8, 10, 9))],
     )
     assert _shown(f"{path}#b", capsys) == (0, ("  -\n    type: heading\n    text: B\n", ""))
+
+
+def test_a_region_whose_text_does_not_read_back_as_its_blocks_has_no_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path / "doc.yaml", SPACES_KEPT_AS_CONTENT)
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [_region("a", "A", 2, None), _region("b", "B", 2, (10, 11, 8))],
+    )
+    assert _shown(f"{path}#a", capsys) == _none_of_its_lines(path, "a", UNCHECKED_REASON)
+
+
+def test_a_block_whose_type_comes_through_an_alias_is_not_written_in_place(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path / "doc.yaml", ALIASED_TYPE)
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [_region("a", "A", 2, (4, 5, 9)), _region("b", "B", 2, None)],
+    )
 
 
 def test_an_aliased_item_is_not_written_in_place(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

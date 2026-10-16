@@ -45,6 +45,7 @@ _NOT_WRITTEN_IN_PLACE = OutsideFile("is not written in place (it comes through a
 _SHARES_WITH_THE_NEXT_BLOCK = OutsideFile("shares its lines with the next block")
 _SHARES_WITH_THE_BLOCK_BEFORE = OutsideFile("shares its lines with the block before it")
 _SHARES_WITH_THE_LIST_AROUND = OutsideFile("shares its lines with the list around it")
+_COULD_NOT_BE_CHECKED = OutsideFile("could not be checked against the file")
 
 Origin = yaml.Node | OutsideFile
 _Position = tuple[int, int | None]
@@ -106,6 +107,7 @@ class _Placed:
     items: tuple[Origin, ...]
     siblings: Sequence[AnyBlock]
     position: int
+    in_flow: bool
 
 
 def approximate_tokens(text: str) -> int:
@@ -153,12 +155,26 @@ def _child(origin: Origin, step: str) -> Origin:
     return _NOT_WRITTEN_IN_PLACE if found is None else _block_origin(found)
 
 
-def _item_origins(sequence: Origin, count: int) -> tuple[Origin, ...]:
+def _pairs_with(item: yaml.Node, block: AnyBlock) -> bool:
+    if not isinstance(item, yaml.MappingNode):
+        return True
+    written_type = _value_of(item, "type")
+    return (
+        isinstance(written_type, yaml.ScalarNode)
+        and not isinstance(written_type, _AliasNode)
+        and written_type.value == block.type
+    )
+
+
+def _item_origins(sequence: Origin, blocks: Sequence[AnyBlock]) -> tuple[Origin, ...]:
     if isinstance(sequence, OutsideFile):
-        return (sequence,) * count
-    if not isinstance(sequence, yaml.SequenceNode) or len(sequence.value) != count:
-        return (_NOT_WRITTEN_IN_PLACE,) * count
-    return tuple(sequence.value)
+        return (sequence,) * len(blocks)
+    if not isinstance(sequence, yaml.SequenceNode) or len(sequence.value) != len(blocks):
+        return (_NOT_WRITTEN_IN_PLACE,) * len(blocks)
+    return tuple(
+        item if _pairs_with(item, block) else _NOT_WRITTEN_IN_PLACE
+        for item, block in zip(sequence.value, blocks, strict=True)
+    )
 
 
 def _origin_of(placed: _Placed) -> Origin:
@@ -173,9 +189,10 @@ def _child_lists(block: AnyBlock) -> dict[tuple[str, ...], list[AnyBlock]]:
 
 
 def _placements(blocks: Sequence[AnyBlock], sequence: Origin) -> Iterator[tuple[AnyBlock, _Placed]]:
-    items = _item_origins(sequence, len(blocks))
+    items = _item_origins(sequence, blocks)
+    in_flow = isinstance(sequence, yaml.SequenceNode) and bool(sequence.flow_style)
     for position, block in enumerate(blocks):
-        placed = _Placed(items, blocks, position)
+        placed = _Placed(items, blocks, position, in_flow)
         yield block, placed
         for steps, children in _child_lists(block).items():
             yield from _placements(children, functools.reduce(_child, steps, _origin_of(placed)))
@@ -244,6 +261,25 @@ def _shares_a_line_with_the_list_around(
     return not (_INDENTATION_AND_DASHES.fullmatch(before) and _COMMA_OR_COMMENT.fullmatch(after))
 
 
+def _value_tree(node: yaml.Node) -> object:
+    if isinstance(node, yaml.MappingNode):
+        return node.tag, [(_value_tree(key), _value_tree(value)) for key, value in node.value]
+    if isinstance(node, yaml.SequenceNode):
+        return node.tag, [_value_tree(item) for item in node.value]
+    return node.tag, node.value
+
+
+def _reads_back_as(lines: Sequence[str], items: Sequence[yaml.Node], *, in_flow: bool) -> bool:
+    text = "".join(lines)
+    try:
+        read_back = _AliasKeepingLoader(f"[\n{text}\n]" if in_flow else text).get_single_node()
+    except yaml.YAMLError:
+        return False
+    return isinstance(read_back, yaml.SequenceNode) and list(map(_value_tree, read_back.value)) == list(
+        map(_value_tree, items)
+    )
+
+
 def _closes_a_heading_of(level: int, block: AnyBlock) -> bool:
     return isinstance(block, Heading) and block.level <= level
 
@@ -277,6 +313,8 @@ def _region_lines(
         return _SHARES_WITH_THE_NEXT_BLOCK
     if _shares_a_line_with_the_list_around(origin.start_mark, end_position, source_lines):
         return _SHARES_WITH_THE_LIST_AROUND
+    if not _reads_back_as(source_lines[start : end + 1], covered, in_flow=placed.in_flow):
+        return _COULD_NOT_BE_CHECKED
     return start + 1, end + 1
 
 
