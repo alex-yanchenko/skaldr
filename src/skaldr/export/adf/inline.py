@@ -138,6 +138,11 @@ def text_color_mark(tone: ToneName) -> AdfMark:
     return AdfTextColor(type="textColor", attrs=AdfTextColorAttrs(color=TEXT_COLOR[tone]))
 
 
+def _script_mark(position: ScriptPosition) -> AdfMark:
+    kind = AdfSubsupAttrs(type="sub" if position == "subscript" else "sup")
+    return AdfSubsup(type="subsup", attrs=kind)
+
+
 def _marked(node: AdfInline, mark: AdfMark) -> AdfInline:
     if node["type"] != "text":
         return node
@@ -286,7 +291,8 @@ class AdfRuns:
 
     def citation(self, run: Citation, /) -> AdfInlines:
         label = (_plain_text(f"[{run.number}]"),)
-        return self.link(label, run.url) if run.url else label
+        linked = self.link(label, run.url) if run.url else label
+        return with_mark(linked, _script_mark("superscript"))
 
     def placeholder(self, name: str, /) -> AdfInlines:
         return self.code("{{" + name + "}}")
@@ -297,8 +303,7 @@ class AdfRuns:
     def script(self, position: ScriptPosition, text: str, /) -> AdfInlines:
         if not text:
             return ()
-        kind = AdfSubsupAttrs(type="sub" if position == "subscript" else "sup")
-        return with_mark((_plain_text(text),), AdfSubsup(type="subsup", attrs=kind))
+        return with_mark((_plain_text(text),), _script_mark(position))
 
     def tinted(
         self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: AdfInlines, /

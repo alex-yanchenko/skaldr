@@ -112,6 +112,43 @@ def test_a_block_compares_in_the_form_slack_stores(block: str, comparable: str) 
     assert comparable_block(block) == comparable
 
 
+@pytest.mark.parametrize(
+    ("written", "stored"),
+    [
+        pytest.param("* a\n  * b\n  * c", "* a\n    * b\n    * c", id="bullets-under-a-bullet"),
+        pytest.param("1. a\n   1. • b", "1. a\n    1. • b", id="dots-under-a-number"),
+        pytest.param("* a\n  * 1\\. b", "* a\n    * 1. b", id="an-escaped-number-label"),
+        pytest.param("* a\n  * \\- b", "* a\n    * - b", id="an-escaped-dash-label"),
+        pytest.param("* [ ] a\n  * [x] b", "* [ ] a\n    * [x] b", id="checks-under-a-check"),
+        pytest.param(
+            "10. j\n    1. b\n       1. c\n11. k", "10. j\n    1. b\n        1. c\n11. k", id="three-deep"
+        ),
+        pytest.param("1. \\+ plus\n2. \\* star", "1. + plus\n2. * star", id="escaped-plus-and-star"),
+        pytest.param("1. 2\\) paren", "1. 2) paren", id="an-escaped-parenthesis-number"),
+        pytest.param("* a\n  continued", "* a\n    continued", id="a-continuation-line"),
+    ],
+)
+def test_a_nested_list_as_written_compares_equal_to_the_form_slack_stores(written: str, stored: str) -> None:
+    assert comparable_block(written) == comparable_block(stored)
+
+
+@pytest.mark.parametrize(
+    ("one", "other"),
+    [
+        pytest.param("* a\n  * b\n  * c", "* a\n  * b\n* c", id="an-item-moved-out-a-level"),
+        pytest.param("* a\n  * b\n    * c", "* a\n  * b\n  * c", id="an-item-moved-up-a-level"),
+        pytest.param("* \\. x", "* . x", id="a-backslash-before-a-dot-with-no-number"),
+        pytest.param("* \\# x", "* # x", id="a-backslash-before-a-hash"),
+    ],
+)
+def test_a_list_that_reads_differently_still_compares_different(one: str, other: str) -> None:
+    assert comparable_block(one) != comparable_block(other)
+
+
+def test_a_list_holding_a_code_fence_compares_its_code_lines_as_written() -> None:
+    assert comparable_block("* a\n```\n\n* x\n```") == "* a\n```\n\n* x\n```"
+
+
 def test_a_comparable_text_is_its_own_comparable_text() -> None:
     once = comparable_text("- a\n\n&nbsp;\n\n- [x] b\n\n| A |\n| --- |\n| 1 \\| 2 |\n\n```\n\n- c\n```\n")
 
@@ -342,6 +379,30 @@ def test_the_archived_line_names_the_document() -> None:
             ["* One.", "Sow.", "* Two."], "* One.\n\nSow.\n\n* Two.\n", id="a-paragraph-keeps-lists-apart"
         ),
         pytest.param([], "&nbsp;\n", id="no-blocks-is-one-blank-paragraph"),
+        pytest.param(
+            ["* Fruit\n    * 1. Apple\n    * 2) Pear"],
+            "* Fruit\n    * 1\\. Apple\n    * 2\\) Pear\n",
+            id="a-stored-item-starting-like-a-number-marker-is-escaped-again",
+        ),
+        pytest.param(
+            ["1. - dash\n2. + plus\n3. * star"],
+            "1. \\- dash\n2. \\+ plus\n3. \\* star\n",
+            id="a-stored-item-starting-like-a-bullet-marker-is-escaped-again",
+        ),
+        pytest.param(
+            ["* [x] 1. done\n* [ ] open"],
+            "* [x] 1\\. done\n* [ ] open\n",
+            id="a-check-item-keeps-its-box-and-its-text-is-escaped",
+        ),
+        pytest.param(
+            ["1. • b\n2. 2026 plan\n* *bold*"],
+            "1. • b\n2. 2026 plan\n* *bold*\n",
+            id="item-text-that-cannot-start-a-list-is-sent-as-stored",
+        ),
+        pytest.param(["1. Sow."], "1. Sow.\n", id="a-paragraph-like-item-is-unchanged"),
+        pytest.param(
+            ["* 1\\. a\n* \\- b"], "* 1\\. a\n* \\- b\n", id="an-item-already-escaped-is-sent-as-it-is"
+        ),
     ],
 )
 def test_a_canvas_body_is_its_blocks_with_two_lists_in_a_row_kept_apart(raws: list[str], body: str) -> None:

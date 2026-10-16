@@ -56,6 +56,7 @@ def _text(text: str, *marks: Mapping[str, object]) -> dict[str, object]:
 STRONG = {"type": "strong"}
 EM = {"type": "em"}
 CODE = {"type": "code"}
+SUPERSCRIPT = {"type": "subsup", "attrs": {"type": "sup"}}
 UNDERLINE = {"type": "underline"}
 STRIKE = {"type": "strike"}
 
@@ -174,14 +175,14 @@ def test_an_authored_link_to_a_heading_is_an_invariant_the_check_backs() -> None
     )
 
 
-def test_a_citation_with_a_url_links_its_number() -> None:
+def test_a_citation_with_a_url_is_its_number_as_a_superscript_over_its_link() -> None:
     assert _written((Citation("k", 3, "https://example.com/k"),)) == [
-        _text("[3]", _link("https://example.com/k"))
+        _text("[3]", _link("https://example.com/k"), SUPERSCRIPT)
     ]
 
 
-def test_a_citation_without_a_url_is_its_number() -> None:
-    assert _written((Citation("k", 3),)) == [_text("[3]")]
+def test_a_citation_without_a_url_is_its_number_as_a_superscript() -> None:
+    assert _written((Citation("k", 3),)) == [_text("[3]", SUPERSCRIPT)]
 
 
 def test_a_placeholder_is_code() -> None:
@@ -337,8 +338,8 @@ def test_a_link_to_an_allowed_scheme_is_kept(url: str) -> None:
     assert _written((Link((Plain("x"),), url),)) == [_text("x", _link(url))]
 
 
-def test_a_citation_with_an_unsafe_url_is_its_number_alone() -> None:
-    assert _written((Citation("k", 2, "javascript:alert(1)"),)) == [_text("[2]")]
+def test_a_citation_with_an_unsafe_url_is_its_number_alone_as_a_superscript() -> None:
+    assert _written((Citation("k", 2, "javascript:alert(1)"),)) == [_text("[2]", SUPERSCRIPT)]
 
 
 def test_a_text_node_with_a_link_strong_and_em_carries_them_in_the_fixed_order() -> None:

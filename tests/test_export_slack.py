@@ -14,16 +14,22 @@ from skaldr.export.slack import render_slack, render_slack_regions
 from skaldr.export.tree import (
     BlockRegion,
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     Graph,
     GraphNode,
     GridColumn,
     Heading,
     HeadingLevel,
+    LabelledValue,
     ListEntry,
     ListKind,
     ListNode,
@@ -247,17 +253,88 @@ def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack
 @pytest.mark.parametrize(
     ("level", "line"),
     [
-        pytest.param(1, "# Counts", id="level-1"),
-        pytest.param(2, "## Counts", id="level-2"),
-        pytest.param(3, "### Counts", id="level-3"),
-        pytest.param(4, "### Counts", id="level-4-folds-to-3"),
-        pytest.param(6, "### Counts", id="level-6-folds-to-3"),
+        pytest.param(2, "# Counts", id="level-2"),
+        pytest.param(3, "## Counts", id="level-3"),
+        pytest.param(4, "### Counts", id="level-4"),
     ],
 )
-def test_a_heading_keeps_its_level_up_to_three_and_deeper_ones_fold_to_three(
+def test_headings_move_up_one_level_when_the_document_has_no_level_1_heading(
     level: HeadingLevel, line: str
 ) -> None:
     assert render_slack([Heading(level, make_rich_text("Counts"), "counts")]) == f"{line}\n"
+
+
+def test_headings_keep_their_levels_when_the_document_has_a_level_1_heading() -> None:
+    headings = [
+        Heading(1, make_rich_text("A")),
+        Heading(2, make_rich_text("B")),
+        Heading(3, make_rich_text("C")),
+    ]
+
+    assert render_slack(headings) == "# A\n\n## B\n\n### C\n"
+
+
+def test_a_level_1_heading_inside_a_toggle_stops_the_shift_for_the_whole_document() -> None:
+    part = Toggle(make_rich_text("Part"), 1, (make_paragraph("p"),))
+
+    assert render_slack([Heading(2, make_rich_text("B")), part]) == "## B\n\n# Part\n\np\n"
+
+
+def test_a_toggle_heading_moves_up_like_a_heading() -> None:
+    section = Toggle(make_rich_text("Section"), 2, (make_paragraph("p"),))
+
+    assert render_slack([section]) == "# Section\n\np\n"
+
+
+@pytest.mark.parametrize(
+    ("nodes", "level"),
+    [
+        pytest.param([Heading(5, make_rich_text("Deep"))], 4, id="level-5-shifted-to-4"),
+        pytest.param(
+            [Heading(1, make_rich_text("Top")), Heading(4, make_rich_text("Deep"))], 4, id="level-4"
+        ),
+    ],
+)
+def test_a_heading_a_canvas_still_cannot_hold_after_the_shift_is_rejected(
+    nodes: list[Node], level: int
+) -> None:
+    assert vars(refusal_of(nodes, "slack")) == _canvas_rejection(
+        "a Slack canvas holds headings down to level 3, "
+        f"so it cannot show the heading 'Deep' at level {level}",
+        "write the heading as bold text, or export the document elsewhere",
+    )
+
+
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_heading_too_deep_to_hold() -> None:
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([Heading(5, make_rich_text("Deep"))])
+
+    assert str(raised.value) == (
+        "a Slack canvas holds headings down to level 3, so it has no form for 'Deep' at level 4; "
+        "the export check should have refused it"
+    )
+
+
+def test_a_toggle_heading_a_canvas_cannot_hold_is_rejected_like_a_heading() -> None:
+    section = Toggle(make_rich_text("Raw"), 5, (make_paragraph("x"),))
+
+    assert vars(refusal_of([section], "slack")) == _canvas_rejection(
+        "a Slack canvas holds headings down to level 3, so it cannot show the heading 'Raw' at level 4",
+        "write the heading as bold text, or export the document elsewhere",
+    )
+
+
+def test_a_heading_block_too_deep_in_a_section_is_rejected_naming_its_yaml_path() -> None:
+    blocks = [{"type": "section", "title": "S", "blocks": [{"type": "heading", "text": "Deep", "level": 4}]}]
+
+    with pytest.raises(ExportRejectedError) as raised:
+        slack_of(blocks)
+
+    assert vars(raised.value) == _canvas_rejection(
+        "a Slack canvas holds headings down to level 3, so it cannot show the heading 'Deep' at level 4",
+        "write the heading as bold text, or export the document elsewhere",
+        "at blocks.0.section.blocks.0.heading",
+    )
 
 
 def test_a_paragraph_is_its_inline_text_and_drops_its_tone() -> None:
@@ -280,7 +357,7 @@ def _broken_line(second: str) -> tuple[ExportRun, ...]:
             "::: {.callout}\n💡 one\\\n\\:::\n:::\n",
             id="callout-paragraph-line-after-the-break-is-not-a-fence",
         ),
-        pytest.param(Heading(2, _broken_line("two")), "## one two\n", id="heading-space"),
+        pytest.param(Heading(2, _broken_line("two")), "# one two\n", id="heading-space"),
         pytest.param(make_bullets(ListEntry(_broken_line("two"))), "* one two\n", id="list-item-space"),
         pytest.param(Quote((Paragraph(_broken_line("two")),)), "> one two\n", id="quote-space"),
         pytest.param(Toggle(_broken_line("two"), None, ()), "**one two**\n", id="title-space"),
@@ -309,7 +386,7 @@ def test_a_line_break_outside_a_table_cell_is_a_hard_break_in_a_paragraph_and_a_
             ListNode(
                 "number", (make_list_entry("a", make_bullets(make_list_entry("b"))), make_list_entry("c"))
             ),
-            "1. a\n   * b\n2. c\n",
+            "1. a\n   1. • b\n2. c\n",
             id="number-with-nested-bullets",
         ),
     ],
@@ -363,6 +440,166 @@ def test_a_numbered_list_in_a_table_cell_keeps_its_numbers_as_text() -> None:
     assert slack_of([block]) == "| N |\n| --- |\n| 3. a<br>4. b |\n"
 
 
+def test_a_bullet_list_in_a_table_cell_is_dash_items_joined_by_line_breaks() -> None:
+    block = {
+        "type": "table",
+        "columns": [{"key": "n", "label": "N", "kind": "text"}],
+        "rows": [{"n": "- a\n- b"}],
+    }
+
+    assert slack_of([block]) == "| N |\n| --- |\n| - a<br>- b |\n"
+
+
+def _one_cell_table(*blocks: Node) -> TableNode:
+    return TableNode((make_table_cell("N"),), (TableRow((TableCell((), blocks=blocks),)),))
+
+
+@pytest.mark.parametrize(
+    ("kind", "nested_kind", "cell"),
+    [
+        pytest.param("bullet", "bullet", "- a<br>  - b<br>- c", id="bullets-under-bullets"),
+        pytest.param("number", "number", "1. a<br>  1. b<br>2. c", id="numbers-under-numbers"),
+        pytest.param("number", "bullet", "1. a<br>  1. • b<br>2. c", id="bullets-under-numbers-as-numbers"),
+        pytest.param("bullet", "number", "- a<br>  - 1\\. b<br>- c", id="numbers-under-bullets-as-bullets"),
+    ],
+)
+def test_a_nested_list_in_a_table_cell_is_indented_two_spaces_and_takes_its_parents_kind(
+    kind: ListKind, nested_kind: ListKind, cell: str
+) -> None:
+    nested = ListNode(nested_kind, (make_list_entry("b"),))
+    items = ListNode(kind, (make_list_entry("a", nested), make_list_entry("c")))
+
+    assert render_slack([_one_cell_table(items)]) == f"| N |\n| --- |\n| {cell} |\n"
+
+
+def test_text_then_a_list_in_a_table_cell_is_a_paragraph_followed_by_a_real_list() -> None:
+    items = make_bullets(make_list_entry("a"), make_list_entry("b"))
+
+    assert render_slack([_one_cell_table(make_paragraph("intro"), items)]) == (
+        "| N |\n| --- |\n| intro<br>- a<br>- b |\n"
+    )
+
+
+def test_a_list_cell_on_a_danger_row_keeps_the_row_dot_before_its_list() -> None:
+    row = TableRow((TableCell((), blocks=(make_bullets(make_list_entry("a")),)),), "danger")
+    table = TableNode((make_table_cell("N"),), (row,))
+
+    assert render_slack([table]) == "| N |\n| --- |\n| 🔴 - a |\n"
+
+
+def test_a_fact_strip_is_one_paragraph_of_its_facts_joined_by_middle_dots() -> None:
+    strip = FactStrip(
+        (
+            LabelledValue("Site:", make_rich_text("West")),
+            LabelledValue(None, make_rich_text("Q3")),
+            LabelledValue("Owner", make_rich_text("Ops")),
+        )
+    )
+
+    assert render_slack([strip]) == "**Site**: West · Q3 · **Owner**: Ops\n"
+
+
+def test_a_sections_fields_are_one_paragraph_under_its_heading() -> None:
+    fields = {"status": "In Progress", "priority": "High"}
+    section = make_section("st2", title="Widen the bin code", collapsed=False, fields=fields)
+
+    assert (
+        slack_of([section]) == "# Widen the bin code\n\n**Status**: In Progress · **Priority**: High\n\nx\n"
+    )
+
+
+def test_a_fact_strip_beside_a_list_needs_no_list_separator() -> None:
+    strip = FactStrip((LabelledValue("Site", make_rich_text("West")),))
+
+    assert render_slack([strip, make_bullets(make_list_entry("a"))]) == "**Site**: West\n\n* a\n"
+
+
+def test_a_definition_list_is_a_bold_term_paragraph_then_its_body_blocks() -> None:
+    steps = make_bullets(make_list_entry("a"))
+    definitions = DefinitionList(
+        (
+            Definition("Fix", (Paragraph(make_rich_text("Recount twice.")), steps)),
+            Definition("Gap", ()),
+            Definition("Late", (Paragraph(make_rich_text("Friday.")),)),
+        )
+    )
+
+    assert render_slack([definitions]) == (
+        "**Fix**\n\nRecount twice.\n\n* a\n\n**Gap**\n\n**Late**\n\nFriday.\n"
+    )
+
+
+def test_a_definition_body_with_text_after_its_list_is_written_since_it_sits_in_no_list_item() -> None:
+    body = "first\n\nsecond\n\n- x\n- y\n\nthird"
+    block = {"type": "def_list", "items": [{"term": "Fix", "body": body}]}
+
+    assert slack_of([block]) == "**Fix**\n\nfirst\n\nsecond\n\n* x\n* y\n\nthird\n"
+
+
+def test_a_definition_body_with_two_lists_keeps_them_apart_with_the_list_separator() -> None:
+    block = {"type": "def_list", "items": [{"term": "Scan", "body": "Lead.\n\n- a\n- b\n\n1. c\n2. d"}]}
+
+    assert slack_of([block]) == f"**Scan**\n\nLead.\n\n* a\n* b\n\n{LIST_SEPARATOR}\n\n1. c\n2. d\n"
+
+
+def test_cards_are_a_column_layout_with_each_value_and_its_note_in_its_own_column() -> None:
+    cards = Cards(
+        (
+            Card("Clean", make_rich_text("9"), note="since Monday"),
+            Card("Late", make_rich_text("2"), tone="danger"),
+        )
+    )
+
+    assert render_slack([cards]) == (
+        "::: {.layout}\n"
+        "::: {.column}\n"
+        "**Clean**: 9\n"
+        "\n"
+        "since Monday\n"
+        ":::\n"
+        "::: {.column}\n"
+        "🔴 **Late**: 2\n"
+        ":::\n"
+        ":::\n"
+    )
+
+
+def test_more_than_three_cards_continue_in_a_next_layout_and_a_lone_card_is_its_own_blocks() -> None:
+    cards = Cards(tuple(Card(name, make_rich_text("1")) for name in "ABCD"))
+
+    assert render_slack([cards]) == (
+        "::: {.layout}\n"
+        "::: {.column}\n**A**: 1\n:::\n"
+        "::: {.column}\n**B**: 1\n:::\n"
+        "::: {.column}\n**C**: 1\n:::\n"
+        ":::\n"
+        "\n"
+        "**D**: 1\n"
+    )
+
+
+def test_cards_inside_a_callout_or_a_column_are_bullets_since_a_layout_cannot_nest() -> None:
+    cards = Cards((Card("Clean", make_rich_text("9"), note="since Monday"),))
+    column = Columns((GridColumn(50, (cards,)), GridColumn(50, (make_paragraph("b"),))))
+
+    assert render_slack([Callout("info", (cards,)), column]) == (
+        "::: {.callout}\n"
+        "💡\n"
+        "\n"
+        "* **Clean**: 9 since Monday\n"
+        ":::\n"
+        "\n"
+        "::: {.layout}\n"
+        "::: {.column}\n"
+        "* **Clean**: 9 since Monday\n"
+        ":::\n"
+        "::: {.column}\n"
+        "b\n"
+        ":::\n"
+        ":::\n"
+    )
+
+
 def test_a_numbered_list_in_a_quote_is_refused_since_a_canvas_quote_holds_only_text() -> None:
     with pytest.raises(ExportRejectedError) as raised:
         slack_of([{"type": "quote", "body": "3. a\n4. b"}])
@@ -395,18 +632,52 @@ def test_an_empty_paragraph_writes_nothing(nodes: list[Node], text: str) -> None
 @pytest.mark.parametrize(
     ("kind", "nested_kind", "text"),
     [
-        pytest.param("bullet", "number", "* a\n  1. b\n", id="number-under-bullet"),
-        pytest.param("number", "bullet", "1. a\n   * b\n", id="bullet-under-number"),
-        pytest.param("check", "bullet", "* [ ] a\n  * b\n", id="bullet-under-check"),
-        pytest.param("bullet", "check", "* a\n  * [ ] b\n", id="check-under-bullet"),
-        pytest.param("number", "check", "1. a\n   * [ ] b\n", id="check-under-number"),
-        pytest.param("number", "number", "1. a\n   1. b\n", id="same-kind"),
+        pytest.param("bullet", "number", "* a\n  * 1\\. b\n  * 2\\. c\n", id="number-under-bullet"),
+        pytest.param("number", "bullet", "1. a\n   1. • b\n   2. • c\n", id="bullet-under-number"),
+        pytest.param("bullet", "check", "* a\n  * ☐ b\n  * ☑ c\n", id="check-under-bullet"),
+        pytest.param("number", "check", "1. a\n   1. ☐ b\n   2. ☑ c\n", id="check-under-number"),
+        pytest.param("number", "number", "1. a\n   1. b\n   2. c\n", id="number-under-number"),
+        pytest.param("bullet", "bullet", "* a\n  * b\n  * c\n", id="bullet-under-bullet"),
+        pytest.param("check", "check", "* [ ] a\n  * [ ] b\n  * [x] c\n", id="check-under-check"),
     ],
 )
-def test_a_nested_list_keeps_its_own_kind(kind: ListKind, nested_kind: ListKind, text: str) -> None:
-    nested = ListNode(nested_kind, (make_list_entry("b"),))
+def test_a_nested_list_takes_its_parents_kind_and_leads_each_item_with_its_own_marker(
+    kind: ListKind, nested_kind: ListKind, text: str
+) -> None:
+    nested = ListNode(nested_kind, (make_list_entry("b"), make_list_entry("c", checked=True)))
 
     assert render_slack([ListNode(kind, (make_list_entry("a", nested),))]) == text
+
+
+@pytest.mark.parametrize(
+    ("outer", "middle", "text"),
+    [
+        pytest.param("bullet", "number", "* a\n  * 1\\. b\n    * c\n", id="bullet-number-bullet"),
+        pytest.param("number", "bullet", "1. a\n   1. • b\n      1. c\n", id="number-bullet-number"),
+    ],
+)
+def test_every_level_under_a_list_of_another_kind_takes_the_outer_lists_kind(
+    outer: ListKind, middle: ListKind, text: str
+) -> None:
+    deepest = ListNode(outer, (make_list_entry("c"),))
+    between = ListNode(middle, (make_list_entry("b", deepest),))
+
+    assert render_slack([ListNode(outer, (make_list_entry("a", between),))]) == text
+
+
+@pytest.mark.parametrize("nested_kind", ["bullet", "number"])
+def test_a_list_of_another_kind_under_a_check_item_is_an_internal_error(
+    nested_kind: ListKind,
+) -> None:
+    nested = ListNode(nested_kind, (make_list_entry("b"),))
+
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([ListNode("check", (make_list_entry("a", nested),))])
+
+    assert str(raised.value) == (
+        f"a Slack canvas nests only check items under a check item, not a {nested_kind} list; "
+        "a check list's nested items are check items, so the lowering should not have made one"
+    )
 
 
 def test_a_nested_list_three_deep_indents_to_each_content_column() -> None:
@@ -539,7 +810,7 @@ def test_a_block_a_list_item_cannot_hold_is_rejected_even_two_lists_deep(held: N
 def test_a_paragraph_before_a_nested_list_in_a_list_item_is_written_in_place() -> None:
     entry = make_list_entry("a", make_paragraph("lead"), make_bullets(make_list_entry("n")))
 
-    assert render_slack([ListNode("number", (entry, make_list_entry("b")))]) == "1. a lead\n   * n\n2. b\n"
+    assert render_slack([ListNode("number", (entry, make_list_entry("b")))]) == "1. a lead\n   1. • n\n2. b\n"
 
 
 @pytest.mark.parametrize(
@@ -954,12 +1225,7 @@ def test_a_divider_stays_at_the_top_level() -> None:
     ("node", "text"),
     [
         pytest.param(
-            Toggle(make_rich_text("Raw"), 2, (make_paragraph("x"),)), "## Raw\n\nx\n", id="heading-level-2"
-        ),
-        pytest.param(
-            Toggle(make_rich_text("Raw"), 5, (make_paragraph("x"),)),
-            "### Raw\n\nx\n",
-            id="heading-level-5-folds",
+            Toggle(make_rich_text("Raw"), 2, (make_paragraph("x"),)), "# Raw\n\nx\n", id="heading-level-2"
         ),
         pytest.param(
             Toggle(make_rich_text("Raw"), None, (make_paragraph("x"),)), "**Raw**\n\nx\n", id="no-heading"
@@ -982,7 +1248,7 @@ def test_up_to_three_columns_are_a_column_layout() -> None:
 
     assert render_slack([node]) == (
         "::: {.layout}\n"
-        "::: {.column}\n### Left\n\nleft\n:::\n"
+        "::: {.column}\n## Left\n\nleft\n:::\n"
         "::: {.column}\n* a\n:::\n"
         "::: {.column}\n**T**\n\nx\n:::\n"
         ":::\n"
@@ -1312,7 +1578,7 @@ COUNTS_HEADING: dict[str, Any] = {"type": "heading", "text": "Counts", "id": "co
     ],
 )
 def test_emphasis_inside_a_link_label_inside_emphasis_on_a_canvas(body: str, written: str) -> None:
-    assert slack_of([COUNTS_HEADING, {"type": "text", "body": body}]) == f"## Counts\n\n{written}\n"
+    assert slack_of([COUNTS_HEADING, {"type": "text", "body": body}]) == f"# Counts\n\n{written}\n"
 
 
 @pytest.mark.parametrize(
@@ -1423,13 +1689,40 @@ def test_a_document_exports_its_body_without_the_title_since_the_canvas_takes_th
     )
 
 
+def _exported_with_meta(tmp_path: Path, **meta: str) -> dict[str, str]:
+    path = write_report(tmp_path, make_report(meta={"title": "Test Report", **meta}))
+    out_dir = tmp_path / "out"
+
+    export_slack(load_report(path), out_dir)
+
+    return folder_texts(out_dir)
+
+
+def test_the_page_icon_leads_the_canvas_title_in_the_manifest(tmp_path: Path) -> None:
+    written = _exported_with_meta(tmp_path, icon="📊")
+
+    assert (json.loads(written[EXPORT_MANIFEST])["title"], written["page.md"]) == (
+        "📊 Test Report",
+        "Hello.\n",
+    )
+
+
+def test_the_page_cover_is_a_link_paragraph_before_the_body(tmp_path: Path) -> None:
+    written = _exported_with_meta(tmp_path, cover="https://example.com/cover.png")
+
+    assert (json.loads(written[EXPORT_MANIFEST])["title"], written["page.md"]) == (
+        "Test Report",
+        "[Cover image](https://example.com/cover.png)\n\nHello.\n",
+    )
+
+
 def test_a_document_built_from_yaml_exports_through_the_lowering() -> None:
     blocks = [
         {"type": "heading", "text": "Counts"},
         {"type": "callout", "tone": "warning", "title": "Recount", "body": "Aisle 4 by **Friday**."},
     ]
 
-    assert slack_of(blocks) == "## Counts\n\n::: {.callout}\n⚠️ **Recount**\n\nAisle 4 by **Friday**.\n:::\n"
+    assert slack_of(blocks) == "# Counts\n\n::: {.callout}\n⚠️ **Recount**\n\nAisle 4 by **Friday**.\n:::\n"
 
 
 def _code_report(tmp_path: Path, code_length: int, character: str = "x") -> Report:
@@ -1620,18 +1913,6 @@ def test_a_walkthrough_step_holding_a_block_a_canvas_list_item_cannot_hold_is_re
     ("blocks", "what", "path"),
     [
         pytest.param(
-            [{"type": "def_list", "items": [{"term": "Scan", "body": "Lead.\n\n- a\n- b\n\n1. c\n2. d"}]}],
-            "a second nested list",
-            "blocks.0.def_list",
-            id="definition-with-two-lists",
-        ),
-        pytest.param(
-            [{"type": "def_list", "items": [{"term": "Scan", "body": "Lead.\n\n- a\n- b\n\nTail."}]}],
-            "a paragraph after its nested list",
-            "blocks.0.def_list",
-            id="definition-with-a-paragraph-after-its-list",
-        ),
-        pytest.param(
             [{"type": "text", "body": "- a\n  - b\n  - c\n\n  1. d\n  2. e\n- f"}],
             "a second nested list",
             "blocks.0.text",
@@ -1688,7 +1969,7 @@ def test_a_walkthrough_step_with_text_then_one_list_exports_as_one_list_item() -
     detail = [{"type": "text", "body": "Twice."}, {"type": "list", "items": ["a", "b"]}]
     walkthrough = {"type": "walkthrough", "steps": [{"label": "Scan", "detail": detail}]}
 
-    assert slack_of([walkthrough]) == "1. **Scan** Twice.\n   * a\n   * b\n"
+    assert slack_of([walkthrough]) == "1. **Scan** Twice.\n   1. • a\n   2. • b\n"
 
 
 def test_a_walkthrough_whose_steps_hold_no_grid_exports() -> None:
@@ -1748,7 +2029,7 @@ def test_each_region_is_written_on_its_own_and_together_they_read_as_the_whole_c
             "* Spade.\n* Rake.\n",
             "&nbsp;\n\n* Sow in spring.\n",
             "",
-            "## Notes\n",
+            "# Notes\n",
         ),
         render_slack(document.body),
     )

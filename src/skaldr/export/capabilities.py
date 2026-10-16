@@ -39,7 +39,7 @@ FencedInAListItemFeature = Literal[
     "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step"
 ]
 ListInAQuoteFeature = Literal["list inside a quote"]
-CalloutPlacementFeature = Literal["divider inside a callout"]
+CalloutPlacementFeature = Literal["divider inside a callout", "link card inside a callout"]
 AnyPlacementFeature = Literal[PlacementFeature, CalloutPlacementFeature]
 GridCellFeature = Literal[
     "table inside a grid cell", "callout inside a grid cell", "divider inside a grid cell"
@@ -47,6 +47,7 @@ GridCellFeature = Literal[
 GridCellsFeature = Literal["grid with more than three cells"]
 TonedCellFeature = Literal["toned grid cell"]
 GridInAGridCellFeature = Literal["grid inside a grid cell"]
+DeepHeadingFeature = Literal["heading deeper than a canvas holds"]
 DividerInAStepFeature = Literal["divider inside a walkthrough step"]
 PanesFeature = Literal["set of tabs", "request with several cases"]
 OccurrenceFeature = Literal[
@@ -79,6 +80,7 @@ Feature = Literal[
     GridCellsFeature,
     TonedCellFeature,
     GridInAGridCellFeature,
+    DeepHeadingFeature,
     DividerInAStepFeature,
     PanesFeature,
     OccurrenceFeature,
@@ -88,12 +90,13 @@ RICH_STEP_NOTE: Final[OccurrenceFeature] = (
 )
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
-Held = Literal["table", "callout", "quote", "toggle", "divider"]
+Held = Literal["table", "callout", "quote", "link card", "toggle", "divider"]
 FIRST_LIST_NUMBER: Final = 1
 BACKTICK: Final = "`"
 CLOSING_TAG_OPENER: Final = "</"
 CANVAS_TABLE_CELL_LIMIT: Final = 300
 CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
+CANVAS_HEADING_LEVEL_LIMIT: Final = 3
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
     "superscript": str.maketrans(
         "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
@@ -229,6 +232,14 @@ class GridInAGridCell:
 
 
 @dataclass(frozen=True)
+class DeepHeading:
+    text: str
+    level: int
+    limit: int = CANVAS_HEADING_LEVEL_LIMIT
+    feature: DeepHeadingFeature = field(default="heading deeper than a canvas holds", init=False)
+
+
+@dataclass(frozen=True)
 class DividerInAStep:
     feature: DividerInAStepFeature = field(default="divider inside a walkthrough step", init=False)
 
@@ -261,6 +272,7 @@ Details = (
     | GridCells
     | TonedCell
     | GridInAGridCell
+    | DeepHeading
     | DividerInAStep
     | Panes
     | Occurrence
@@ -368,6 +380,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         {"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}
     ),
     "quote inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
+    "link card inside a callout": _kept_except({}),
     "toggle inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "table inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "toggle inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
@@ -550,6 +563,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "heading deeper than a canvas holds": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas holds headings down to level {limit}, "
+                "so it cannot show the heading '{text}' at level {level}",
+                "write the heading as bold text, or export the document elsewhere",
+            )
+        }
+    ),
     "divider inside a walkthrough step": _kept_except(
         {
             "adf": Rejection(
@@ -616,6 +638,7 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], AnyPlacementFeature]] = {
     ("callout", "table"): "table inside a callout",
     ("callout", "callout"): "callout inside a callout",
     ("callout", "quote"): "quote inside a callout",
+    ("callout", "link card"): "link card inside a callout",
     ("callout", "toggle"): "toggle inside a callout",
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",
