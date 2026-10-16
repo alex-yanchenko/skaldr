@@ -970,20 +970,57 @@ def test_a_check_list_becomes_a_task_list() -> None:
             {"start": 9}, "9. c\n10. d\n    1. e\n", id="start-counts-on-and-a-nested-list-from-one"
         ),
         pytest.param({"numbering": "decimal"}, "1. c\n2. d\n   1. e\n", id="decimal-is-native"),
-        pytest.param(
-            {"numbering": "letters"}, "- a. c\n- b. d\n  - a. e\n", id="letters-are-bullets-led-by-the-letter"
-        ),
-        pytest.param(
-            {"start": 4, "numbering": "roman"},
-            "- iv. c\n- v. d\n  - i. e\n",
-            id="roman-is-bullets-led-by-the-numeral-from-the-start",
-        ),
     ],
 )
 def test_a_numbered_list_keeps_its_start_and_its_numbering(options: dict[str, object], markdown: str) -> None:
     block = {"type": "list", "style": "number", "items": ["c", {"text": "d", "items": ["e"]}], **options}
 
     assert markdown_of([block]) == markdown
+
+
+def test_a_lettered_list_is_an_ol_of_type_a_with_each_item_set_apart_by_blank_lines() -> None:
+    block = {"type": "list", "style": "number", "numbering": "letters", "items": ["c", "**d**"]}
+
+    assert markdown_of([block]) == ('<ol type="a">\n<li>\n\nc\n\n</li>\n<li>\n\n**d**\n\n</li>\n</ol>\n')
+
+
+def test_a_roman_list_is_an_ol_of_type_i_from_its_start_with_nested_lists_inside_its_items() -> None:
+    block = {
+        "type": "list",
+        "style": "number",
+        "numbering": "roman",
+        "start": 4,
+        "items": ["c", {"text": "d", "items": ["e"]}],
+    }
+
+    assert markdown_of([block]) == (
+        '<ol type="i" start="4">\n'
+        "<li>\n\nc\n\n</li>\n"
+        '<li>\n\nd\n\n<ol type="i">\n<li>\n\ne\n\n</li>\n</ol>\n\n</li>\n'
+        "</ol>\n"
+    )
+
+
+def test_an_ol_does_not_join_the_markdown_lists_around_it() -> None:
+    lettered = ListNode("number", (ListEntry((Plain("b"),)),), numbering="letters")
+    nodes = [
+        ListNode("number", (ListEntry((Plain("a"),)),)),
+        lettered,
+        ListNode("number", (ListEntry((Plain("c"),)),)),
+    ]
+
+    assert render_markdown(nodes) == '1. a\n\n<ol type="a">\n<li>\n\nb\n\n</li>\n</ol>\n\n1. c\n'
+
+
+def test_an_ol_item_holding_a_callout_keeps_the_icon_led_quote_and_a_blank_item_is_empty() -> None:
+    inner = Callout("success", (Paragraph((Plain("done"),)),))
+    lettered = ListNode(
+        "number", (ListEntry((Plain("a"),), children=(inner,)), ListEntry(())), numbering="roman"
+    )
+
+    assert render_markdown([lettered]) == (
+        '<ol type="i">\n<li>\n\na\n\n> ✅ done\n\n</li>\n<li></li>\n</ol>\n'
+    )
 
 
 @pytest.mark.parametrize(
@@ -1882,20 +1919,45 @@ def test_list_lines_in_a_callout_body_become_a_list_inside_the_alert() -> None:
     assert markdown_of([callout]) == "> [!NOTE]\n> Checks:\n>\n> - lint\n> - test\n"
 
 
-def test_list_lines_in_a_quote_are_lines_led_by_their_marker() -> None:
-    quote = {"type": "quote", "body": "Said:\n- a\n- b"}
+def test_a_list_in_a_quote_is_a_markdown_list_inside_the_quote() -> None:
+    quote = {"type": "quote", "body": "Said:\n- a\n- b\n\n2. c\n3. d", "cite": "Ops lead"}
 
-    assert markdown_of([quote]) == "> Said:\n>\n> • a\n>\n> • b\n"
+    assert markdown_of([quote]) == ("> Said:\n>\n> - a\n> - b\n>\n> 2. c\n> 3. d\n>\n> *Ops lead*\n")
 
 
-def test_list_lines_in_a_table_cell_are_lines_led_by_their_marker() -> None:
+def test_a_nested_list_in_a_quote_nests_under_its_item() -> None:
+    quote = {"type": "quote", "body": "- a\n  - b\n- c"}
+
+    assert markdown_of([quote]) == "> - a\n>   - b\n> - c\n"
+
+
+def test_a_list_in_a_table_cell_is_an_inline_ul_or_ol_after_the_cell_text() -> None:
     table = {
         "type": "table",
         "columns": [{"key": "a", "label": "A", "kind": "rich"}],
-        "rows": [{"a": "Steps:\n\n2. one\n3. two"}],
+        "rows": [{"a": "Steps:\n\n2. one\n3. **two**"}, {"a": "- a | b\n  - c\n- d"}],
     }
 
-    assert markdown_of([table]) == "| A |\n| --- |\n| Steps:<br>2. one<br>3. two |\n"
+    assert markdown_of([table]) == (
+        "| A |\n| --- |\n"
+        '| Steps:<br><ol start="2"><li>one</li><li>**two**</li></ol> |\n'
+        "| <ul><li>a \\| b<ul><li>c</li></ul></li><li>d</li></ul> |\n"
+    )
+
+
+def test_a_toned_row_dots_a_cell_holding_a_list_and_strikes_its_text_when_muted() -> None:
+    cell = TableCell(
+        (), blocks=(Paragraph((Plain("Fix:"),)), ListNode("bullet", (ListEntry((Plain("one"),)),)))
+    )
+    table = TableNode(
+        (TableCell((Plain("Steps"),)),), (TableRow((cell,), tone="danger"), TableRow((cell,), tone="muted"))
+    )
+
+    assert render_markdown([table]) == (
+        "| Steps |\n| --- |\n"
+        "| 🔴 Fix:<br><ul><li>one</li></ul> |\n"
+        "| ~~Fix:~~<br><ul><li>~~one~~</li></ul> |\n"
+    )
 
 
 def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:

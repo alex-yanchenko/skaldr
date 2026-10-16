@@ -378,7 +378,22 @@ def test_every_other_target_exports_what_one_target_refuses_without_a_refusal(
             id="underline-on-github",
         ),
         pytest.param(
-            LETTERED_LIST, "markdown", "# Test Report\n\n- a. a\n- b. b\n", id="lettered-list-on-github"
+            HIGHLIGHTED_TEXT,
+            "markdown",
+            "# Test Report\n\nThe recount is <mark>due Friday</mark>.\n",
+            id="highlight-on-github",
+        ),
+        pytest.param(
+            LETTERED_LIST,
+            "markdown",
+            '# Test Report\n\n<ol type="a">\n<li>\n\na\n\n</li>\n<li>\n\nb\n\n</li>\n</ol>\n',
+            id="lettered-list-on-github",
+        ),
+        pytest.param(
+            LIST_IN_A_QUOTE,
+            "markdown",
+            "# Test Report\n\n> Count:\n>\n> - aisles\n> - bins\n",
+            id="list-in-a-quote-on-github",
         ),
         pytest.param(
             LINK_TO_ANOTHER_DOCUMENT,

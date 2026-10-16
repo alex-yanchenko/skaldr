@@ -167,10 +167,31 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 ### Re-count procedure, from step iv
 
-- iv. Freeze inbound moves in the overflow aisles.
-- v. Re-scan every bin with the widened reader.
-  - i. Start with the aisles that held the 260 skipped units.
-- vi. Re-run reconciliation and compare against the first count.
+<ol type="i" start="4">
+<li>
+
+Freeze inbound moves in the overflow aisles.
+
+</li>
+<li>
+
+Re-scan every bin with the widened reader.
+
+<ol type="i">
+<li>
+
+Start with the aisles that held the 260 skipped units.
+
+</li>
+</ol>
+
+</li>
+<li>
+
+Re-run reconciliation and compare against the first count.
+
+</li>
+</ol>
 
 ### Decisions
 

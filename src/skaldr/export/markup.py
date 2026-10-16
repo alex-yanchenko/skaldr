@@ -327,9 +327,18 @@ class CommonMarkRuns(MarkupRuns, ABC):
         return self._written(runs, _Enclosing())
 
     def write_toned(self, tones: Sequence[ToneName], runs: ExportRich) -> str:
-        dots = [self.mark(IndicatorMark(tone)) for tone in _dot_tones_not_leading(tones, runs)]
-        text = self._written_struck(runs) if "muted" in tones else self.write(runs)
+        dots = self.tone_dots(tones, runs)
+        text = self.write_struck_if_muted(tones, runs)
         return " ".join([*dots, text] if text else dots)
+
+    def tone_dots(self, tones: Sequence[ToneName], runs: ExportRich) -> list[str]:
+        return [self.mark(IndicatorMark(tone)) for tone in _dot_tones_not_leading(tones, runs)]
+
+    def write_struck_if_muted(self, tones: Sequence[ToneName], runs: ExportRich) -> str:
+        return self._written_struck(runs) if "muted" in tones else self.write(runs)
+
+    def write_cell(self, tones: Sequence[ToneName], cell: TableCell) -> str:
+        return self.write_toned(tones, cell_text(cell))
 
     def _written_struck(self, runs: ExportRich) -> str:
         struck = _Emphasis("strike", self._written(runs, _Enclosing().inside("strike")))
@@ -423,7 +432,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
 
 def pipe_table_lines(table: TableNode, writer: CommonMarkRuns) -> list[str]:
     def cell_markup(cell: TableCell, tones: Sequence[ToneName]) -> str:
-        return writer.write_toned(tones, cell_text(cell)).replace("|", "\\|")
+        return writer.write_cell(tones, cell).replace("|", "\\|")
 
     width = table_width(table)
     lines = [

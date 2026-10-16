@@ -9,13 +9,14 @@ from typing import Final, Literal, NoReturn
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.folds import folded_except, quote_lines
+from skaldr.export.folds import folded, folded_except
 from skaldr.export.github_html import HtmlRuns, date_tag, details_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
+    HTML_LINE_BREAK,
     LARGEST_ORDERED_MARKER_NUMBER,
     CommonMarkRuns,
     code_block_lines,
@@ -56,9 +57,11 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
     TableNode,
     TableOfContents,
     Tabs,
+    TextNumbering,
     Timeline,
     Toggle,
     ToneName,
@@ -86,6 +89,7 @@ GITHUB_ALERT_TYPE: Final[Mapping[ToneName, str]] = {
     "danger": "CAUTION",
     "accent": "IMPORTANT",
 }
+ORDERED_LIST_TYPE: Final[Mapping[TextNumbering, str]] = {"letters": "a", "roman": "i"}
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
     "bullet": "dash",
@@ -114,6 +118,13 @@ def _kept_in_a_github_slug(character: str) -> bool:
 
 def github_slug(text: str) -> str:
     return "".join(filter(_kept_in_a_github_slug, text.lower())).replace(" ", "-")
+
+
+def _refuse_a_block_a_cell_cannot_hold(node: Node) -> NoReturn:
+    raise ExportInvariantError(
+        "a table cell holds only paragraphs and lists, "
+        f"not a {type(node).__name__}; the lowering should not have put one there"
+    )
 
 
 class _MarkdownRuns(CommonMarkRuns):
@@ -145,6 +156,42 @@ class _MarkdownRuns(CommonMarkRuns):
 
     def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
         return self.link(label, f"{doc_id}.md")
+
+    def write_cell(self, tones: Sequence[ToneName], cell: TableCell) -> str:
+        if not cell.blocks:
+            return super().write_cell(tones, cell)
+        dots = self.tone_dots(tones, ())
+        parts = [part for part in self._cell_parts(cell.blocks, tones) if part]
+        content = HTML_LINE_BREAK.join(parts)
+        return " ".join([*dots, content] if content else dots)
+
+    def _cell_parts(self, blocks: Sequence[Node], tones: Sequence[ToneName]) -> Iterator[str]:
+        for node in folded(blocks):
+            match node:
+                case Paragraph():
+                    yield self.write_struck_if_muted(tones, node.text)
+                case ListNode():
+                    yield self._html_list(node, tones)
+                case _:
+                    _refuse_a_block_a_cell_cannot_hold(node)
+
+    def _html_list(self, node: ListNode, tones: Sequence[ToneName]) -> str:
+        tag = "ol" if node.kind == "number" else "ul"
+        start = f' start="{node.start}"' if node.kind == "number" and node.start != 1 else ""
+        items = "".join(f"<li>{self._html_item(entry, tones)}</li>" for entry in node.entries)
+        return f"<{tag}{start}>{items}</{tag}>"
+
+    def _html_item(self, entry: ListEntry, tones: Sequence[ToneName]) -> str:
+        content = self.write_struck_if_muted(tones, entry.text)
+        for child in folded(entry.children):
+            match child:
+                case ListNode():
+                    content += self._html_list(child, tones)
+                case Paragraph():
+                    content += HTML_LINE_BREAK + self.write_struck_if_muted(tones, child.text)
+                case _:
+                    _refuse_a_block_a_cell_cannot_hold(child)
+        return content
 
     def underline(self, inner: str, /) -> str:
         return f"<ins>{inner}</ins>"
@@ -198,6 +245,8 @@ def _is_written_natively(node: Node) -> bool:
     match node:
         case Toggle():
             return node.open
+        case ListNode():
+            return node.numbering is not None
         case _:
             return False
 
@@ -305,10 +354,21 @@ class _MarkdownWriter:
         return [f"{MEDIA_KIND_LABELS[node.kind]}: {self.runs.link(label, url)}"]
 
     def quote_lines(self, node: Quote) -> list[str]:
-        parts = [self.block_text(line) for line in quote_lines(node)]
-        if node.cite:
-            parts.append(styled("italic", self.inline(node.cite)))
-        return quoted(joined([[part] for part in parts]))
+        with self.inside_a_container():
+            body = self.blocks(node.body)
+        cite = [styled("italic", self.inline(node.cite))] if node.cite else []
+        return quoted(joined([body, cite]))
+
+    def ordered_html_lines(self, node: ListNode, numbering: TextNumbering) -> list[str]:
+        start = f' start="{node.start}"' if node.start != 1 else ""
+        lines = [f'<ol type="{ORDERED_LIST_TYPE[numbering]}"{start}>']
+        for entry in node.entries:
+            text = self.block_text(entry.text)
+            with self.inside_a_container():
+                children = self.blocks(entry.children)
+            content = joined([[text] if text else [], children])
+            lines += ["<li>", "", *content, "", "</li>"] if content else ["<li></li>"]
+        return [*lines, "</ol>"]
 
     def details_written(
         self, title: ExportRich, children: Sequence[Node], after: _ListTail | None, *, opened: bool
@@ -346,6 +406,8 @@ class _MarkdownWriter:
             case Paragraph():
                 text = self.block_text(node.text)
                 return _Written.of([text] if text else [])
+            case ListNode() if node.numbering is not None:
+                return _Written.of(self.ordered_html_lines(node, node.numbering))
             case ListNode():
                 family = MARKER_FAMILY[node.kind]
                 return _Written.of(self.list_lines(node, alternate), _ListTail(family, alternate))

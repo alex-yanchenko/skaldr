@@ -55,7 +55,16 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
     return list(feature_hits(report, LoweredDocument("Plan", (BlockRegion(0, tuple(nodes)),))))
 
 
-WRITTEN_NATIVELY_ON_GITHUB = frozenset({"open toggle"})
+WRITTEN_NATIVELY_ON_GITHUB = frozenset(
+    {
+        "open toggle",
+        "roman list",
+        "letter list",
+        "quote holding lists",
+        "table cell holding a list",
+        "long list cell beside a short cell",
+    }
+)
 FOLDED_WRITER_CASES = [
     pytest.param(writer, case, id=f"{writer}-{case}")
     for writer in WRITERS
