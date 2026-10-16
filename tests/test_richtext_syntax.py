@@ -354,6 +354,19 @@ def test_an_attribute_list_that_cannot_color_text_fails_naming_it(text: str, mes
             ),
             id="operators-signs-and-parentheses-in-a-script",
         ),
+        pytest.param(
+            "Ca^2+^ and Fe^3+^, x^n+1^.",
+            (
+                ("text", "Ca"),
+                ("superscript", "2+"),
+                ("text", " and Fe"),
+                ("superscript", "3+"),
+                ("text", ", x"),
+                ("superscript", "n+1"),
+                ("text", "."),
+            ),
+            id="operator-in-a-script-closed-before-a-space-or-punctuation",
+        ),
     ],
 )
 def test_underline_and_script_marks_become_tokens(text: str, shape: Shape) -> None:
@@ -373,6 +386,8 @@ def test_underline_and_script_marks_become_tokens(text: str, shape: Shape) -> No
         pytest.param("cut ~5%~ and 2^a_b^ and x~a/b~", id="characters-a-script-does-not-hold"),
         pytest.param("a^^b^^ and [^x^]", id="doubled-carets-and-a-caret-after-a-bracket"),
         pytest.param("~~unclosed~", id="strike-opener-with-one-closing-tilde"),
+        pytest.param("x^2+y^2=z^2", id="equation-with-carets-for-powers"),
+        pytest.param("a~1+b~2=c", id="equation-with-tildes-for-indices"),
     ],
 )
 def test_pluses_tildes_and_carets_that_form_no_mark_stay_text(text: str) -> None:
