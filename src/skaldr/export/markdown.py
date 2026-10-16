@@ -9,7 +9,8 @@ from typing import Final, Literal, NoReturn
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.folds import folded, quote_lines
+from skaldr.export.folds import folded_except, quote_lines
+from skaldr.export.github_html import HtmlRuns, date_tag, details_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import plain
 from skaldr.export.markup import (
@@ -35,14 +36,18 @@ from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import data_table_swapped_in, figure_mermaid_draws, swaps_the_figure, web_address_of
 from skaldr.export.tree import (
     Callout,
+    Cards,
     CodeBlock,
     Columns,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
-    GenericNode,
+    FactStrip,
     Heading,
     HeadingLevel,
+    KeyValueList,
+    LinkCard,
     ListEntry,
     ListKind,
     ListNode,
@@ -54,6 +59,7 @@ from skaldr.export.tree import (
     TableNode,
     TableOfContents,
     Tabs,
+    Timeline,
     Toggle,
     ToneName,
     heading_of,
@@ -61,7 +67,6 @@ from skaldr.export.tree import (
 )
 from skaldr.models import MEDIA_KIND_LABELS
 from skaldr.richtext import SCRIPT_HTML_TAG, MarkerStyle, ScriptPosition
-from skaldr.typed_links import date_target_text
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x24D0, 0x24EA),
@@ -136,9 +141,7 @@ class _MarkdownRuns(CommonMarkRuns):
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))
 
     def date_mention(self, label: str, start: date, end: date | None, /) -> str:
-        if end is None:
-            return f'<time datetime="{start.isoformat()}">{label}</time>'
-        return f'<span data-range="{date_target_text(start, end)}">{label}</span>'
+        return date_tag(label, start, end)
 
     def document_link(self, label: str, doc_id: str, _section: str | None, /) -> str:
         return self.link(label, f"{doc_id}.md")
@@ -191,7 +194,15 @@ class _Written:
         return cls(tuple(lines), tail)
 
 
-def _marker_family(node: GenericNode) -> MarkerFamily | None:
+def _is_written_natively(node: Node) -> bool:
+    match node:
+        case Toggle():
+            return node.open
+        case _:
+            return False
+
+
+def _marker_family(node: Node) -> MarkerFamily | None:
     if isinstance(node, ListNode):
         return MARKER_FAMILY[node.kind]
     return "dash" if isinstance(node, TableOfContents) else None
@@ -204,6 +215,7 @@ def _must_alternate_markers(family: MarkerFamily | None, after: _ListTail | None
 class _MarkdownWriter:
     def __init__(self, heading_slugs: Mapping[str, str]) -> None:
         self.runs = _MarkdownRuns(heading_slugs)
+        self.html = HtmlRuns(heading_slugs)
         self.container_depth = 0
 
     def inline(self, runs: ExportRich) -> str:
@@ -239,7 +251,7 @@ class _MarkdownWriter:
         return lines
 
     def entry_children(self, entry: ListEntry, width: int, after_a_bare_marker: bool) -> list[str]:
-        nodes = folded(entry.children)
+        nodes = folded_except(entry.children, _is_written_natively)
         with self.inside_a_container():
             children = self.blocks(nodes)
         if not children:
@@ -298,12 +310,22 @@ class _MarkdownWriter:
             parts.append(styled("italic", self.inline(node.cite)))
         return quoted(joined([[part] for part in parts]))
 
+    def details_written(
+        self, title: ExportRich, children: Sequence[Node], after: _ListTail | None, *, opened: bool
+    ) -> _Written:
+        summary = self.html.write(title)
+        if not summary.strip():
+            return self.blocks_after(children, after)
+        body = self.blocks_after(children, None)
+        return _Written.of(details_lines(summary, body.lines, opened=opened))
+
     def tabs_written(self, node: Tabs, after: _ListTail | None) -> _Written:
         sections: list[Sequence[str]] = []
         tail = after
-        for tab in node.tabs:
-            title = self.inline(tab_title_led_by_its_icon(tab))
-            section = self.titled(styled("bold", title), tab.children, tail)
+        for index, tab in enumerate(node.tabs):
+            section = self.details_written(
+                tab_title_led_by_its_icon(tab), tab.children, tail, opened=index == 0
+            )
             if section.lines:
                 sections.append(section.lines)
                 tail = section.tail
@@ -316,7 +338,7 @@ class _MarkdownWriter:
         ]
         return [f"{dash} [{title}](#{slug})" if slug else f"{dash} {title}" for slug, title in entries]
 
-    def written(self, node: GenericNode, after: _ListTail | None) -> _Written:
+    def written(self, node: Node, after: _ListTail | None) -> _Written:
         alternate = _must_alternate_markers(_marker_family(node), after)
         match node:
             case Heading():
@@ -346,7 +368,7 @@ class _MarkdownWriter:
                     return self.titled(
                         self.heading_line(node.heading_level, node.title), node.children, after
                     )
-                return self.titled(styled("bold", self.inline(node.title)), node.children, after)
+                return self.details_written(node.title, node.children, after, opened=node.open)
             case Columns():
                 with self.inside_a_container():
                     columns = self.blocks_after(nested_nodes(node), after)
@@ -364,6 +386,10 @@ class _MarkdownWriter:
                 )
             case TableOfContents():
                 return _Written.of(self.toc_lines(node, alternate), _ListTail("dash", alternate))
+            case FactStrip() | KeyValueList() | DefinitionList() | Cards() | Timeline() | LinkCard():
+                raise ExportInvariantError(
+                    f"the GitHub writer folds a {type(node).__name__} before it writes it"
+                )
             case _:
                 assert_never(node)
 
@@ -371,7 +397,7 @@ class _MarkdownWriter:
         rendered: list[Sequence[str]] = []
         tail = after
         opens_with_a_paragraph = False
-        for node in folded(nodes):
+        for node in folded_except(nodes, _is_written_natively):
             written = self.written(node, tail)
             if written.lines:
                 opens_with_a_paragraph = opens_with_a_paragraph if rendered else isinstance(node, Paragraph)

@@ -1505,10 +1505,10 @@ case, where the page is shared as a URL an agent later has to read back.
 | a decimal `number` list's `start` | the first marker is the start number, which GitHub and CommonMark honour; a marker holds at most nine digits, so an item past 999999999 is written as 999999999 and still shows its own number, since a reader counts on from the start | a native numbered list when it starts at 1; a list whose `start` is not 1, or a numbered list in prose such as `3. a`, is refused, since Notion numbers every list from 1; number it from 1 |
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
 | a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |
-| a multi-case `request` | each case under a bold title | one toggle per case, its title led by the icon of the case's status |
-| `tabs` | each tab under a bold title, led by an icon when its tone is info, success, warning or danger | one toggle per tab, its title led by the same icon |
+| a multi-case `request` | one `<details>` block per case, the first open, its summary led by the icon of the case's status | one toggle per case, its title led by the icon of the case's status |
+| `tabs` | one `<details>` block per tab, the first open, its summary led by an icon when its tone is info, success, warning or danger | one toggle per tab, its title led by the same icon |
 | a collapsed `section` | a heading with its content below | a toggle heading |
-| `toggle` | its bold title with its content below | a `<details>` toggle with its content tab-indented; an open one is its bold title with its content below |
+| `toggle`, and the badge legend | a `<details>` block with its title as the `<summary>`, which is written as HTML since GitHub reads no Markdown there (bold, italic, strike, underline, a highlight, code, links and dates keep their form; inline math is inline code), and its content below after a blank line; an open `toggle` is `<details open>`, and toggles inside toggles nest as `<details>` inside `<details>` | a `<details>` toggle with its content tab-indented; an open one is its bold title with its content below |
 | `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level, so a level 4 heading there is `#####` | `##`, `###` or `####`; a heading that would be deeper than `####`, such as a level 4 heading inside a section, is `####`, the deepest heading Notion has |
 | `grid` | its cells one after another | native columns |
 | `divider` | a `---` thematic break with a blank line on each side | a `---` divider |

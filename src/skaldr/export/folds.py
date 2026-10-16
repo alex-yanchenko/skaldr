@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Final
 
@@ -195,3 +195,11 @@ def _as_written_today(node: Node) -> tuple[GenericNode, ...]:
 
 def folded(nodes: Iterable[Node]) -> tuple[GenericNode, ...]:
     return tuple(written for node in nodes for written in _as_written_today(node))
+
+
+def folded_except(nodes: Iterable[Node], is_written_natively: Callable[[Node], bool]) -> tuple[Node, ...]:
+    return tuple(
+        written
+        for node in nodes
+        for written in ((node,) if is_written_natively(node) else _as_written_today(node))
+    )

@@ -98,11 +98,14 @@ flowchart LR
 
 ## Discrepancies & fixes
 
-**Legend: badges used on this page**
+<details>
+<summary>Legend: badges used on this page</summary>
 
 - 🟡 **Floor** Fixable on the floor before the next count.
 - 🔵 **System** Defect in the scanning/labeling pipeline.
 - 🔴 **Vendor** Depends on the vendor to resolve.
+
+</details>
 
 | Discrepancy | Risk | Units | What the problem is | Proposed fix |
 | --- | --- | --- | --- | --- |
@@ -273,12 +276,15 @@ Zone C holds most of the mislabeled bins, so it is recounted first.
 
 Raw counts are pre-aggregation and exclude the 8,500 cleanly-matched units.
 
-**How the raw counts were pulled**
+<details>
+<summary>How the raw counts were pulled</summary>
 
 One pass over the scan-stage audit log for cycle `Q3-2026`, grouped by the reason code each scanner attached.
 
 - Scans with no reason code count as matched.
 - A pallet scanned in two aisles counts once, under its first aisle.
+
+</details>
 
 ## Counts at a glance
 
@@ -341,19 +347,28 @@ pie
 | **Zone C** | 🟡 Floor | 🔵 System | ⚪ n/a |  |
 | **Overflow** | 🔴 Vendor | 🔴 Vendor |  |  |
 
-**⚠️ Floor**
+<details open>
+<summary>⚠️ Floor</summary>
 
 - Re-label the Zone B bins the scanner misread.
 - Recount Zone C by hand before sign-off.
 
-**💡 System**
+</details>
+
+<details>
+<summary>💡 System</summary>
 
 Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.
 
-**🛑 Vendor**
+</details>
+
+<details>
+<summary>🛑 Vendor</summary>
 
 > [!CAUTION]
 > Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
+
+</details>
 
 ## Where the count comes from
 
@@ -405,7 +420,8 @@ The counts above come from the export, but a disputed bin is quicker to settle a
 - `{{bin}}` bin: for example A-17-3
 - `{{token}}` API token: a secret, supply your own
 
-**✅ a bin that balances**
+<details open>
+<summary>✅ a bin that balances</summary>
 
 ```bash
 curl -i -X GET \
@@ -430,7 +446,10 @@ content-type: application/json
 > [!TIP]
 > **Verdict**: Expected and counted agree, so the bin needs no recount.
 
-**✅ an overflow bin**
+</details>
+
+<details>
+<summary>✅ an overflow bin</summary>
 
 ```bash
 curl -i -X GET \
@@ -455,7 +474,10 @@ content-type: application/json
 > [!TIP]
 > **Verdict**: A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.
 
-**⚠️ a bin the token cannot read**
+</details>
+
+<details>
+<summary>⚠️ a bin the token cannot read</summary>
 
 ```bash
 curl -i -X GET \
@@ -477,11 +499,14 @@ content-type: application/json
 > [!WARNING]
 > **Verdict**: The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.
 
+</details>
+
 Overflow bins are the one place the export and the WMS disagree by design. The command below pulls every flagged bin with its gap already worked out. The team's secrets wrapper supplies the token, so there is nothing to fill in: copy it, run it, compare.
 
 **Every overflow bin in one warehouse**
 
-**⚠️ NW-04, the finding**
+<details open>
+<summary>⚠️ NW-04, the finding</summary>
 
 ```bash
 vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
@@ -507,7 +532,10 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 > [!WARNING]
 > **Verdict**: Two overflow bins short, 26 units between them, matching the manual-path queue.
 
-**✅ NW-02, the control**
+</details>
+
+<details>
+<summary>✅ NW-02, the control</summary>
 
 ```bash
 vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
@@ -528,6 +556,8 @@ vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "ht
 
 > [!TIP]
 > **Verdict**: A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.
+
+</details>
 
 ## Reconciling a bin against the live system
 
@@ -567,7 +597,8 @@ content-type: application/json
 
 **Step 2 of 2: Read the bins that did not balance**
 
-**✅ with the token**
+<details open>
+<summary>✅ with the token</summary>
 
 ```bash
 curl -i -X GET \
@@ -593,7 +624,10 @@ x-total-count: 3
 > [!TIP]
 > **Verdict**: The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.
 
-**⚠️ once the token has expired**
+</details>
+
+<details>
+<summary>⚠️ once the token has expired</summary>
 
 ```bash
 curl -i -X GET \
@@ -615,6 +649,8 @@ content-type: application/json
 
 > [!WARNING]
 > **Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
+
+</details>
 
 > **Before the next count**
 >

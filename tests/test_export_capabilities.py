@@ -140,7 +140,10 @@ RENDERERS: dict[ExportTarget, Callable[[Sequence[Node]], object]] = {
     "slack": render_slack,
 }
 PANES_WRITTEN_AS_TITLES: dict[ExportTarget, object] = {
-    "markdown": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
+    "markdown": (
+        "<details open>\n<summary>⚠️ One</summary>\n\na\n\n</details>\n\n"
+        "<details>\n<summary>Two</summary>\n\nb\n\n</details>\n"
+    ),
     "slack": "**⚠️ One**\n\na\n\n**Two**\n\nb\n",
 }
 DIAGRAM_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
