@@ -48,7 +48,7 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
-from skaldr.export.folds import LINK_CARD_SEPARATOR, folded
+from skaldr.export.folds import folded, link_card_detail
 from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.runs import Chip, ExportRich, StatusMark, export_visible_text
 from skaldr.export.swaps import (
@@ -359,8 +359,7 @@ class _AdfBlocks:
             card = AdfBlockCard(type="blockCard", attrs=AdfBlockCardAttrs(url=node.url))
         else:
             card = AdfEmbedCard(type="embedCard", attrs=AdfEmbedCardAttrs(url=node.url, layout="center"))
-        caption = LINK_CARD_SEPARATOR.join(part for part in (node.domain, node.caption) if part)
-        return [card, *self.paragraph_blocks(Paragraph(plain(caption), "muted"))]
+        return [card, *self.paragraph_blocks(Paragraph(plain(link_card_detail(node)), "muted"))]
 
     def expand(self, container: Container, title: str, children: Sequence[Node]) -> AdfBlock:
         attrs = AdfExpandAttrs(title=title)

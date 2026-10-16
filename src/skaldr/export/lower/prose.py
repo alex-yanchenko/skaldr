@@ -28,6 +28,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     TextNumbering,
     Timeline,
     TimelineEvent,
@@ -233,13 +235,10 @@ def lower_timeline(block: models.Timeline, lowering: Lowering) -> list[Node]:
     return [Timeline(tuple(_timeline_event(item, lowering) for item in block.items))]
 
 
-def _reference_entry(item: models.ReferenceItem, lowering: Lowering) -> ListEntry:
+def _reference_entry(item: models.ReferenceItem, lowering: Lowering) -> ReferenceEntry:
     numbers = lowering.rich_context.reference_numbers or {}
-    parts: list[ExportRich] = [plain(f"[{numbers[item.key]}]"), lowering.rich(item.text)]
-    if item.url:
-        parts.append((Link((Plain("source"),), item.url),))
-    return ListEntry(spaced(parts))
+    return ReferenceEntry(numbers[item.key], lowering.rich(item.text), item.url)
 
 
 def lower_references(block: models.References, lowering: Lowering) -> list[Node]:
-    return [bullets(_reference_entry(item, lowering) for item in block.items)]
+    return [References(tuple(_reference_entry(item, lowering) for item in block.items))]

@@ -427,10 +427,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "colour span": _kept_except({"markdown": _GITHUB_CANNOT_COLOUR, "slack": _CANVAS_CANNOT_COLOUR}),
     "highlight span": _kept_except(
         {
-            "markdown": Rejection(
-                "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'",
-                _WITHOUT_THE_HIGHLIGHT,
-            ),
             "adf": _JIRA_CANNOT_HIGHLIGHT,
             "slack": Rejection(
                 "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'",

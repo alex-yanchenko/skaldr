@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Final
 
@@ -8,7 +8,7 @@ from skaldr import compute
 from skaldr.errors import ExportInvariantError
 from skaldr.export.capabilities import FIRST_LIST_NUMBER
 from skaldr.export.inline import bold, plain
-from skaldr.export.lower.context import joined_by_breaks, with_bold_label
+from skaldr.export.lower.context import joined_by_breaks, spaced, with_bold_label
 from skaldr.export.runs import Chip, ExportRich, StatusMark, export_visible_text
 from skaldr.export.tree import (
     AuthoredName,
@@ -35,6 +35,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     TableCell,
     TableNode,
     TableOfContents,
@@ -128,9 +130,22 @@ def _event_entry(event: TimelineEvent, path: str | None) -> ListEntry:
     return ListEntry(text, children=body)
 
 
+def link_card_detail(card: LinkCard) -> str:
+    return LINK_CARD_SEPARATOR.join(part for part in (card.domain, card.caption) if part)
+
+
+def reference_runs(entry: ReferenceEntry) -> ExportRich:
+    source: ExportRich = (Link((Plain("source"),), entry.url),) if entry.url else ()
+    return spaced([entry.text, source]) if source else entry.text
+
+
+def _reference_entry(entry: ReferenceEntry) -> ListEntry:
+    return ListEntry(spaced([plain(f"[{entry.number}]"), reference_runs(entry)]))
+
+
 def _link_card_quote(card: LinkCard) -> Quote:
     link = Link(plain(card.title), card.url)
-    detail = LINK_CARD_SEPARATOR.join(part for part in (card.domain, card.caption) if part)
+    detail = link_card_detail(card)
     return Quote(
         (Paragraph((Styled("bold", (link,)),), authored_at=card.authored_at),),
         plain(detail),
@@ -171,6 +186,8 @@ def _as_written_today(node: Node) -> tuple[GenericNode, ...]:
             return (_bullets(events, node.authored_at),)
         case LinkCard():
             return (_link_card_quote(node),)
+        case References():
+            return (_bullets(map(_reference_entry, node.entries), node.authored_at),)
         case (
             Heading()
             | Paragraph()
@@ -195,3 +212,11 @@ def _as_written_today(node: Node) -> tuple[GenericNode, ...]:
 
 def folded(nodes: Iterable[Node]) -> tuple[GenericNode, ...]:
     return tuple(written for node in nodes for written in _as_written_today(node))
+
+
+def folded_except(nodes: Iterable[Node], is_written_natively: Callable[[Node], bool]) -> tuple[Node, ...]:
+    return tuple(
+        written
+        for node in nodes
+        for written in ((node,) if is_written_natively(node) else _as_written_today(node))
+    )

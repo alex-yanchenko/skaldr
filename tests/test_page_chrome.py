@@ -161,12 +161,10 @@ def test_the_lowered_document_carries_the_icon_and_the_cover() -> None:
     )
 
 
-def test_github_markdown_leads_the_title_with_the_icon_and_links_the_cover_under_it() -> None:
+def test_github_markdown_leads_the_title_with_the_icon_and_shows_the_cover_image_under_it() -> None:
     document = lower_report(parse_report(report_with(icon="\U0001f9ea", cover=COVER)))
 
-    assert render_markdown_document(document) == (
-        f"# \U0001f9ea Q3 count\n\n[Cover image]({COVER})\n\nHello.\n"
-    )
+    assert render_markdown_document(document) == f"# \U0001f9ea Q3 count\n\n![Cover]({COVER})\n\nHello.\n"
 
 
 def test_github_markdown_keeps_the_plain_title_without_an_icon_or_a_cover() -> None:
@@ -178,7 +176,7 @@ def test_github_markdown_keeps_the_plain_title_without_an_icon_or_a_cover() -> N
 def test_github_markdown_puts_the_cover_between_the_title_and_the_body() -> None:
     document = lower_report(parse_report(make_report(meta={"title": "Q3 count", "cover": COVER})))
 
-    assert render_markdown_document(document) == f"# Q3 count\n\n[Cover image]({COVER})\n\nHello.\n"
+    assert render_markdown_document(document) == f"# Q3 count\n\n![Cover]({COVER})\n\nHello.\n"
 
 
 def test_notion_markdown_carries_neither_because_they_are_page_properties() -> None:
