@@ -11,7 +11,7 @@ from pygments.token import Keyword, Text, _TokenType  # pyright: ignore[reportPr
 
 from skaldr import highlight
 from skaldr.models import Code, parse_report
-from skaldr.render import render_html
+from skaldr.render import html_environment, render_html
 from tests.factories.report_factory import make_report
 
 
@@ -248,6 +248,12 @@ def test_the_document_budget_is_fresh_for_every_render(monkeypatch: pytest.Monke
     assert (_panels_of([block]), _panels_of([block])) == (
         ['x <span class="t-op">=</span> <span class="t-num">1</span>'],
     ) * 2
+
+
+def test_the_bare_html_environment_registers_no_unbudgeted_highlighter() -> None:
+    registered = set(html_environment().globals)
+
+    assert registered & {"highlighted_code", "highlighted_diff_lines", "highlighted_query"} == set()
 
 
 def test_a_diff_and_a_query_draw_on_the_same_document_budget() -> None:

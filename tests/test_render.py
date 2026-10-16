@@ -977,6 +977,31 @@ def test_anchor_link_resolves_to_a_heading_inside_a_panel() -> None:
     assert '<a href="#inside">in</a>' in html
 
 
+def test_a_declared_badge_no_block_uses_renders_no_legend_with_or_without_a_table() -> None:
+    badges = {"P": {"label": "prod", "tone": "blue", "legend": "the prod tag"}}
+    text = {"type": "text", "body": "Intro."}
+    table = make_table([{"key": "a", "label": "A", "kind": "text"}], rows=[{"a": "x"}])
+
+    pages = [
+        render_html(parse_report(make_report(badges=badges, blocks=blocks)))
+        for blocks in ([text], [text, table])
+    ]
+
+    assert ["Legend: badges used on this page" in page for page in pages] == [False, False]
+
+
+def test_the_legend_renders_once_before_the_first_block_when_badges_are_used_and_no_table_exists() -> None:
+    badges = {"P": {"label": "prod", "tone": "blue", "legend": "the prod tag"}}
+    blocks = [{"type": "text", "body": "Intro."}, {"type": "badge_row", "items": [{"key": "P"}]}]
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=blocks)))
+
+    assert (
+        html.count("Legend: badges used on this page"),
+        html.index("Legend: badges used on this page") < html.index("Intro."),
+    ) == (1, True)
+
+
 def test_badge_referenced_only_inside_a_panel_still_feeds_the_legend() -> None:
     # proves the badge walker recurses into a panel; without it this would be an undeclared-reference error
     report = parse_report(
