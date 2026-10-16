@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -548,10 +549,16 @@ def test_an_open_part_renders_as_a_titled_region_with_its_blocks(tmp_path: Path)
     html = render_html(_combined(tmp_path))
 
     assert (
-        '<section class="part" id="details"><h1 class="part-title">Details</h1><p class="text">second</p>'
+        '<section class="part" id="details"><h2 class="part-title">Details</h2><p class="text">second</p>'
         in html
     )
     assert html.index('class="part-title">Overview<') < html.index("Inside one") < html.index("Details")
+
+
+def test_a_combined_page_has_one_h1_whatever_the_number_of_parts(tmp_path: Path) -> None:
+    html = render_html(_combined(tmp_path))
+
+    assert re.findall(r"<h1[ >][^<]*", html) == ["<h1>Combined"]
 
 
 def test_a_collapsed_part_renders_as_a_closed_disclosure_holding_its_blocks(tmp_path: Path) -> None:
