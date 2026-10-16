@@ -8,8 +8,10 @@ from urllib.parse import urlsplit
 from typing_extensions import assert_never
 
 from skaldr.errors import ConnectorError, ExportInvariantError
-from skaldr.export.adf.colors import BADGE_LOZENGE, TEXT_COLOR
+from skaldr.export.adf.colors import BACKGROUND_COLOR, BADGE_LOZENGE, TEXT_COLOR
 from skaldr.export.adf.nodes import (
+    AdfBackgroundColor,
+    AdfBackgroundColorAttrs,
     AdfCode,
     AdfDate,
     AdfDateAttrs,
@@ -63,8 +65,10 @@ MARK_RANK: Final[Mapping[str, int]] = {
     "strike": 4,
     "subsup": 5,
     "textColor": 6,
-    "code": 7,
+    "backgroundColor": 7,
+    "code": 8,
 }
+PLACEHOLDER_HIGHLIGHT: Final[ToneName] = "warning"
 STATUS_LOZENGE: Final[Mapping[StatusState, LozengeColor]] = {
     "done": "green",
     "current": "blue",
@@ -136,6 +140,11 @@ def _style_mark(style: StyleName) -> AdfMark:
 
 def text_color_mark(tone: ToneName) -> AdfMark:
     return AdfTextColor(type="textColor", attrs=AdfTextColorAttrs(color=TEXT_COLOR[tone]))
+
+
+def background_color_mark(tone: ToneName) -> AdfMark:
+    attrs = AdfBackgroundColorAttrs(color=BACKGROUND_COLOR[tone])
+    return AdfBackgroundColor(type="backgroundColor", attrs=attrs)
 
 
 def _script_mark(position: ScriptPosition) -> AdfMark:
@@ -295,7 +304,7 @@ class AdfRuns:
         return with_mark(linked, _script_mark("superscript"))
 
     def placeholder(self, name: str, /) -> AdfInlines:
-        return self.code("{{" + name + "}}")
+        return with_mark((_plain_text("{{" + name + "}}"),), background_color_mark(PLACEHOLDER_HIGHLIGHT))
 
     def styled(self, style: StyleName, inner: AdfInlines, /) -> AdfInlines:
         return with_mark(inner, _style_mark(style))
@@ -308,11 +317,8 @@ class AdfRuns:
     def tinted(
         self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: AdfInlines, /
     ) -> AdfInlines:
-        if background is not None:
-            raise ExportInvariantError(
-                "a Jira description does not show a text highlight; the export check should have refused it"
-            )
-        return inner if tone is None else with_mark(inner, text_color_mark(tone))
+        coloured = inner if tone is None else with_mark(inner, text_color_mark(tone))
+        return coloured if background is None else with_mark(coloured, background_color_mark(background))
 
     def toned_label(self, tone: ToneLiteral, inner: AdfInlines, /) -> AdfInlines:
         return with_mark(inner, text_color_mark(tone))

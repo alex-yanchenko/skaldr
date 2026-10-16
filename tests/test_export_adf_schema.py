@@ -9,6 +9,7 @@ from jsonschema import Draft4Validator, ValidationError
 from skaldr.export.adf import IssueLinks, render_adf, render_adf_document
 from skaldr.export.inline import plain
 from skaldr.export.lower import lower_report
+from skaldr.export.runs import DecisionMark
 from skaldr.export.tree import (
     Callout,
     Columns,
@@ -21,12 +22,13 @@ from skaldr.export.tree import (
     Paragraph,
     Quote,
     TableCell,
+    TableColumn,
     TableNode,
     TableRow,
     Toggle,
 )
 from skaldr.models import parse_report
-from skaldr.richtext import DateMention, Plain, Styled
+from skaldr.richtext import DateMention, Placeholder, Plain, Styled, Tinted
 from tests.conftest import REPO_ROOT
 from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, accepted_example, make_report
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
@@ -109,7 +111,7 @@ def test_every_lowered_node_type_writes_a_document_the_adf_schema_accepts(node: 
     assert _problems(render_adf((node,))) == []
 
 
-UPGRADED_FORMS = [
+EARLIER_UPGRADED_FORMS = [
     pytest.param(LinkCard("Runbook", "https://example.com/runbook", "embed"), id="embed-card"),
     pytest.param(Toggle(plain("More"), None, (Paragraph(plain("body")),), open=True), id="open-toggle"),
     pytest.param(
@@ -156,6 +158,48 @@ UPGRADED_FORMS = [
             )
         ),
         id="toned-grid",
+    ),
+]
+
+
+UPGRADED_FORMS = [
+    *EARLIER_UPGRADED_FORMS,
+    pytest.param(
+        Paragraph(
+            (
+                Tinted(None, "warning", (Plain("marked "),)),
+                Tinted("danger", "sky", (Plain("both "),)),
+                Placeholder("owner"),
+            )
+        ),
+        id="highlight-colour-and-highlight-and-placeholder",
+    ),
+    pytest.param(
+        ListNode(
+            "bullet",
+            (
+                ListEntry((DecisionMark(True), Plain(" "), Plain("ship"))),
+                ListEntry((DecisionMark(False), Plain(" "), Plain("who signs?"))),
+                ListEntry((DecisionMark(True), Plain(" "), Plain("cut"))),
+            ),
+        ),
+        id="decision-list-with-an-open-question",
+    ),
+    pytest.param(
+        Callout("info", (ListNode("bullet", (ListEntry((DecisionMark(True), Plain(" "), Plain("ship"))),)),)),
+        id="decision-list-in-a-panel",
+    ),
+    pytest.param(
+        Columns((GridColumn(70, (Paragraph(plain("wide")),)), GridColumn(30, (Paragraph(plain("narrow")),)))),
+        id="grid-of-two-sized-cells",
+    ),
+    pytest.param(
+        TableNode(
+            (TableCell(plain("a")), TableCell(plain("b"))),
+            (TableRow((TableCell(plain("1")), TableCell(plain("2")))),),
+            columns=(TableColumn(share=0.7), TableColumn()),
+        ),
+        id="table-with-column-shares",
     ),
 ]
 

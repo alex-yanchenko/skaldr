@@ -7,7 +7,7 @@ import pytest
 from skaldr.errors import ExportInvariantError
 from skaldr.export.adf import render_adf, render_adf_document
 from skaldr.export.inline import plain
-from skaldr.export.runs import Chip
+from skaldr.export.runs import Chip, DecisionMark
 from skaldr.export.tree import (
     Callout,
     Card,
@@ -22,21 +22,23 @@ from skaldr.export.tree import (
     KeyValueList,
     LabelledValue,
     LinkCard,
+    ListEntry,
     ListNode,
     LoweredDocument,
     Node,
     Paragraph,
     Quote,
     TableCell,
+    TableColumn,
     TableNode,
     TableRow,
     Timeline,
     TimelineEvent,
     Toggle,
 )
-from skaldr.richtext import Citation, Plain
+from skaldr.richtext import Citation, Plain, Styled
 from tests.factories import check_nodes, refusal_of
-from tests.factories.adf_factory import cell, para, text_entry
+from tests.factories.adf_factory import cell, para, pie_over_its_table, text_entry
 
 Json = Mapping[str, object]
 
@@ -71,8 +73,12 @@ def _words(text: str, *marks: Json) -> Json:
     return _paragraph(_text(text, *marks))
 
 
-def _cell(kind: str, *content: Json, background: str | None = None) -> Json:
-    attrs: Json = {"attrs": {"background": background}} if background else {}
+def _cell(kind: str, *content: Json, background: str | None = None, colwidth: int | None = None) -> Json:
+    attributes = {
+        **({"background": background} if background else {}),
+        **({"colwidth": [colwidth]} if colwidth else {}),
+    }
+    attrs: Json = {"attrs": attributes} if attributes else {}
     return {"type": kind, **attrs, "content": list(content) or [_paragraph()]}
 
 
@@ -80,8 +86,10 @@ def _header(text: str, background: str | None = None) -> Json:
     return _cell("tableHeader", _words(text), background=background) if text else _cell("tableHeader")
 
 
-def _body(text: str, background: str | None = None) -> Json:
-    return _cell("tableCell", _words(text), background=background) if text else _cell("tableCell")
+def _body(text: str, background: str | None = None, colwidth: int | None = None) -> Json:
+    if not text:
+        return _cell("tableCell", colwidth=colwidth)
+    return _cell("tableCell", _words(text), background=background, colwidth=colwidth)
 
 
 def _row(*cells: Json) -> Json:
@@ -92,6 +100,14 @@ def _table(*rows: Json) -> Json:
     return {
         "type": "table",
         "attrs": {"isNumberColumnEnabled": False, "layout": "default"},
+        "content": list(rows),
+    }
+
+
+def _sized_table(*rows: Json) -> Json:
+    return {
+        "type": "table",
+        "attrs": {"isNumberColumnEnabled": False, "layout": "center", "width": 760},
         "content": list(rows),
     }
 
@@ -546,11 +562,97 @@ def _grid_of(count: int) -> Columns:
 
 
 def test_a_grid_of_more_than_three_cells_is_a_one_row_table() -> None:
-    assert _rendered(_grid_of(4)) == _doc(_table(_row(*(_body(f"c{index}") for index in range(4)))))
+    assert _rendered(_grid_of(4)) == _doc(
+        _sized_table(_row(*(_body(f"c{index}", colwidth=190) for index in range(4))))
+    )
 
 
-def test_a_grid_of_three_plain_cells_stays_its_cells_one_after_another() -> None:
-    assert _rendered(_grid_of(3)) == _doc(*(_words(f"c{index}") for index in range(3)))
+def test_a_grid_of_three_plain_cells_is_a_one_row_table_sized_by_the_cell_ratios() -> None:
+    assert _rendered(_grid_of(3)) == _doc(
+        _sized_table(_row(_body("c0", colwidth=254), _body("c1", colwidth=253), _body("c2", colwidth=253)))
+    )
+
+
+def test_a_grid_of_two_unequal_cells_gives_each_cell_its_share_of_the_table_width() -> None:
+    node = Columns((GridColumn(70, (para("wide"),)), GridColumn(30, (para("narrow"),))))
+
+    assert _rendered(node) == _doc(
+        _sized_table(_row(_body("wide", colwidth=532), _body("narrow", colwidth=228)))
+    )
+
+
+def _three_cells_ending_in(last: Node) -> Columns:
+    return Columns((GridColumn(33, (para("c0"),)), GridColumn(33, (para("c1"),)), GridColumn(34, (last,))))
+
+
+def test_a_grid_of_three_plain_cells_holding_a_toggle_is_a_table_with_a_nested_expand() -> None:
+    node = _three_cells_ending_in(Toggle(plain("More"), None, (para("x"),)))
+
+    assert _rendered(node) == _doc(
+        _sized_table(
+            _row(
+                _body("c0", colwidth=251),
+                _body("c1", colwidth=251),
+                _cell(
+                    "tableCell",
+                    {"type": "nestedExpand", "attrs": {"title": "More"}, "content": [_words("x")]},
+                    colwidth=258,
+                ),
+            )
+        )
+    )
+
+
+def test_a_grid_of_three_plain_cells_holding_a_toggle_in_a_toggle_stays_its_cells_one_after_another() -> None:
+    node = _three_cells_ending_in(Toggle(plain("Outer"), None, (Toggle(plain("Inner"), None, (para("x"),)),)))
+
+    assert _rendered(node) == _doc(
+        _words("c0"),
+        _words("c1"),
+        {
+            "type": "expand",
+            "attrs": {"title": "Outer"},
+            "content": [{"type": "nestedExpand", "attrs": {"title": "Inner"}, "content": [_words("x")]}],
+        },
+    )
+
+
+def test_a_grid_of_three_plain_cells_holding_a_chart_stays_its_cells_one_after_another() -> None:
+    node = _three_cells_ending_in(pie_over_its_table())
+
+    assert _rendered(node) == _doc(
+        _words("c0"), _words("c1"), _table(_row(_header("Slice")), _row(_body("a")))
+    )
+
+
+def test_a_grid_of_three_plain_cells_in_a_callout_stays_its_cells_one_after_another() -> None:
+    node = Callout("info", (_grid_of(3),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "panel",
+            "attrs": {"panelType": "info"},
+            "content": [_words(f"c{index}") for index in range(3)],
+        }
+    )
+
+
+def test_a_grid_of_three_plain_cells_in_a_nested_expand_stays_its_cells_one_after_another() -> None:
+    node = Toggle(plain("a"), None, (Toggle(plain("b"), None, (_grid_of(3),)),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "expand",
+            "attrs": {"title": "a"},
+            "content": [
+                {
+                    "type": "nestedExpand",
+                    "attrs": {"title": "b"},
+                    "content": [_words(f"c{index}") for index in range(3)],
+                }
+            ],
+        }
+    )
 
 
 def test_a_toned_grid_cell_is_a_cell_background_and_makes_the_grid_a_table() -> None:
@@ -558,10 +660,10 @@ def test_a_toned_grid_cell_is_a_cell_background_and_makes_the_grid_a_table() -> 
     node = Columns((GridColumn(50, (para("left"),)), GridColumn(50, (toned,))))
 
     assert _rendered(node) == _doc(
-        _table(
+        _sized_table(
             _row(
-                _body("left"),
-                _cell("tableCell", _words("right"), {"type": "rule"}, background="#FFFAE6"),
+                _body("left", colwidth=380),
+                _cell("tableCell", _words("right"), {"type": "rule"}, background="#FFFAE6", colwidth=380),
             )
         )
     )
@@ -576,18 +678,20 @@ def test_a_grid_cell_holds_a_list_a_callout_and_a_toggle_as_a_nested_expand() ->
     )
 
     assert _rendered(Columns(cells)) == _doc(
-        _table(
+        _sized_table(
             _row(
-                _cell("tableCell", _bullets(_item(_words("a")))),
+                _cell("tableCell", _bullets(_item(_words("a"))), colwidth=190),
                 _cell(
                     "tableCell",
                     {"type": "panel", "attrs": {"panelType": "info"}, "content": [_words("b")]},
+                    colwidth=190,
                 ),
                 _cell(
                     "tableCell",
                     {"type": "nestedExpand", "attrs": {"title": "t"}, "content": [_words("c")]},
+                    colwidth=190,
                 ),
-                _body(""),
+                _body("", colwidth=190),
             )
         )
     )
@@ -604,12 +708,12 @@ def test_a_grid_inside_a_grid_cell_stays_its_cells_one_after_another_inside_the_
     )
 
     assert _rendered(outer) == _doc(
-        _table(
+        _sized_table(
             _row(
-                _body("a"),
-                _cell("tableCell", *(_words(f"c{index}") for index in range(4))),
-                _body("b"),
-                _body("c"),
+                _body("a", colwidth=190),
+                _cell("tableCell", *(_words(f"c{index}") for index in range(4)), colwidth=190),
+                _body("b", colwidth=190),
+                _body("c", colwidth=190),
             )
         )
     )
@@ -622,15 +726,16 @@ def test_a_fact_strip_in_a_grid_cell_stays_bullets_since_a_cell_holds_no_table()
     )
 
     assert _rendered(Columns(cells))["content"] == [
-        _table(
+        _sized_table(
             _row(
                 _cell(
                     "tableCell",
                     _bullets(_item(_paragraph(_text("Site", STRONG), _text(": West")))),
+                    colwidth=190,
                 ),
-                _body("x"),
-                _body("x"),
-                _body("x"),
+                _body("x", colwidth=190),
+                _body("x", colwidth=190),
+                _body("x", colwidth=190),
             )
         )
     ]
@@ -754,3 +859,226 @@ def test_a_grid_cell_holding_what_a_table_cell_holds_passes_the_check() -> None:
     )
 
     check_nodes((Columns(cells),), "adf")
+
+
+def _sized_cell(text: str, colwidth: int, header: bool = False) -> Json:
+    kind = "tableHeader" if header else "tableCell"
+    return _cell(kind, _words(text), colwidth=colwidth)
+
+
+def _table_with_columns(*columns: TableColumn) -> TableNode:
+    header = tuple(cell(f"h{index}") for index in range(len(columns)))
+    row = TableRow(tuple(cell(f"c{index}") for index in range(len(columns))))
+    return TableNode(header, (row,), columns=columns)
+
+
+def _sized_columns(*widths: int) -> Json:
+    return _doc(
+        _sized_table(
+            _row(*(_sized_cell(f"h{index}", width, header=True) for index, width in enumerate(widths))),
+            _row(*(_sized_cell(f"c{index}", width) for index, width in enumerate(widths))),
+        )
+    )
+
+
+def test_a_table_with_column_shares_gives_each_column_its_share_of_the_table_width() -> None:
+    node = _table_with_columns(TableColumn(share=0.5), TableColumn(share=0.25), TableColumn(share=0.25))
+
+    assert _rendered(node) == _sized_columns(380, 190, 190)
+
+
+def test_a_table_column_with_no_share_takes_the_room_the_other_columns_leave() -> None:
+    node = _table_with_columns(TableColumn(share=0.5), TableColumn(), TableColumn(share=0.25))
+
+    assert _rendered(node) == _sized_columns(380, 190, 190)
+
+
+def test_a_table_column_with_no_share_keeps_a_width_when_the_other_columns_ask_for_everything() -> None:
+    node = _table_with_columns(TableColumn(share=0.5), TableColumn(), TableColumn(share=0.5))
+
+    assert _rendered(node) == _sized_columns(346, 69, 345)
+
+
+def test_a_table_whose_columns_carry_only_tones_keeps_the_default_layout_and_no_widths() -> None:
+    node = _table_with_columns(TableColumn("info"), TableColumn())
+
+    assert _rendered(node) == _doc(
+        _table(
+            _row(_cell("tableHeader", _words("h0")), _cell("tableHeader", _words("h1"))),
+            _row(_body("c0", "#DEEBFF"), _body("c1")),
+        )
+    )
+
+
+def test_a_table_with_column_shares_pads_a_short_row_with_an_empty_sized_cell() -> None:
+    node = TableNode(
+        (cell("h0"), cell("h1")),
+        (TableRow((cell("c0"),)),),
+        columns=(TableColumn(share=0.5), TableColumn(share=0.5)),
+    )
+
+    assert _rendered(node) == _doc(
+        _sized_table(
+            _row(_sized_cell("h0", 380, header=True), _sized_cell("h1", 380, header=True)),
+            _row(_sized_cell("c0", 380), _body("", colwidth=380)),
+        )
+    )
+
+
+def _decision(text: str, decided: bool, *children: Node) -> ListEntry:
+    return ListEntry((DecisionMark(decided), Plain(" "), *plain(text)), children=children)
+
+
+def _decision_item(local_id: str, text: str) -> Json:
+    return {
+        "type": "decisionItem",
+        "attrs": {"localId": local_id, "state": "DECIDED"},
+        "content": [_text(text)],
+    }
+
+
+def _decision_list(local_id: str, *items: Json) -> Json:
+    return {"type": "decisionList", "attrs": {"localId": local_id}, "content": list(items)}
+
+
+SHIP_FRIDAY_LIST = ListNode("bullet", (_decision("Ship Friday", True),))
+SHIP_FRIDAY_WRITTEN = _decision_list(
+    "skaldr-decision-list-1", _decision_item("skaldr-decision-2", "Ship Friday")
+)
+
+
+def test_a_decision_list_of_decided_points_is_a_decision_list_of_decided_items() -> None:
+    node = ListNode("bullet", (_decision("Ship Friday", True), _decision("Skip the recount", True)))
+
+    assert _rendered(node) == _doc(
+        _decision_list(
+            "skaldr-decision-list-1",
+            _decision_item("skaldr-decision-2", "Ship Friday"),
+            _decision_item("skaldr-decision-3", "Skip the recount"),
+        )
+    )
+
+
+def test_an_open_question_stays_a_bullet_with_its_question_mark_between_decision_lists() -> None:
+    node = ListNode(
+        "bullet",
+        (_decision("Ship Friday", True), _decision("Who signs?", False), _decision("Cut scope", True)),
+    )
+
+    assert _rendered(node) == _doc(
+        SHIP_FRIDAY_WRITTEN,
+        _bullets(_item(_words("❓ Who signs?"))),
+        _decision_list("skaldr-decision-list-3", _decision_item("skaldr-decision-4", "Cut scope")),
+    )
+
+
+def test_a_list_of_only_open_questions_stays_a_bullet_list() -> None:
+    node = ListNode("bullet", (_decision("Who signs?", False), _decision("When?", False)))
+
+    assert _rendered(node) == _doc(_bullets(_item(_words("❓ Who signs?")), _item(_words("❓ When?"))))
+
+
+def test_a_decided_point_with_detail_under_it_stays_a_bullet_since_a_decision_item_holds_no_list() -> None:
+    detail = ListNode("bullet", (text_entry("because"),))
+    node = ListNode("bullet", (_decision("Ship Friday", True, detail), _decision("Cut scope", True)))
+
+    assert _rendered(node) == _doc(
+        _bullets(_item(_words("☑️ Ship Friday"), _bullets(_item(_words("because"))))),
+        _decision_list("skaldr-decision-list-1", _decision_item("skaldr-decision-2", "Cut scope")),
+    )
+
+
+def test_a_decided_point_keeps_its_bold_as_inline_content() -> None:
+    entry = ListEntry((DecisionMark(True), Plain(" "), Styled("bold", (Plain("Ship"),)), Plain(" Friday")))
+
+    assert _rendered(ListNode("bullet", (entry,))) == _doc(
+        _decision_list(
+            "skaldr-decision-list-1",
+            {
+                "type": "decisionItem",
+                "attrs": {"localId": "skaldr-decision-2", "state": "DECIDED"},
+                "content": [_text("Ship", STRONG), _text(" Friday")],
+            },
+        )
+    )
+
+
+def test_a_decided_point_with_no_words_is_a_decision_item_with_no_content() -> None:
+    node = ListNode("bullet", (ListEntry((DecisionMark(True), Plain(" "))),))
+
+    assert _rendered(node) == _doc(
+        _decision_list(
+            "skaldr-decision-list-1",
+            {"type": "decisionItem", "attrs": {"localId": "skaldr-decision-2", "state": "DECIDED"}},
+        )
+    )
+
+
+def test_a_decision_list_in_a_panel_is_a_decision_list() -> None:
+    assert _rendered(Callout("info", (SHIP_FRIDAY_LIST,))) == _doc(
+        {"type": "panel", "attrs": {"panelType": "info"}, "content": [SHIP_FRIDAY_WRITTEN]}
+    )
+
+
+def test_a_decision_list_in_an_expand_is_a_decision_list() -> None:
+    node = Toggle(plain("More"), None, (SHIP_FRIDAY_LIST,), open=True)
+
+    assert _rendered(node) == _doc(
+        {"type": "expand", "attrs": {"title": "More"}, "content": [SHIP_FRIDAY_WRITTEN]}
+    )
+
+
+def test_a_decision_list_in_a_nested_expand_is_a_decision_list() -> None:
+    node = Toggle(plain("a"), None, (Toggle(plain("b"), None, (SHIP_FRIDAY_LIST,), open=True),), open=True)
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "expand",
+            "attrs": {"title": "a"},
+            "content": [{"type": "nestedExpand", "attrs": {"title": "b"}, "content": [SHIP_FRIDAY_WRITTEN]}],
+        }
+    )
+
+
+def test_a_decision_list_in_a_quote_stays_a_bullet_list_since_a_quote_holds_no_decision_list() -> None:
+    node = Quote((SHIP_FRIDAY_LIST,))
+
+    assert _rendered(node) == _doc(
+        {"type": "blockquote", "content": [_bullets(_item(_words("☑️ Ship Friday")))]}
+    )
+
+
+def test_a_decision_list_nested_in_a_list_item_stays_a_bullet_list() -> None:
+    node = ListNode("bullet", (text_entry("plan", SHIP_FRIDAY_LIST),))
+
+    assert _rendered(node) == _doc(_bullets(_item(_words("plan"), _bullets(_item(_words("☑️ Ship Friday"))))))
+
+
+def test_a_decision_list_in_a_muted_row_is_struck_through_item_by_item() -> None:
+    node = TableNode((cell("A"),), (TableRow((TableCell((), blocks=(SHIP_FRIDAY_LIST,)),), tone="muted"),))
+
+    assert _rendered(node) == _doc(
+        _table(
+            _row(_header("A")),
+            _row(
+                _cell(
+                    "tableCell",
+                    _decision_list(
+                        "skaldr-decision-list-1",
+                        {
+                            "type": "decisionItem",
+                            "attrs": {"localId": "skaldr-decision-2", "state": "DECIDED"},
+                            "content": [_text("Ship Friday", STRIKE)],
+                        },
+                    ),
+                    background="#F4F5F7",
+                )
+            ),
+        )
+    )
+
+
+def test_a_decision_list_in_a_table_cell_is_a_decision_list() -> None:
+    node = TableNode((cell("A"),), (TableRow((TableCell((), blocks=(SHIP_FRIDAY_LIST,)),)),))
+
+    assert _rendered(node) == _doc(_table(_row(_header("A")), _row(_cell("tableCell", SHIP_FRIDAY_WRITTEN))))

@@ -34,8 +34,6 @@ EXAMPLE_EDITS_FOR: Final[Mapping[ExportTarget, tuple[tuple[str, str], ...]]] = {
         (DOCUMENT_LINK, "the cold room plan"),
     ),
     "adf": (
-        (HIGHLIGHTED_SPAN, "due Friday"),
-        (COLOURED_AND_HIGHLIGHTED_SPAN, "[vendor lots]{tone=accent}"),
         (ROMAN_LIST_FROM_4, "    start: 4\n"),
         (EXAMPLE_CALLOUT_IN_A_STEP, EXAMPLE_TEXT_IN_A_STEP),
         (DOCUMENT_LINK, "the cold room plan"),

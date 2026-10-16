@@ -310,10 +310,6 @@ _CANVAS_CANNOT_COLOUR: Final = Rejection(
     "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
 )
 _WITHOUT_THE_HIGHLIGHT: Final = _WITHOUT_THE_MARK.format(mark="highlight")
-_JIRA_CANNOT_HIGHLIGHT: Final = Rejection(
-    "a Jira description does not show a text highlight, so it cannot show the highlight on '{text}'",
-    _WITHOUT_THE_HIGHLIGHT,
-)
 _FROM_ONE_WHY: Final = (
     "{target} numbers every list from 1, so it cannot show a numbered list that starts at {{start}}"
 )
@@ -431,7 +427,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'",
                 _WITHOUT_THE_HIGHLIGHT,
             ),
-            "adf": _JIRA_CANNOT_HIGHLIGHT,
             "slack": Rejection(
                 "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'",
                 _WITHOUT_THE_HIGHLIGHT,
@@ -446,7 +441,6 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "so it cannot show both on '{text}'",
                 "keep either the colour or the highlight on the text",
             ),
-            "adf": _JIRA_CANNOT_HIGHLIGHT,
             "slack": _CANVAS_CANNOT_COLOUR,
         }
     ),

@@ -786,7 +786,23 @@
         },
         {
           "type": "text",
-          "text": ", its recount is due Friday, and the "
+          "text": ", its recount is "
+        },
+        {
+          "type": "text",
+          "text": "due Friday",
+          "marks": [
+            {
+              "type": "backgroundColor",
+              "attrs": {
+                "color": "#FFFAE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", and the "
         },
         {
           "type": "text",
@@ -796,6 +812,12 @@
               "type": "textColor",
               "attrs": {
                 "color": "#6554C0"
+              }
+            },
+            {
+              "type": "backgroundColor",
+              "attrs": {
+                "color": "#B3D4FF"
               }
             }
           ]
@@ -1484,7 +1506,8 @@
       "type": "table",
       "attrs": {
         "isNumberColumnEnabled": false,
-        "layout": "default"
+        "layout": "center",
+        "width": 760
       },
       "content": [
         {
@@ -1502,7 +1525,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  211
+                ]
+              }
             },
             {
               "type": "tableHeader",
@@ -1516,7 +1544,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  53
+                ]
+              }
             },
             {
               "type": "tableHeader",
@@ -1530,7 +1563,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  76
+                ]
+              }
             },
             {
               "type": "tableHeader",
@@ -1544,7 +1582,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  210
+                ]
+              }
             },
             {
               "type": "tableHeader",
@@ -1558,7 +1601,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  210
+                ]
+              }
             }
           ]
         },
@@ -1584,7 +1632,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  211
+                ]
               }
             },
             {
@@ -1595,7 +1646,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  53
+                ]
               }
             },
             {
@@ -1606,7 +1660,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  76
+                ]
               }
             },
             {
@@ -1617,7 +1674,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  210
+                ]
               }
             },
             {
@@ -1628,7 +1688,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  210
+                ]
               }
             }
           ]
@@ -1671,7 +1734,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  211
+                ]
               }
             },
             {
@@ -1688,7 +1754,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  53
+                ]
               }
             },
             {
@@ -1705,7 +1774,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  76
+                ]
               }
             },
             {
@@ -1722,7 +1794,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  210
+                ]
               }
             },
             {
@@ -1752,7 +1827,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  210
+                ]
               }
             }
           ]
@@ -1781,7 +1859,10 @@
                 }
               ],
               "attrs": {
-                "background": "#DEEBFF"
+                "background": "#DEEBFF",
+                "colwidth": [
+                  211
+                ]
               }
             },
             {
@@ -1798,7 +1879,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  53
+                ]
               }
             },
             {
@@ -1815,7 +1899,10 @@
                 }
               ],
               "attrs": {
-                "background": "#DEEBFF"
+                "background": "#DEEBFF",
+                "colwidth": [
+                  76
+                ]
               }
             },
             {
@@ -1832,7 +1919,10 @@
                 }
               ],
               "attrs": {
-                "background": "#DEEBFF"
+                "background": "#DEEBFF",
+                "colwidth": [
+                  210
+                ]
               }
             },
             {
@@ -1849,7 +1939,10 @@
                 }
               ],
               "attrs": {
-                "background": "#DEEBFF"
+                "background": "#DEEBFF",
+                "colwidth": [
+                  210
+                ]
               }
             }
           ]
@@ -1876,7 +1969,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  211
+                ]
               }
             },
             {
@@ -1887,7 +1983,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  53
+                ]
               }
             },
             {
@@ -1898,7 +1997,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  76
+                ]
               }
             },
             {
@@ -1909,7 +2011,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  210
+                ]
               }
             },
             {
@@ -1920,7 +2025,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  210
+                ]
               }
             }
           ]
@@ -1949,7 +2057,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  211
+                ]
               }
             },
             {
@@ -1966,7 +2077,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  53
+                ]
               }
             },
             {
@@ -1983,7 +2097,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  76
+                ]
               }
             },
             {
@@ -2000,7 +2117,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  210
+                ]
               }
             },
             {
@@ -2030,7 +2150,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  210
+                ]
               }
             }
           ]
@@ -2057,7 +2180,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  211
+                ]
               }
             },
             {
@@ -2068,7 +2194,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  53
+                ]
               }
             },
             {
@@ -2079,7 +2208,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  76
+                ]
               }
             },
             {
@@ -2090,7 +2222,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  210
+                ]
               }
             },
             {
@@ -2101,7 +2236,10 @@
                 }
               ],
               "attrs": {
-                "background": "#F4F5F7"
+                "background": "#F4F5F7",
+                "colwidth": [
+                  210
+                ]
               }
             }
           ]
@@ -2126,7 +2264,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  211
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2134,7 +2277,12 @@
                 {
                   "type": "paragraph"
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  53
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2142,7 +2290,12 @@
                 {
                   "type": "paragraph"
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  76
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2150,7 +2303,12 @@
                 {
                   "type": "paragraph"
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  210
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2158,7 +2316,12 @@
                 {
                   "type": "paragraph"
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  210
+                ]
+              }
             }
           ]
         }
@@ -2369,7 +2532,8 @@
       "type": "table",
       "attrs": {
         "isNumberColumnEnabled": false,
-        "layout": "default"
+        "layout": "center",
+        "width": 760
       },
       "content": [
         {
@@ -2387,7 +2551,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  190
+                ]
+              }
             },
             {
               "type": "tableHeader",
@@ -2401,7 +2570,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              }
             },
             {
               "type": "tableHeader",
@@ -2415,7 +2589,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              }
             },
             {
               "type": "tableHeader",
@@ -2429,7 +2608,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  380
+                ]
+              }
             }
           ]
         },
@@ -2448,7 +2632,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  190
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2462,7 +2651,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2478,7 +2672,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  95
+                ]
               }
             },
             {
@@ -2493,7 +2690,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  380
+                ]
+              }
             }
           ]
         },
@@ -2512,7 +2714,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  190
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2526,7 +2733,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              }
             },
             {
               "type": "tableCell",
@@ -2542,7 +2754,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFFAE6"
+                "background": "#FFFAE6",
+                "colwidth": [
+                  95
+                ]
               }
             },
             {
@@ -2557,7 +2772,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  380
+                ]
+              }
             }
           ]
         },
@@ -2578,7 +2798,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  190
+                ]
               }
             },
             {
@@ -2595,7 +2818,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  95
+                ]
               }
             },
             {
@@ -2612,7 +2838,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  95
+                ]
               }
             },
             {
@@ -2642,7 +2871,10 @@
                 }
               ],
               "attrs": {
-                "background": "#FFEBE6"
+                "background": "#FFEBE6",
+                "colwidth": [
+                  380
+                ]
               }
             }
           ]
@@ -3186,36 +3418,42 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "decisionList",
+      "attrs": {
+        "localId": "skaldr-decision-list-8"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "decisionItem",
+          "attrs": {
+            "localId": "skaldr-decision-9",
+            "state": "DECIDED"
+          },
           "content": [
             {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "☑️ De-duplicate on the pallet ID and keep the most recent scan."
-                }
-              ]
+              "type": "text",
+              "text": "De-duplicate on the pallet ID and keep the most recent scan."
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "decisionItem",
+          "attrs": {
+            "localId": "skaldr-decision-10",
+            "state": "DECIDED"
+          },
           "content": [
             {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "☑️ Hold the vendor line until a corrected ASN arrives."
-                }
-              ]
+              "type": "text",
+              "text": "Hold the vendor line until a corrected ASN arrives."
             }
           ]
-        },
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
         {
           "type": "listItem",
           "content": [
@@ -3841,7 +4079,8 @@
       "type": "table",
       "attrs": {
         "isNumberColumnEnabled": false,
-        "layout": "default"
+        "layout": "center",
+        "width": 760
       },
       "content": [
         {
@@ -3915,7 +4154,10 @@
                 }
               ],
               "attrs": {
-                "background": "#EAE6FF"
+                "background": "#EAE6FF",
+                "colwidth": [
+                  251
+                ]
               }
             },
             {
@@ -4046,7 +4288,12 @@
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "colwidth": [
+                  509
+                ]
+              }
             }
           ]
         }
@@ -7531,13 +7778,13 @@
         {
           "type": "taskList",
           "attrs": {
-            "localId": "skaldr-task-list-8"
+            "localId": "skaldr-task-list-11"
           },
           "content": [
             {
               "type": "taskItem",
               "attrs": {
-                "localId": "skaldr-task-9",
+                "localId": "skaldr-task-12",
                 "state": "DONE"
               },
               "content": [
@@ -7563,7 +7810,7 @@
             {
               "type": "taskItem",
               "attrs": {
-                "localId": "skaldr-task-10",
+                "localId": "skaldr-task-13",
                 "state": "TODO"
               },
               "content": [
@@ -7576,7 +7823,7 @@
             {
               "type": "taskItem",
               "attrs": {
-                "localId": "skaldr-task-11",
+                "localId": "skaldr-task-14",
                 "state": "TODO"
               },
               "content": [

@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from datetime import date
 
 from skaldr.export.inline import plain
-from skaldr.export.runs import Break, CheckMark, Chip, StatusMark, SwimlaneMark
+from skaldr.export.runs import Break, CheckMark, Chip, DecisionMark, StatusMark, SwimlaneMark
 from skaldr.export.tree import (
     Callout,
     Card,
@@ -49,6 +49,7 @@ from skaldr.richtext import (
     IssueLink,
     Link,
     PersonMention,
+    Placeholder,
     Plain,
     ScriptText,
     Styled,
@@ -113,6 +114,9 @@ def showcase_nodes() -> tuple[Node, ...]:
                 Code(" code"),
                 Link((Styled("bold", (Code("linked code"),)),), "https://example.com/a?b=c&d=e"),
                 Tinted("danger", None, (Plain(" red"),)),
+                Tinted(None, "warning", (Plain(" marked"),)),
+                Tinted("danger", "sky", (Plain(" red on blue"),)),
+                Placeholder("owner"),
                 ScriptText("subscript", "2"),
                 ScriptText("superscript", "n"),
                 Citation("k", 1, "https://example.com/k"),
@@ -141,6 +145,13 @@ def showcase_nodes() -> tuple[Node, ...]:
             ),
         ),
         ListNode("check", (ListEntry(plain("done"), checked=True), ListEntry(plain("open")))),
+        ListNode(
+            "bullet",
+            (
+                ListEntry((DecisionMark(True), Plain(" "), Plain("ship"))),
+                ListEntry((DecisionMark(False), Plain(" "), Plain("who signs?"))),
+            ),
+        ),
         Quote((para("a quote"), para("second line")), cite=plain("Someone")),
         Divider(),
         Media("image", "https://example.com/a.png", plain("Aisle"), plain("Fig 1")),
@@ -156,7 +167,7 @@ def showcase_nodes() -> tuple[Node, ...]:
                 TableRow((cell("total"), cell("1"), cell("2")), emphasis="total"),
             ),
             header_column=True,
-            columns=(TableColumn(), TableColumn("accent")),
+            columns=(TableColumn(share=0.5), TableColumn("accent", 0.2), TableColumn()),
         ),
         Toggle(
             plain("Collapsed"),

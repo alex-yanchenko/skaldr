@@ -188,9 +188,6 @@ LINK_TO_A_SECTION = [
 LINK_TO_ANOTHER_DOCUMENT = [{"type": "text", "body": "It follows [the plan](doc:cold-room-plan#recount)."}]
 WITHOUT_THE_COLOUR = "write the text without the colour or export the document elsewhere"
 WITHOUT_THE_HIGHLIGHT = "write the text without the highlight or export the document elsewhere"
-JIRA_HIGHLIGHT_WHY = (
-    "a Jira description does not show a text highlight, so it cannot show the highlight on '{text}'"
-)
 GITHUB_COLOUR_WHY = "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'"
 GITHUB_HIGHLIGHT_WHY = "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'"
 CANVAS_COLOUR_WHY = "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'"
@@ -233,22 +230,6 @@ INLINE_REFUSALS: dict[str, RefusedCase] = {
         "highlight span",
         HIGHLIGHTED_TEXT,
         GITHUB_HIGHLIGHT_WHY.format(text="due Friday"),
-        WITHOUT_THE_HIGHLIGHT,
-        "at blocks.0.text",
-    ),
-    "adf-highlight-span": RefusedCase(
-        "adf",
-        "highlight span",
-        HIGHLIGHTED_TEXT,
-        JIRA_HIGHLIGHT_WHY.format(text="due Friday"),
-        WITHOUT_THE_HIGHLIGHT,
-        "at blocks.0.text",
-    ),
-    "adf-colour-and-highlight-span": RefusedCase(
-        "adf",
-        "colour and highlight span",
-        COLOURED_AND_HIGHLIGHTED_TEXT,
-        JIRA_HIGHLIGHT_WHY.format(text="vendor lots"),
         WITHOUT_THE_HIGHLIGHT,
         "at blocks.0.text",
     ),
@@ -396,7 +377,6 @@ class NestedSpans:
         github_why = GITHUB_COLOUR_WHY if self.outer_is_a_colour else GITHUB_HIGHLIGHT_WHY
         outer_instead = WITHOUT_THE_COLOUR if self.outer_is_a_colour else WITHOUT_THE_HIGHLIGHT
         outer_feature: Feature = "colour span" if self.outer_is_a_colour else "highlight span"
-        jira_why = JIRA_HIGHLIGHT_WHY.format(text=self.highlighted)
         return {
             f"markdown-{name}": RefusedCase(
                 "markdown", outer_feature, blocks, github_why.format(text=outer), outer_instead, AT_THE_TEXT
@@ -408,9 +388,6 @@ class NestedSpans:
                 NOTION_BOTH_WHY.format(text=self.inner),
                 NOTION_BOTH_INSTEAD,
                 AT_THE_TEXT,
-            ),
-            f"adf-{name}": RefusedCase(
-                "adf", "highlight span", blocks, jira_why, WITHOUT_THE_HIGHLIGHT, AT_THE_TEXT
             ),
             f"slack-{name}": RefusedCase(
                 "slack", outer_feature, blocks, canvas_why.format(text=outer), outer_instead, AT_THE_TEXT
@@ -447,14 +424,6 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
         "highlight span",
         HIGHLIGHT_IN_A_STEP_TITLE,
         GITHUB_HIGHLIGHT_WHY.format(text="cold room"),
-        WITHOUT_THE_HIGHLIGHT,
-        STEP_PATH_OF_THE_TITLE,
-    ),
-    "adf-highlight-inside-a-toned-step-title": RefusedCase(
-        "adf",
-        "highlight span",
-        HIGHLIGHT_IN_A_STEP_TITLE,
-        JIRA_HIGHLIGHT_WHY.format(text="cold room"),
         WITHOUT_THE_HIGHLIGHT,
         STEP_PATH_OF_THE_TITLE,
     ),
@@ -1359,6 +1328,9 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     "notion-http-image": AcceptedCase("notion", [HTTP_IMAGE], HTTP_IMAGE_MARKDOWN),
     "slack-http-image": AcceptedCase("slack", [HTTP_IMAGE], HTTP_IMAGE_MARKDOWN),
     "adf-http-image": AcceptedCase("adf", [HTTP_IMAGE]),
+    "adf-highlight-span": AcceptedCase("adf", HIGHLIGHTED_TEXT),
+    "adf-colour-and-highlight-span": AcceptedCase("adf", COLOURED_AND_HIGHLIGHTED_TEXT),
+    "adf-highlight-inside-a-toned-step-title": AcceptedCase("adf", HIGHLIGHT_IN_A_STEP_TITLE),
 }
 ALL_REFUSALS: dict[str, RefusedCase] = {**SEEDED_REFUSALS, **DIAGRAM_REFUSALS}
 DIAGRAM_CASES = [pytest.param(case, id=name) for name, case in DIAGRAM_REFUSALS.items()]
