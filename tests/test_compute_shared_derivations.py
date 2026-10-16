@@ -4,6 +4,8 @@ from typing import Any
 import pytest
 
 from skaldr.compute import (
+    DerivedCardTally,
+    MatrixCellDisplay,
     RecordedBody,
     ResponseCaption,
     derived_card_tally,
@@ -99,9 +101,11 @@ def test_a_derived_card_tally_reads_a_matrix_or_sums_its_tables() -> None:
     assert isinstance(cards, Cards)
     matrices, tables = matrix_tallies(report), table_tallies(report)
 
-    assert [derived_card_tally(card, matrices, tables)._asdict() for card in cards.items] == [
-        {"counted": 1, "total": 2},
-        {"counted": 2, "total": 3},
+    tallies = [derived_card_tally(card, matrices, tables) for card in cards.items]
+
+    assert [(type(tally), tally) for tally in tallies] == [
+        (DerivedCardTally, DerivedCardTally(counted=1, total=2)),
+        (DerivedCardTally, DerivedCardTally(counted=2, total=3)),
     ]
 
 
@@ -254,11 +258,13 @@ def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() 
         MatrixCell(row="r", col="c", label="n/a"),
     ]
 
-    assert [matrix_cell_display(cell, badges)._asdict() for cell in cells] == [
-        {"tone": "blue", "text": "api"},
-        {"tone": "blue", "text": "yes"},
-        {"tone": "amber", "text": ""},
-        {"tone": None, "text": "n/a"},
+    displays = [matrix_cell_display(cell, badges) for cell in cells]
+
+    assert [(type(display), display) for display in displays] == [
+        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="api")),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="yes")),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="amber", text="")),
+        (MatrixCellDisplay, MatrixCellDisplay(tone=None, text="n/a")),
     ]
 
 

@@ -395,8 +395,13 @@ def _report_with_derived_card(card: dict[str, object], *, matrix_id: str = "cov"
 
 
 def test_derived_card_without_badge_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"needs a `badge` to count"):
+    with pytest.raises(ReportError) as raised:
         parse_report(_report_with_derived_card({"of_matrix": "cov"}))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.cards.items.0: Value error, "
+        "a derived card (`of_matrix`/`of_tables`) needs a `badge` to count"
+    )
 
 
 def test_derived_card_with_an_authored_value_is_rejected() -> None:

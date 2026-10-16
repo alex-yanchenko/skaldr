@@ -177,6 +177,17 @@ def test_a_document_with_blocks_or_an_index_passes_the_schema(document: dict[str
     assert schema_errors(document) == []
 
 
+def test_an_index_with_an_empty_intro_is_refused_by_the_schema() -> None:
+    document: dict[str, Any] = {
+        "version": 1,
+        "meta": {"title": "T"},
+        "index": {"parts": ["a.yaml"]},
+        "blocks": [],
+    }
+
+    assert schema_messages_at(document, ("blocks",)) == {"[] should be non-empty"}
+
+
 SWIMLANE_STEP = {"lane": "Product", "col": "Sprint 1", "n": "1", "label": "Spec"}
 
 

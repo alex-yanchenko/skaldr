@@ -3611,6 +3611,19 @@ def _parsed_index(data: object) -> Index:
         raise ReportError(_format_validation_error(err, ("index",))) from err
 
 
+def _part_file(index_path: Path, part_path: str) -> Path:
+    part = index_path.parent / part_path
+    try:
+        resolved, folder = part.resolve(), index_path.parent.resolve()
+    except (OSError, RuntimeError) as err:
+        raise ReportError(f"could not resolve {part}: {err}") from err
+    if not resolved.is_relative_to(folder):
+        raise ReportError(
+            f"part {part_path} resolves to {resolved}, outside the index file's folder {folder}"
+        )
+    return part
+
+
 def _loaded_part(path: Path) -> _LoadedPart:
     data = _load_yaml_with_includes(path, (), [])
     if isinstance(_index_of(data), Mapping):
@@ -3748,6 +3761,11 @@ _INTRO_BLOCKS: Final = TypeAdapter(list[PageBlock])
 
 def _intro_blocks(data: Mapping[str, Any]) -> list[object]:
     intro: object = data.get("blocks", [])
+    if isinstance(intro, list) and not intro and "blocks" in data:
+        raise ReportError(
+            "invalid content data: blocks: an index's `blocks` is its optional intro and needs at least "
+            "one block; leave `blocks` out for no intro"
+        )
     try:
         _INTRO_BLOCKS.validate_python(intro, context={BUILT_BY_AN_INDEX: False})
     except ValidationError as err:
@@ -3764,7 +3782,7 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
     if data.get("publish") is not None:
         raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
     intro = _intro_blocks(data)
-    parts = [_loaded_part(path.parent / part_path) for part_path in index.parts]
+    parts = [_loaded_part(_part_file(path, part_path)) for part_path in index.parts]
     _refuse_a_doc_id_published_twice(parts)
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
@@ -3819,5 +3837,5 @@ def content_files(path: Path) -> tuple[Path, ...]:
     index = _index_of(_load_yaml_with_includes(path, (), loaded))
     if index is not None:
         for part_path in _parsed_index(index).parts:
-            _load_yaml_with_includes(path.parent / part_path, (), loaded)
+            _load_yaml_with_includes(_part_file(path, part_path), (), loaded)
     return tuple(loaded)

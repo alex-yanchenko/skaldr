@@ -400,6 +400,29 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
     )
 
 
+def test_a_part_reached_through_a_symlink_out_of_the_index_folder_is_refused(tmp_path: Path) -> None:
+    folder = tmp_path / "idx"
+    outside = tmp_path / "elsewhere"
+    write_report(outside, _part("Outside", "x"), "p.yaml")
+    folder.mkdir()
+    (folder / "link").symlink_to(outside, target_is_directory=True)
+    index = write_report(folder, make_index_report(["link/p.yaml"]), "index.yaml")
+
+    assert _refusal(index) == (
+        f"part link/p.yaml resolves to {(outside / 'p.yaml').resolve()}, "
+        f"outside the index file's folder {folder.resolve()}"
+    )
+
+
+def test_a_symlink_that_stays_inside_the_index_folder_is_a_valid_part_path(tmp_path: Path) -> None:
+    folder = tmp_path / "idx"
+    write_report(folder, _part("Real", "x"), "real/p.yaml")
+    (folder / "alias").symlink_to(folder / "real", target_is_directory=True)
+    index = write_report(folder, make_index_report(["alias/p.yaml"]), "index.yaml")
+
+    assert content_files(index)[-1] == (folder / "real" / "p.yaml").resolve()
+
+
 def test_a_part_whose_index_key_is_not_an_index_is_refused_as_invalid_not_as_an_index(
     tmp_path: Path,
 ) -> None:
@@ -443,6 +466,12 @@ def test_a_part_whose_index_key_is_not_an_index_is_refused_as_invalid_not_as_an_
             id="above-the-index-folder",
         ),
         pytest.param(
+            {"index": {"parts": ["a/../../elsewhere/one.yaml"]}},
+            "invalid content data: index.parts.0: Value error, a part path stays inside the index file's "
+            "folder, not above it: a/../../elsewhere/one.yaml",
+            id="above-the-index-folder-after-normalising",
+        ),
+        pytest.param(
             {"index": {"parts": ["one.yaml"], "layout": "child_pages"}},
             "invalid content data: index.layout: Input should be 'one_page'",
             id="child-pages-not-yet",
@@ -451,6 +480,12 @@ def test_a_part_whose_index_key_is_not_an_index_is_refused_as_invalid_not_as_an_
             {"index": ["one.yaml"]},
             "invalid content data: index: Input should be a valid dictionary or instance of Index",
             id="index-is-a-list",
+        ),
+        pytest.param(
+            {"blocks": []},
+            "invalid content data: blocks: an index's `blocks` is its optional intro and needs at least "
+            "one block; leave `blocks` out for no intro",
+            id="empty-intro",
         ),
         pytest.param(
             {"blocks": "hello"},
@@ -590,18 +625,25 @@ def test_expand_opens_a_collapsed_part(tmp_path: Path) -> None:
     assert '<details class="part" id="details" open><summary>' in html
 
 
-def test_a_collapsed_part_is_a_details_element_the_print_script_and_print_css_both_open(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        pytest.param('<details class="part" id="details"><summary>', id="part-is-a-details-element"),
+        pytest.param(
+            'window.addEventListener("beforeprint", function () {\n'
+            '\t\tdocument.querySelectorAll("details").forEach(function (item) {\n',
+            id="print-script-opens-every-details",
+        ),
+        pytest.param(
+            "details::details-content{content-visibility:visible !important}", id="print-css-shows-content"
+        ),
+        pytest.param('details.part:not([open])>summary::before{content:""', id="print-css-part-marker"),
+    ],
+)
+def test_a_collapsed_part_page_carries_what_the_print_script_and_print_css_open(
+    tmp_path: Path, snippet: str
 ) -> None:
-    html = render_html(_collapsed(tmp_path))
-
-    assert (
-        '<details class="part" id="details"><summary>' in html,
-        'window.addEventListener("beforeprint", function () {\n'
-        '\t\tdocument.querySelectorAll("details").forEach(function (item) {\n' in html,
-        "details::details-content{content-visibility:visible !important}" in html,
-        'details.part:not([open])>summary::before{content:""' in html,
-    ) == (True, True, True, True)
+    assert snippet in render_html(_collapsed(tmp_path))
 
 
 @pytest.mark.parametrize("collapsed", [False, True])
