@@ -1,23 +1,79 @@
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category. {color="gray"}
 Mixed audience: ops reads the impact, the floor team reads the fix. {color="gray"}
 <table_of_contents/>
-- **Source**: WMS export
-- **Period**: Q3 2026
-- **Site**: DC-West
-- **Owner**: Inventory Ops
+<columns>
+	<column ratio="25">
+		Source {color="gray"}
+		WMS export
+	</column>
+	<column ratio="25">
+		Period {color="gray"}
+		Q3 2026
+	</column>
+	<column ratio="25">
+		Site {color="gray"}
+		DC-West
+	</column>
+	<column ratio="25">
+		Owner {color="gray"}
+		Inventory Ops
+	</column>
+</columns>
 ## Overview
 *Reconciled review of the 10,000-unit Q3 cycle count.* {color="gray"}
-- **Count date**: 2026-07-09 14:22 UTC
-- **Units expected**: 10,000
-- **Method**: `full cycle count`
-- **Mode**: strict
-<empty-block/>
-- **Matched cleanly**: 8,500 (85.0%) <span color="green">**▲ +3%**</span>
-- **Floor: fixable**: 1,100 (11.0%) <span color="yellow">**Floor**</span>
-	Miscounts + mislabeled bins we can correct. {color="gray"}
-- **Vendor: escalate**: 400 (4.0%) <span color="green">**▼ −90**</span> <span color="red">**Vendor**</span>
-- <span color="purple">**Count status**</span>: HEALTHY
-- <span color="gray">**Total units**</span>: 10,000
+<table fit-page-width="true" header-column="true">
+	<tr>
+		<td>**Count date**</td>
+		<td>2026-07-09 14:22 UTC</td>
+	</tr>
+	<tr>
+		<td>**Units expected**</td>
+		<td>10,000</td>
+	</tr>
+	<tr>
+		<td>**Method**</td>
+		<td>`full cycle count`</td>
+	</tr>
+	<tr>
+		<td>**Mode**</td>
+		<td>strict</td>
+	</tr>
+</table>
+<columns>
+	<column ratio="34">
+		<callout icon="📝" color="gray_bg">
+			**Matched cleanly**
+			8,500 (85.0%) <span color="green">**▲ +3%**</span>
+		</callout>
+	</column>
+	<column ratio="33">
+		<callout icon="📝" color="gray_bg">
+			**Floor: fixable**
+			1,100 (11.0%) <span color="yellow">**Floor**</span>
+			Miscounts + mislabeled bins we can correct. {color="gray"}
+		</callout>
+	</column>
+	<column ratio="33">
+		<callout icon="📝" color="gray_bg">
+			**Vendor: escalate**
+			400 (4.0%) <span color="green">**▼ −90**</span> <span color="red">**Vendor**</span>
+		</callout>
+	</column>
+</columns>
+<columns>
+	<column ratio="50">
+		<callout icon="📌" color="purple_bg">
+			**Count status**
+			HEALTHY
+		</callout>
+	</column>
+	<column ratio="50">
+		<callout icon="📝" color="gray_bg">
+			**Total units**
+			10,000
+		</callout>
+	</column>
+</columns>
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 Percentages are of the 10,000-unit total. Counts were verified against the shelf, not estimated. {color="gray"}
 Every bin label now ends in a <span underline="true">check digit</span>. The cold room logged H$`_{\text{2}}`$O condensation on 3 of 10$`^{\text{2}}`$ shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
@@ -112,14 +168,14 @@ flowchart LR
 	</tr>
 	<tr>
 		<td color="yellow_bg">Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340</td>
-		<td color="yellow_bg">🟡</td>
+		<td>🟡</td>
 		<td>600 (6.0% of total)</td>
 		<td>The same pallet is scanned twice when a picker re-enters an aisle within the count window.</td>
 		<td>De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan.</td>
 	</tr>
 	<tr>
 		<td color="blue_bg">Mislabeled bin codes **System**</td>
-		<td color="yellow_bg">🟡</td>
+		<td>🟡</td>
 		<td>500 (5.0% of total)</td>
 		<td>Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup.</td>
 		<td>Widen the scanner to accept 9-digit codes; re-scan the 500 truncated bins from the raw log.</td>
@@ -133,7 +189,7 @@ flowchart LR
 	</tr>
 	<tr>
 		<td color="red_bg">Short shipment **Vendor**</td>
-		<td color="red_bg">🔴</td>
+		<td>🔴</td>
 		<td>400 (4.0% of total)</td>
 		<td>The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted.</td>
 		<td>Escalated to the vendor (ticket `OPS-1234`); hold the line until a corrected ASN arrives.</td>
@@ -194,12 +250,12 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 </table>
 **Affects**: <span color="brown">**inventory**</span> <span color="pink">**scan-app**</span> <span color="purple">**DC-West**</span>
 ## Verification
-- ✅ Reconciliation gate passes (10,000 \= 10,000).
-- ✅ De-dup validated on a 1,000-pallet sample.
-- 🔵 Overflow bins being re-counted by hand right now.
-- ⚪ Overflow re-scan scheduled for the next count.
-- ❌ Vendor short-ship: blocked, cannot count.
-- ⏸️ Vendor escalation awaiting `OPS-1234` response.
+- <span color="green">✓</span> Reconciliation gate passes (10,000 \= 10,000).
+- <span color="green">✓</span> De-dup validated on a 1,000-pallet sample.
+- <span color="blue">◐</span> Overflow bins being re-counted by hand right now.
+- <span color="gray">○</span> Overflow re-scan scheduled for the next count.
+- <span color="red">✗</span> Vendor short-ship: blocked, cannot count.
+- <span color="yellow">⏸</span> Vendor escalation awaiting `OPS-1234` response.
 ### Follow-up checklist
 - [x] Confirm the `bin > 12` scan rule with the site lead.
 - [ ] Ship the 9-digit bin-code widening behind the scan flag.
@@ -207,8 +263,10 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 	- [ ] Watch the mis-scan rate for one shift before widening.
 - [ ] Re-run the count and re-verify reconciliation.
 #### Sign-off and rollback
-- **Owner**: Inventory Ops. **@site-lead** signs off each fix.
-- **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+**Owner**
+	Inventory Ops. **@site-lead** signs off each fix.
+**Rollback**
+	Re-disable the scan flag; the widened bins fall back to the 5-digit read.
 ---
 <callout icon="🎤" color="gray_bg">
 	**For the read-out**
@@ -224,13 +282,13 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 - ☑️ Hold the vendor line until a corrected ASN arrives.
 - ❓ Whether overflow aisles get a count window of their own.
 ## Rollout
-- ✅ **2026-06-30**: Initial full count
+- <span color="green">✓</span> **2026-06-30**: Initial full count
 	12,400 units scanned; 88% matched clean.
-- ✅ **2026-07-02**: Root-caused the double-count bug
+- <span color="green">✓</span> **2026-07-02**: Root-caused the double-count bug
 	Lexical tiebreak in `dedupe.ts`.
-- 🔵 **2026-07-09**: Fix drafted, awaiting re-count
+- <span color="blue">◐</span> **2026-07-09**: Fix drafted, awaiting re-count
 	Placeholder-aware ordering; recovers 1,140 units.
-- ⚪ **next count**: Re-verify reconciliation
+- <span color="gray">○</span> **next count**: Re-verify reconciliation
 ## Method
 Counts come from the scan-stage audit log, grouped by discrepancy reason. The reconciliation query and the de-dup fix are below.
 A zone's drift is $`d = \frac{|c - e|}{e}`$, where $`c`$ is the counted units and $`e`$ the expected units; the page reports the mean over the $`n`$ zones, with $`\sigma`$ as its spread.
@@ -262,8 +320,14 @@ function pickWinner(a, b) {
 <columns>
 	<column ratio="33">
 		<callout icon="📌" color="purple_bg">
-			- <span color="green">**Matched cleanly**</span>: 8,500 (85.0%)
-			- <span color="yellow">**Needs work**</span>: 1,500 (15.0%)
+			<callout icon="✅" color="green_bg">
+				**Matched cleanly**
+				8,500 (85.0%)
+			</callout>
+			<callout icon="⚠️" color="yellow_bg">
+				**Needs work**
+				1,500 (15.0%)
+			</callout>
 		</callout>
 	</column>
 	<column ratio="67">
@@ -273,19 +337,47 @@ function pickWinner(a, b) {
 		</callout>
 		- <span color="yellow">**Zone C**</span>: █████████░ 88.0%
 		<empty-block/>
-		- ✅ Reconciliation gate passes.
-		- ⏸️ Awaiting `OPS-1234`.
+		- <span color="green">✓</span> Reconciliation gate passes.
+		- <span color="yellow">⏸</span> Awaiting `OPS-1234`.
 	</column>
 </columns>
 ## Recount Zone C
-- **Status**: In Progress
-- **Priority**: High
-- **Assignee**: ada
-- **Due**: 2026-10-15
-- **Labels**: recount, bins
-- **Estimate**: 3
-- **Relates**: Appendix: discrepancy-reason raw counts
-- **team**: Floor ops
+<columns>
+	<column ratio="25">
+		Status {color="gray"}
+		In Progress
+	</column>
+	<column ratio="25">
+		Priority {color="gray"}
+		High
+	</column>
+	<column ratio="25">
+		Assignee {color="gray"}
+		ada
+	</column>
+	<column ratio="25">
+		Due {color="gray"}
+		2026-10-15
+	</column>
+</columns>
+<columns>
+	<column ratio="25">
+		Labels {color="gray"}
+		recount, bins
+	</column>
+	<column ratio="25">
+		Estimate {color="gray"}
+		3
+	</column>
+	<column ratio="25">
+		Relates {color="gray"}
+		Appendix: discrepancy-reason raw counts
+	</column>
+	<column ratio="25">
+		team {color="gray"}
+		Floor ops
+	</column>
+</columns>
 Zone C holds most of the mislabeled bins, so it is recounted first.
 ## Appendix: discrepancy-reason raw counts {toggle="true"}
 	*updated 18 Jul 2026* {color="gray"}
@@ -417,10 +509,27 @@ pie
 	</tr>
 </table>
 ## Readiness by zone
-- <span color="yellow">**Floor**</span>: 7 (43.8%)
-- <span color="blue">**System**</span>: 2 (12.5%)
-- <span color="red">**Vendor**</span>: 2 (12.5%)
-	Awaiting the vendor's corrected ASN. {color="gray"}
+<columns>
+	<column ratio="34">
+		<callout icon="📝" color="gray_bg">
+			<span color="yellow">**Floor**</span>
+			7 (43.8%)
+		</callout>
+	</column>
+	<column ratio="33">
+		<callout icon="📝" color="gray_bg">
+			<span color="blue">**System**</span>
+			2 (12.5%)
+		</callout>
+	</column>
+	<column ratio="33">
+		<callout icon="📝" color="gray_bg">
+			<span color="red">**Vendor**</span>
+			2 (12.5%)
+			Awaiting the vendor's corrected ASN. {color="gray"}
+		</callout>
+	</column>
+</columns>
 <table fit-page-width="true" header-row="true" header-column="true">
 	<tr>
 		<td></td>
