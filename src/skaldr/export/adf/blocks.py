@@ -109,7 +109,7 @@ _ALLOWED_BLOCKS: Final[Mapping[Container, frozenset[str]]] = {
     "doc": _TEXT_BLOCKS | _FENCED_BLOCKS | _CARDS | {"table", "expand"},
     "expand": _TEXT_BLOCKS | _FENCED_BLOCKS | _CARDS | {"table", "nestedExpand"},
     "nested_expand": _TEXT_BLOCKS | _FENCED_BLOCKS,
-    "panel": _TEXT_BLOCKS | {"codeBlock", "rule"},
+    "panel": _TEXT_BLOCKS | {"codeBlock", "rule", "blockCard"},
     "cell": _TEXT_BLOCKS | _FENCED_BLOCKS | _CARDS | {"nestedExpand"},
     "list item": _LIST_ITEM_BLOCKS,
     "quote": frozenset({"paragraph", "bulletList", "orderedList"}),
@@ -170,7 +170,10 @@ def _marked_block(block: AdfBlock, mark: AdfMark) -> AdfBlock:
         if "attrs" in block:
             marked["attrs"] = block["attrs"]
         return marked
-    return block
+    raise ExportInvariantError(
+        f"ADF cannot mark a {block['type']} inside a table cell; "
+        "the lowering should hold only paragraphs and lists there"
+    )
 
 
 def _label_runs(label: str | None) -> ExportRich:
@@ -220,9 +223,9 @@ def _holds_a_table(nodes: Iterable[Node]) -> bool:
 
 
 def _row_marks(row: TableRow) -> list[AdfMark]:
-    bold: list[AdfMark] = [AdfStrong(type="strong")] if row.emphasis is not None else []
+    emphasised: list[AdfMark] = [AdfStrong(type="strong")] if row.emphasis is not None else []
     struck: list[AdfMark] = [AdfStrike(type="strike")] if row.tone == "muted" else []
-    return [*bold, *struck]
+    return [*emphasised, *struck]
 
 
 def _expand_type(container: Container) -> Literal["expand", "nestedExpand"]:
@@ -276,8 +279,7 @@ class _AdfBlocks:
         return (
             len(node.columns) > PLAIN_GRID_COLUMN_LIMIT
             or any(_toned_grid_cell(column) is not None for column in node.columns)
-            or _holds_a_table(nested_nodes(node))
-        )
+        ) and not _holds_a_table(nested_nodes(node))
 
     def node_blocks(self, node: GenericNode, container: Container) -> list[AdfBlock]:
         match node:
@@ -357,7 +359,7 @@ class _AdfBlocks:
             card = AdfBlockCard(type="blockCard", attrs=AdfBlockCardAttrs(url=node.url))
         else:
             card = AdfEmbedCard(type="embedCard", attrs=AdfEmbedCardAttrs(url=node.url, layout="center"))
-        caption = LINK_CARD_SEPARATOR.join(part for part in (node.title, node.domain, node.caption) if part)
+        caption = LINK_CARD_SEPARATOR.join(part for part in (node.domain, node.caption) if part)
         return [card, *self.paragraph_blocks(Paragraph(plain(caption), "muted"))]
 
     def expand(self, container: Container, title: str, children: Sequence[Node]) -> AdfBlock:

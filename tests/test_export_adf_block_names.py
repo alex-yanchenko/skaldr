@@ -69,7 +69,6 @@ def _in_a_panel(block: dict[str, Any]) -> list[dict[str, Any]]:
 @pytest.mark.parametrize(
     ("block", "named"),
     [
-        pytest.param({"type": "link", "url": LINK_URL, "display": "card"}, "a link card", id="link-card"),
         pytest.param({"type": "link", "url": LINK_URL, "display": "embed"}, "a link embed", id="link-embed"),
         pytest.param({"type": "callout", "tone": "info", "body": "x"}, "a callout", id="callout"),
         pytest.param({"type": "note", "body": "x"}, "a note", id="note"),

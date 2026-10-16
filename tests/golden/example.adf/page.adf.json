@@ -3772,7 +3772,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Aggregate lot runbook · example.com · Revision 7",
+          "text": "example.com · Revision 7",
           "marks": [
             {
               "type": "textColor",

@@ -39,7 +39,7 @@ FencedInAListItemFeature = Literal[
     "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step"
 ]
 ListInAQuoteFeature = Literal["list inside a quote"]
-CalloutPlacementFeature = Literal["divider inside a callout"]
+CalloutPlacementFeature = Literal["divider inside a callout", "link card inside a callout"]
 AnyPlacementFeature = Literal[PlacementFeature, CalloutPlacementFeature]
 GridCellFeature = Literal[
     "table inside a grid cell", "callout inside a grid cell", "divider inside a grid cell"
@@ -88,7 +88,7 @@ RICH_STEP_NOTE: Final[OccurrenceFeature] = (
 )
 Holder = Literal["callout", "toggle inside a toggle"]
 Container = Literal["document", "toggle", Holder]
-Held = Literal["table", "callout", "quote", "toggle", "divider"]
+Held = Literal["table", "callout", "quote", "link card", "toggle", "divider"]
 FIRST_LIST_NUMBER: Final = 1
 BACKTICK: Final = "`"
 CLOSING_TAG_OPENER: Final = "</"
@@ -286,11 +286,6 @@ _ADF_CANNOT_PLACE: Final = Rejection(
     "move the {held} out of the {holder_name}",
     names_the_heading=True,
 )
-_ADF_CANNOT_PLACE_IN_A_GRID_CELL: Final = Rejection(
-    "ADF cannot place a {held} inside a grid cell, since a table cell holds no table",
-    "move the {held} out of the grid",
-    names_the_heading=True,
-)
 _CANVAS_LIST_ITEM_WHY: Final = (
     "a Slack canvas list item holds only text and one nested list, so it cannot show {held}"
 )
@@ -373,6 +368,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         {"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}
     ),
     "quote inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE}),
+    "link card inside a callout": _kept_except({}),
     "toggle inside a callout": _kept_except({"adf": _ADF_CANNOT_PLACE, "slack": _CANVAS_CALLOUT_CANNOT_HOLD}),
     "table inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "toggle inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
@@ -534,9 +530,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
-    "table inside a grid cell": _kept_except(
-        {"adf": _ADF_CANNOT_PLACE_IN_A_GRID_CELL, "slack": _CANVAS_COLUMN_CANNOT_HOLD}
-    ),
+    "table inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "callout inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "divider inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "toned grid cell": _kept_except(
@@ -623,6 +617,7 @@ PLACEMENTS: Final[Mapping[tuple[Holder, Held], AnyPlacementFeature]] = {
     ("callout", "table"): "table inside a callout",
     ("callout", "callout"): "callout inside a callout",
     ("callout", "quote"): "quote inside a callout",
+    ("callout", "link card"): "link card inside a callout",
     ("callout", "toggle"): "toggle inside a callout",
     ("toggle inside a toggle", "table"): "table inside a toggle inside a toggle",
     ("toggle inside a toggle", "toggle"): "toggle inside a toggle inside a toggle",

@@ -729,9 +729,6 @@ CANVAS_COLUMN_WHY = (
     "a Slack canvas column holds no table, callout or divider, so it cannot show the {held} "
     "inside a grid cell"
 )
-ADF_TABLE_IN_A_GRID_CELL_WHY = (
-    "ADF cannot place a table inside a grid cell, since a table cell holds no table"
-)
 INNER_GRID_WHY = "a Slack canvas cannot show a grid's columns inside a grid cell"
 INNER_GRID_INSTEAD = "write the inner grid's cells as cells of the outer grid"
 IMAGE = {"type": "image", "src": "https://example.com/shelf.png", "alt": "Shelf"}
@@ -806,15 +803,6 @@ CONTAINER_ADF_REFUSALS: dict[str, RefusedCase] = {
         "at blocks.0.walkthrough.steps.0.detail.0.divider",
         also_refused_by=("slack",),
     ),
-    "adf-table-in-a-grid-cell": RefusedCase(
-        "adf",
-        "table inside a grid cell",
-        [two_cell_grid(TABLE)],
-        ADF_TABLE_IN_A_GRID_CELL_WHY,
-        "move the table out of the grid",
-        "at blocks.0.grid.cells.1.blocks.0.table",
-        also_refused_by=("slack",),
-    ),
 }
 CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
     "slack-table-in-a-panel": _in_a_panel_refused_by_a_canvas(
@@ -833,7 +821,7 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
         "table inside a callout", BAR_CHART, "chart", "adf"
     ),
     "slack-chart-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
-        "table inside a grid cell", BAR_CHART, "chart", "adf"
+        "table inside a grid cell", BAR_CHART, "chart"
     ),
     "slack-request-with-a-verdict-in-a-panel": _in_a_panel_refused_by_a_canvas(
         "callout inside a callout",
@@ -885,7 +873,7 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
         "at blocks.0.grid",
     ),
     "slack-table-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
-        "table inside a grid cell", TABLE, "table", "adf"
+        "table inside a grid cell", TABLE, "table"
     ),
     "slack-callout-in-a-grid-cell": _in_a_grid_cell_refused_by_a_canvas(
         "callout inside a grid cell", {"type": "callout", "tone": "info", "body": "x"}, "callout"
@@ -924,7 +912,6 @@ CONTAINER_SLACK_REFUSALS: dict[str, RefusedCase] = {
         CANVAS_COLUMN_WHY.format(held="table"),
         "move the table out of the grid",
         "at blocks.0.grid.cells.1.blocks.0.grid.cells.0.blocks.0.table",
-        also_refused_by=("adf",),
     ),
     "slack-code-in-a-one-cell-grid-in-a-walkthrough-step": RefusedCase(
         "slack",

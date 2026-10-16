@@ -755,18 +755,14 @@ def test_columns_are_written_one_after_another() -> None:
     assert _rendered(node) == _doc(_words("left"), _words("right"), {"type": "rule"})
 
 
-def test_the_writer_refuses_a_table_in_a_column_as_an_invariant_since_a_cell_holds_no_table() -> None:
+def test_a_table_in_a_column_is_an_ordinary_table_after_the_columns_before_it() -> None:
     table = TableNode((_cell("A"),), (TableRow((_cell("1"),)),))
     node = Columns((GridColumn(50, (_para("left"),)), GridColumn(50, (table,))))
 
-    with pytest.raises(
-        ExportInvariantError,
-        match=_exactly(
-            "ADF does not allow a table inside a cell, written from a TableNode; "
-            "the export check should have refused it"
-        ),
-    ):
-        render_adf((node,))
+    assert _rendered(node) == _doc(
+        _words("left"),
+        _table(_row(_table_cell("tableHeader", "A")), _row(_table_cell("tableCell", "1"))),
+    )
 
 
 def test_tabs_are_one_expand_per_tab_titled_with_the_icon_of_the_tab_tone() -> None:

@@ -1,6 +1,10 @@
 import json
+import re
 from collections.abc import Mapping
 
+import pytest
+
+from skaldr.errors import ExportInvariantError
 from skaldr.export.adf import render_adf, render_adf_document
 from skaldr.export.inline import plain
 from skaldr.export.runs import Chip
@@ -8,6 +12,7 @@ from skaldr.export.tree import (
     Callout,
     Card,
     Cards,
+    CodeBlock,
     Columns,
     Definition,
     DefinitionList,
@@ -40,6 +45,10 @@ STRONG: Json = {"type": "strong"}
 STRIKE: Json = {"type": "strike"}
 SUPERSCRIPT: Json = {"type": "subsup", "attrs": {"type": "sup"}}
 RUNBOOK = "https://example.com/runbook"
+
+
+def _exactly(message: str) -> str:
+    return f"^{re.escape(message)}$"
 
 
 def _rendered(*nodes: Node) -> Json:
@@ -264,16 +273,51 @@ def test_a_link_card_is_a_block_card_over_a_grey_caption() -> None:
 
     assert _rendered(node) == _doc(
         {"type": "blockCard", "attrs": {"url": RUNBOOK}},
-        _words("Runbook · example.com · Steps", MUTED_TEXT),
+        _words("example.com · Steps", MUTED_TEXT),
     )
 
 
-def test_a_link_embed_is_an_embed_card_over_a_grey_caption() -> None:
-    node = LinkCard("Runbook", RUNBOOK, "embed")
+def test_a_link_embed_is_an_embed_card_over_a_grey_caption_of_its_domain() -> None:
+    node = LinkCard("Runbook", RUNBOOK, "embed", domain="example.com")
 
     assert _rendered(node) == _doc(
         {"type": "embedCard", "attrs": {"url": RUNBOOK, "layout": "center"}},
-        _words("Runbook", MUTED_TEXT),
+        _words("example.com", MUTED_TEXT),
+    )
+
+
+def test_a_link_card_with_no_domain_or_caption_is_the_card_alone() -> None:
+    assert _rendered(LinkCard("Runbook", RUNBOOK, "card")) == _doc(
+        {"type": "blockCard", "attrs": {"url": RUNBOOK}}
+    )
+
+
+def test_a_link_card_in_a_panel_is_a_block_card() -> None:
+    node = Callout("info", (LinkCard("Runbook", RUNBOOK, "card", domain="example.com"),))
+
+    check_nodes((node,), "adf")
+    assert _rendered(node) == _doc(
+        {
+            "type": "panel",
+            "attrs": {"panelType": "info"},
+            "content": [{"type": "blockCard", "attrs": {"url": RUNBOOK}}, _words("example.com", MUTED_TEXT)],
+        }
+    )
+
+
+def test_a_link_embed_in_a_panel_is_refused_as_a_quote_in_a_panel() -> None:
+    node = Callout("info", (LinkCard("Runbook", RUNBOOK, "embed"),))
+
+    assert str(refusal_of((node,), "adf")) == (
+        "ADF cannot place a link embed inside a callout; move the link embed out of the callout"
+    )
+
+
+def test_a_link_card_in_a_list_item_is_refused() -> None:
+    node = ListNode("bullet", (text_entry("a", LinkCard("Runbook", RUNBOOK, "card")),))
+
+    assert str(refusal_of((node,), "adf")) == (
+        "ADF cannot place a link card inside a list item; move the link card out of the list, after the list"
     )
 
 
@@ -284,7 +328,7 @@ def test_a_link_card_in_a_toggle_is_a_block_card() -> None:
         {
             "type": "expand",
             "attrs": {"title": "More"},
-            "content": [{"type": "blockCard", "attrs": {"url": RUNBOOK}}, _words("Runbook", MUTED_TEXT)],
+            "content": [{"type": "blockCard", "attrs": {"url": RUNBOOK}}],
         }
     )
 
@@ -635,14 +679,72 @@ def test_a_fact_strip_in_a_list_item_stays_bullets_since_a_list_item_holds_no_ta
     )
 
 
-def test_a_table_in_a_grid_cell_is_refused_naming_its_place() -> None:
-    table = TableNode((cell("A"),), (TableRow((cell("1"),)),))
-    grid = Columns((GridColumn(50, (para("left"),)), GridColumn(50, (table,))))
+TABLE_A = TableNode((cell("A"),), (TableRow((cell("1"),)),))
+TABLE_A_WRITTEN = _table(_row(_header("A")), _row(_body("1")))
+
+
+def _grid_holding_a_table(cells: int) -> Columns:
+    held = tuple(GridColumn(100 // cells, (para(f"c{index}"),)) for index in range(cells - 1))
+    return Columns((*held, GridColumn(100 // cells, (TABLE_A,))))
+
+
+@pytest.mark.parametrize("cells", [2, 4])
+def test_a_grid_holding_a_table_writes_its_cells_one_after_another_as_it_always_did(cells: int) -> None:
+    grid = _grid_holding_a_table(cells)
+
+    check_nodes((grid,), "adf")
+    assert _rendered(grid) == _doc(*(_words(f"c{index}") for index in range(cells - 1)), TABLE_A_WRITTEN)
+
+
+def test_a_grid_holding_a_table_in_a_toggle_writes_its_cells_one_after_another() -> None:
+    node = Toggle(plain("More"), None, (_grid_holding_a_table(4),))
+
+    check_nodes((node,), "adf")
+    assert _rendered(node) == _doc(
+        {
+            "type": "expand",
+            "attrs": {"title": "More"},
+            "content": [*(_words(f"c{index}") for index in range(3)), TABLE_A_WRITTEN],
+        }
+    )
+
+
+def test_a_toned_grid_cell_holding_a_table_is_refused_as_a_table_in_a_panel_as_it_always_was() -> None:
+    toned = Callout("warning", (TABLE_A,), authored_as="grid cell")
+    grid = Columns((GridColumn(50, (para("left"),)), GridColumn(50, (toned,))))
 
     assert str(refusal_of((grid,), "adf")) == (
-        "ADF cannot place a table inside a grid cell, since a table cell holds no table; "
-        "move the table out of the grid"
+        "ADF cannot place a table inside a grid cell; move the table out of the grid cell"
     )
+
+
+def test_a_toggle_two_deep_in_a_table_form_grid_cell_passes_the_check_and_stops_the_writer() -> None:
+    inner = Toggle(plain("Inner"), None, (para("x"),))
+    outer = Toggle(plain("Outer"), None, (inner,))
+    cells = (*(GridColumn(25, (para(f"c{index}"),)) for index in range(3)), GridColumn(25, (outer,)))
+
+    check_nodes((Columns(cells),), "adf")
+    with pytest.raises(
+        ExportInvariantError,
+        match=_exactly(
+            "ADF does not allow a nestedExpand inside a nested_expand, written from a Toggle; "
+            "the export check should have refused it"
+        ),
+    ):
+        render_adf((Columns(cells),))
+
+
+def test_a_cell_block_the_writer_cannot_mark_is_an_internal_error() -> None:
+    node = TableNode((cell("A"),), (TableRow((TableCell((), blocks=(CodeBlock("x"),)),), emphasis="group"),))
+
+    with pytest.raises(
+        ExportInvariantError,
+        match=_exactly(
+            "ADF cannot mark a codeBlock inside a table cell; "
+            "the lowering should hold only paragraphs and lists there"
+        ),
+    ):
+        render_adf((node,))
 
 
 def test_a_grid_cell_holding_what_a_table_cell_holds_passes_the_check() -> None:

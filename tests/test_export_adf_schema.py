@@ -113,6 +113,10 @@ UPGRADED_FORMS = [
     pytest.param(LinkCard("Runbook", "https://example.com/runbook", "embed"), id="embed-card"),
     pytest.param(Toggle(plain("More"), None, (Paragraph(plain("body")),), open=True), id="open-toggle"),
     pytest.param(
+        Callout("info", (LinkCard("Runbook", "https://example.com/runbook", "card", domain="example.com"),)),
+        id="block-card-in-a-panel",
+    ),
+    pytest.param(
         Quote(
             (Paragraph(plain("Said:")), ListNode("number", (ListEntry(plain("a")),), start=3)), plain("Ana")
         ),
