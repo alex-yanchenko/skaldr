@@ -160,6 +160,14 @@ SLACK_REFUSALS: dict[str, RefusedCase] = {
         "move the grid out of the step, after the walkthrough",
         "at blocks.0.walkthrough.steps.0.detail.0.grid",
     ),
+    "slack-heading-deeper-than-a-canvas-holds": RefusedCase(
+        "slack",
+        "heading deeper than a canvas holds",
+        [{"type": "section", "title": "Counts", "blocks": [{"type": "heading", "text": "Deep", "level": 4}]}],
+        "a Slack canvas holds headings down to level 3, so it cannot show the heading 'Deep' at level 4",
+        "write the heading as bold text, or export the document elsewhere",
+        "at blocks.0.section.blocks.0.heading",
+    ),
     "slack-script-with-no-unicode-form": RefusedCase(
         "slack",
         "subscript or superscript with no Unicode form",

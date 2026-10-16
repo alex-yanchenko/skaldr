@@ -773,6 +773,18 @@ def test_a_converter_failure_names_the_exception_latex2mathml_raised() -> None:
     )
 
 
+def test_a_converter_failure_that_is_not_a_latex2mathml_error_still_fails_the_build_naming_it() -> None:
+    expression = "\\mathbb\\\\b\\over\\sqrt\\text"
+
+    with pytest.raises(ReportError) as raised:
+        mathml(expression, "inline")
+
+    assert (str(raised.value), type(raised.value.__cause__)) == (
+        f"invalid math expression '{expression}': latex2mathml cannot convert it (StopIteration)",
+        StopIteration,
+    )
+
+
 def test_a_converter_failure_keeps_the_exception_latex2mathml_raised_as_its_cause() -> None:
     with pytest.raises(ReportError) as raised:
         mathml("x^", "block")

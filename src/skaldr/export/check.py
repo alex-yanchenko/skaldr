@@ -1,5 +1,5 @@
 from collections import deque
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import chain
 from typing import Final
@@ -10,6 +10,7 @@ from skaldr import models
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
     BACKTICK,
+    CANVAS_HEADING_LEVEL_LIMIT,
     CANVAS_LAYOUT_COLUMN_LIMIT,
     CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
@@ -21,6 +22,7 @@ from skaldr.export.capabilities import (
     RICH_STEP_NOTE,
     CellCount,
     Container,
+    DeepHeading,
     Details,
     DividerInAStep,
     FencedInAListItem,
@@ -77,6 +79,7 @@ from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Columns,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
@@ -94,6 +97,7 @@ from skaldr.export.tree import (
     TableOfContents,
     Tabs,
     Toggle,
+    canvas_heading_shift,
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
@@ -214,6 +218,8 @@ def _held(node: GenericNode) -> Held | None:
             return "table"
         case Callout():
             return "callout"
+        case Quote(authored_as="link card"):
+            return "link card"
         case Quote() if any(quote_lines(node)) or node.cite:
             return "quote"
         case Toggle():
@@ -422,13 +428,24 @@ def _nodes_adf_cannot_place_in_a_list_item(child: GenericNode) -> Iterator[Gener
             return
 
 
+def _nodes_as_checked(nodes: Iterable[Node], definitions_as_blocks: bool) -> Iterator[GenericNode]:
+    for node in nodes:
+        if definitions_as_blocks and isinstance(node, DefinitionList):
+            for definition in node.definitions:
+                yield from _nodes_as_checked(definition.body, definitions_as_blocks)
+        else:
+            yield from folded([node])
+
+
 def _document_position(path: str) -> DocumentPosition:
     return tuple((0, int(part), "") if part.isdigit() else (1, 0, part) for part in path.split("."))
 
 
 class _TreeWalk:
-    def __init__(self, located: Iterable[LocatedDetails]) -> None:
+    def __init__(self, located: Iterable[LocatedDetails], definitions_as_blocks: bool) -> None:
+        self.definitions_as_blocks = definitions_as_blocks
         self.heading = ""
+        self.heading_shift = 0
         self.located = deque(located)
 
     def note_heading(self, text: ExportRich) -> None:
@@ -445,14 +462,20 @@ class _TreeWalk:
             path, details = self.located.popleft()
             yield self.hit(details, path)
 
-    def document(self, body: Iterable[Node]) -> Iterator[FeatureHit]:
+    def deep_heading_hits(self, node: Node, level: int, text: ExportRich) -> Iterator[FeatureHit]:
+        canvas_level = level - self.heading_shift
+        if canvas_level > CANVAS_HEADING_LEVEL_LIMIT:
+            yield self.hit(DeepHeading(_visible_text(text), canvas_level), node.authored_at)
+
+    def document(self, body: Sequence[Node]) -> Iterator[FeatureHit]:
+        self.heading_shift = canvas_heading_shift(body)
         yield from self.nodes(body, _Place())
         while self.located:
             path, details = self.located.popleft()
             yield self.hit(details, path)
 
     def nodes(self, nodes: Iterable[Node], place: _Place) -> Iterator[FeatureHit]:
-        for node in folded(nodes):
+        for node in _nodes_as_checked(nodes, self.definitions_as_blocks):
             yield from self.node(node, place)
 
     def inline_hits(self, node: Node, texts: Iterable[ExportRich]) -> Iterator[FeatureHit]:
@@ -476,6 +499,7 @@ class _TreeWalk:
         yield from self.inline_hits(node, _own_texts(node))
         match node:
             case Heading():
+                yield from self.deep_heading_hits(node, node.level, node.text)
                 self.note_heading(node.text)
             case ListNode():
                 yield from self.list_hits(node, place)
@@ -485,6 +509,7 @@ class _TreeWalk:
                 yield from self.nodes(node.children, place.in_a_callout(_term(node)))
             case Toggle():
                 if node.heading_level is not None:
+                    yield from self.deep_heading_hits(node, node.heading_level, node.title)
                     self.note_heading(node.title)
                 yield from self.nodes(node.children, place.in_a_toggle(_term(node)))
             case Tabs():
@@ -645,8 +670,11 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
     return ", ".join(places) or None
 
 
-def feature_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
-    return _TreeWalk(_model_hits_in_document_order(report, document)).document(document.body)
+def feature_hits(
+    report: Report, document: LoweredDocument, target: ExportTarget | None = None
+) -> Iterator[FeatureHit]:
+    walk = _TreeWalk(_model_hits_in_document_order(report, document), target == "slack")
+    return walk.document(document.body)
 
 
 def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:
@@ -665,4 +693,4 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    _raise_the_first_rejection(feature_hits(report, document), target)
+    _raise_the_first_rejection(feature_hits(report, document, target), target)

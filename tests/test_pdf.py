@@ -1,15 +1,29 @@
+import errno
+import os
+import stat
 from pathlib import Path
 
 import pytest
 
 from skaldr import pdf
-from skaldr.errors import ReportError
+from skaldr.errors import ReadOnlyFileError, ReportError
 
 
 def _executable(path: Path, script: str = "#!/bin/sh\nexit 0\n") -> Path:
     path.write_text(script, encoding="utf-8")
     path.chmod(0o755)
     return path
+
+
+def _browser_printing(path: Path, content: str, *, exit_code: int) -> Path:
+    write_to_print_target = 'printf %s "$content" > "${a#--print-to-pdf=}"'
+    return _executable(
+        path,
+        "#!/bin/sh\n"
+        f"content={content}\n"
+        f'for a in "$@"; do case "$a" in --print-to-pdf=*) {write_to_print_target};; esac; done\n'
+        f"exit {exit_code}\n",
+    )
 
 
 def test_find_browser_honors_an_executable_env_override(
@@ -109,8 +123,59 @@ def test_html_to_pdf_runs_the_browser_with_the_expected_command(tmp_path: Path) 
     assert out.exists()  # parent dir was created and the PDF written
     # argv seen by the browser (its own path is argv[0], not captured by "$@")
     args = argv_dump.read_text(encoding="utf-8").splitlines()
-    assert args[:4] == ["--headless", "--disable-gpu", "--no-pdf-header-footer", f"--print-to-pdf={out}"]
+    assert args[:3] == ["--headless", "--disable-gpu", "--no-pdf-header-footer"]
+    assert args[3].startswith("--print-to-pdf=") and args[3].endswith("page.pdf")
+    assert args[3] != f"--print-to-pdf={out}"
     assert args[4].startswith("file://") and args[4].endswith("page.html")
+
+
+def test_html_to_pdf_leaves_an_earlier_pdf_alone_when_the_browser_fails_after_writing(
+    tmp_path: Path,
+) -> None:
+    fake = _browser_printing(tmp_path / "fake-browser", "partial", exit_code=3)
+    out = tmp_path / "out.pdf"
+    out.write_bytes(b"earlier pdf")
+
+    with pytest.raises(ReportError, match=r"browser failed to produce a PDF \(exit 3\): no output"):
+        pdf.html_to_pdf("<html></html>", out, browser=str(fake))
+
+    assert (out.read_bytes(), sorted(tmp_path.iterdir())) == (b"earlier pdf", [fake, out])
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes a read-only file")
+def test_html_to_pdf_refuses_a_read_only_target_before_it_runs_the_browser(tmp_path: Path) -> None:
+    ran = tmp_path / "browser-ran"
+    fake = _executable(tmp_path / "fake-browser", f"#!/bin/sh\n: > {ran}\nexit 0\n")
+    out = tmp_path / "out.pdf"
+    out.write_bytes(b"earlier pdf")
+    out.chmod(0o444)
+
+    with pytest.raises(ReadOnlyFileError) as raised:
+        pdf.html_to_pdf("<html></html>", out, browser=str(fake))
+
+    assert (str(raised.value), ran.exists(), out.read_bytes()) == (
+        f"[Errno {errno.EACCES}] the file is read-only, so skaldr leaves it as it is: '{out}'",
+        False,
+        b"earlier pdf",
+    )
+
+
+def test_html_to_pdf_writes_through_a_symlink_and_keeps_the_link(tmp_path: Path) -> None:
+    fake = _browser_printing(tmp_path / "fake-browser", "new-pdf", exit_code=0)
+    target = tmp_path / "published" / "out.pdf"
+    target.parent.mkdir()
+    target.write_bytes(b"earlier pdf")
+    target.chmod(0o640)
+    link = tmp_path / "out.pdf"
+    link.symlink_to(target)
+
+    pdf.html_to_pdf("<html></html>", link, browser=str(fake))
+
+    assert (link.is_symlink(), target.read_bytes(), stat.S_IMODE(target.stat().st_mode)) == (
+        True,
+        b"new-pdf",
+        0o640,
+    )
 
 
 def test_html_to_pdf_surfaces_a_nonzero_exit(tmp_path: Path) -> None:

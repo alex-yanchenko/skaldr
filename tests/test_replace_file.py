@@ -207,3 +207,131 @@ def test_text_that_cannot_be_encoded_leaves_the_earlier_file_untouched(tmp_path:
         replace_file(path, "lone \ud800 surrogate")
 
     assert (path.read_text(encoding="utf-8"), sorted(tmp_path.iterdir())) == ("earlier page", [path])
+
+
+def test_a_hard_linked_file_keeps_its_earlier_bytes_when_the_disk_fills_partway(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = tmp_path / "first.html"
+    first.write_text("earlier page", encoding="utf-8")
+    second = tmp_path / "second.html"
+    os.link(first, second)
+    real_write_bytes = Path.write_bytes
+
+    def filling_disk(self: Path, data: bytes) -> int:
+        if data == b"new page":
+            real_write_bytes(self, b"new")
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC), str(self))
+        return real_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", filling_disk)
+
+    with pytest.raises(OSError) as raised:
+        replace_file(first, "new page")
+
+    assert (
+        raised.value.errno,
+        first.read_text(encoding="utf-8"),
+        second.read_text(encoding="utf-8"),
+    ) == (errno.ENOSPC, "earlier page", "earlier page")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="a folder is flushed only where POSIX opens one")
+def test_the_staged_file_and_its_folder_are_flushed_around_the_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "page.html"
+    events: list[str] = []
+    real_replace = Path.replace
+
+    def recording_replace(self: Path, target: Path) -> Path:
+        events.append("replace")
+        return real_replace(self, target)
+
+    def recording_fsync(_descriptor: int) -> None:
+        events.append("fsync")
+
+    monkeypatch.setattr("skaldr.replace_file.os.fsync", recording_fsync)
+    monkeypatch.setattr(Path, "replace", recording_replace)
+
+    replace_file(path, "new page")
+
+    assert (events, path.read_text(encoding="utf-8")) == (["fsync", "replace", "fsync"], "new page")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="a folder is flushed only where POSIX opens one")
+def test_a_folder_that_refuses_a_flush_does_not_fail_a_file_already_replaced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "page.html"
+    path.write_text("earlier page", encoding="utf-8")
+    calls: list[int] = []
+    real_fsync = os.fsync
+
+    def refusing_the_folder(descriptor: int) -> None:
+        calls.append(descriptor)
+        if len(calls) == 2:
+            raise OSError(errno.EINVAL, os.strerror(errno.EINVAL))
+        real_fsync(descriptor)
+
+    monkeypatch.setattr("skaldr.replace_file.os.fsync", refusing_the_folder)
+
+    replace_file(path, "new page")
+
+    assert (len(calls), path.read_text(encoding="utf-8")) == (2, "new page")
+
+
+def test_an_in_place_write_is_flushed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    first = tmp_path / "first.html"
+    first.write_text("earlier page", encoding="utf-8")
+    os.link(first, tmp_path / "second.html")
+    events: list[str] = []
+
+    def recording_fsync(_descriptor: int) -> None:
+        events.append("fsync")
+
+    monkeypatch.setattr("skaldr.replace_file.os.fsync", recording_fsync)
+
+    replace_file(first, "new page")
+
+    assert (events, first.read_text(encoding="utf-8")) == (["fsync"], "new page")
+
+
+def test_an_in_place_write_that_fails_its_flush_gets_the_earlier_bytes_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = tmp_path / "first.html"
+    first.write_text("earlier page", encoding="utf-8")
+    os.link(first, tmp_path / "second.html")
+
+    def failing_flush(_descriptor: int) -> None:
+        raise OSError(errno.EIO, os.strerror(errno.EIO))
+
+    monkeypatch.setattr("skaldr.replace_file.os.fsync", failing_flush)
+
+    with pytest.raises(OSError) as raised:
+        replace_file(first, "new page")
+
+    assert (raised.value.errno, first.read_text(encoding="utf-8")) == (errno.EIO, "earlier page")
+
+
+def test_an_in_place_write_interrupted_partway_gets_the_earlier_bytes_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = tmp_path / "first.html"
+    first.write_text("earlier page", encoding="utf-8")
+    os.link(first, tmp_path / "second.html")
+    real_write_bytes = Path.write_bytes
+
+    def interrupted(self: Path, data: bytes) -> int:
+        if data == b"new page":
+            real_write_bytes(self, b"new")
+            raise KeyboardInterrupt
+        return real_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", interrupted)
+
+    with pytest.raises(KeyboardInterrupt):
+        replace_file(first, "new page")
+
+    assert first.read_text(encoding="utf-8") == "earlier page"

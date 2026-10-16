@@ -1,6 +1,6 @@
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Final, NoReturn
@@ -38,6 +38,7 @@ from skaldr.richtext import (
     write_runs,
 )
 
+BlockCellWriter = Callable[[TableCell, Sequence[ToneName]], str]
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 STYLE_TAG: Final[Mapping[MarkerStyle, str]] = {"bold": "strong", "italic": "em", "strike": "del"}
 ENTITY_LOOKALIKE: Final = re.compile(r"&(?=#?\w+;)")
@@ -430,8 +431,12 @@ class CommonMarkRuns(MarkupRuns, ABC):
         return code_span("{{" + name + "}}")
 
 
-def pipe_table_lines(table: TableNode, writer: CommonMarkRuns) -> list[str]:
+def pipe_table_lines(
+    table: TableNode, writer: CommonMarkRuns, block_cell: BlockCellWriter | None = None
+) -> list[str]:
     def cell_markup(cell: TableCell, tones: Sequence[ToneName]) -> str:
+        if cell.blocks and block_cell is not None:
+            return block_cell(cell, tones).replace("|", "\\|")
         return writer.write_cell(tones, cell).replace("|", "\\|")
 
     width = table_width(table)

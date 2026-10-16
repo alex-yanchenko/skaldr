@@ -89,7 +89,7 @@ def test_each_region_is_rendered_as_canvas_markdown() -> None:
     lowering = lowering_for(report)
     page = assemble_item_page("Garden", list(lower_regions(lowering)), lowering, opens_the_document=True)
 
-    assert SlackConnector().render_regions(report, page)[-1] == "## Planting\n\nSow in spring.\n"
+    assert SlackConnector().render_regions(report, page)[-1] == "# Planting\n\nSow in spring.\n"
 
 
 def test_a_transport_signs_in_with_the_targets_workspace() -> None:
@@ -218,7 +218,7 @@ def test_a_changed_section_is_written_with_one_replace_of_the_canvas_body(tmp_pa
 
 
 PLANTING_REWRITTEN = (
-    "# Garden handbook\n\nFor new members\n\nWelcome to the garden.\n\n## Planting\n\n"
+    "# Garden handbook\n\nFor new members\n\nWelcome to the garden.\n\n# Planting\n\n"
     f"Sow in late spring.\n\n{DOCUMENT_STAMP_LINKING_TOOLS}\n"
 )
 

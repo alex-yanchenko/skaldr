@@ -1,7 +1,6 @@
 import re
 import subprocess
 from http import HTTPStatus
-from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -12,6 +11,7 @@ from skaldr.compute import (
     Strip,
     StripLabel,
     anchor_slugs,
+    badge_legend_slot,
     command_for,
     first_table_index,
     fmt,
@@ -41,6 +41,7 @@ from skaldr.models import (
     Table,
     parse_report,
 )
+from tests.conftest import REPO_ROOT
 from tests.factories import (
     make_cell,
     make_command_request,
@@ -1093,6 +1094,19 @@ def test_first_table_index() -> None:
     assert first_table_index(report) == 1
 
 
+def test_the_badge_legend_slot_is_the_first_table_or_the_top_of_the_page() -> None:
+    table = make_reconciled_table()
+    text = {"type": "text", "body": "x"}
+    nested = {"type": "section", "title": "S", "blocks": [make_reconciled_table()]}
+
+    slots = [
+        badge_legend_slot(parse_report(make_report(blocks=blocks)))
+        for blocks in ([text, table], [table], [text, nested], [text])
+    ]
+
+    assert slots == [1, 0, 0, 0]
+
+
 def test_a_table_nested_in_a_section_leaves_the_legend_at_the_top() -> None:
     section = {"type": "section", "title": "S", "blocks": [make_reconciled_table()]}
 
@@ -1325,7 +1339,7 @@ _PHRASES_PYTHON_RENAMED: dict[int, frozenset[str]] = {
 
 
 def test_the_reason_table_in_the_browser_script_agrees_with_the_phrases_the_page_renders() -> None:
-    script = Path("src/skaldr/components/_request.html.j2").read_text(encoding="utf-8")
+    script = (REPO_ROOT / "src/skaldr/components/_request.html.j2").read_text(encoding="utf-8")
     literal = re.search(r"var REASONS = \{(.*?)\};", script, re.DOTALL)
     assert literal is not None
 

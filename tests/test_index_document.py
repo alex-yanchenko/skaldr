@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -16,9 +17,11 @@ from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
 from skaldr.export.tree import Heading, Paragraph, TableOfContents, TocEntry, Toggle
 from skaldr.export_targets import ExportTarget
-from skaldr.models import Person, Report, Text, content_files, load_report, parse_report
+from skaldr.models import Person, Report, content_files, load_report, parse_report
 from skaldr.render import render_html
 from tests.factories import (
+    dumped_part,
+    dumped_text,
     make_index_report,
     make_notion_target,
     make_publish_report,
@@ -45,19 +48,6 @@ def _part(title: str, *bodies: str, **overrides: Any) -> dict[str, Any]:
     return make_report(meta={"title": title}, blocks=[_text(body) for body in bodies], **overrides)
 
 
-def _dumped_text(body: str) -> dict[str, Any]:
-    return Text(type="text", body=body).model_dump(mode="json")
-
-
-def _dumped_part(title: str, *bodies: str, collapsed: bool = False) -> dict[str, Any]:
-    return {
-        "type": "part",
-        "title": title,
-        "collapsed": collapsed,
-        "blocks": [_dumped_text(body) for body in bodies],
-    }
-
-
 def _two_part_index(tmp_path: Path, **overrides: Any) -> Path:
     return write_index_document(
         tmp_path,
@@ -78,9 +68,9 @@ def test_an_index_combines_its_intro_and_one_part_per_file_in_order(tmp_path: Pa
     report = load_report(index)
 
     assert report.model_dump(mode="json")["blocks"] == [
-        _dumped_text("intro"),
-        _dumped_part("Part one", "first"),
-        _dumped_part("Part two", "second"),
+        dumped_text("intro"),
+        dumped_part("Part one", "first"),
+        dumped_part("Part two", "second"),
     ]
 
 
@@ -88,8 +78,8 @@ def test_an_index_needs_no_intro_blocks(tmp_path: Path) -> None:
     report = load_report(_two_part_index(tmp_path))
 
     assert report.model_dump(mode="json")["blocks"] == [
-        _dumped_part("Part one", "first"),
-        _dumped_part("Part two", "second"),
+        dumped_part("Part one", "first"),
+        dumped_part("Part two", "second"),
     ]
 
 
@@ -100,13 +90,13 @@ def test_an_index_with_collapsed_set_collapses_every_part(tmp_path: Path) -> Non
 
     report = load_report(index)
 
-    assert report.model_dump(mode="json")["blocks"] == [_dumped_part("Part one", "first", collapsed=True)]
+    assert report.model_dump(mode="json")["blocks"] == [dumped_part("Part one", "first", collapsed=True)]
 
 
 def test_a_document_with_a_null_index_is_an_ordinary_document(tmp_path: Path) -> None:
     path = write_report(tmp_path, make_report(index=None, blocks=[_text("plain")]))
 
-    assert load_report(path).model_dump(mode="json")["blocks"] == [_dumped_text("plain")]
+    assert load_report(path).model_dump(mode="json")["blocks"] == [dumped_text("plain")]
 
 
 def test_the_combined_page_carries_no_index_so_its_emitted_json_is_refused_rather_than_expanded_twice(
@@ -131,7 +121,7 @@ def test_part_paths_resolve_against_the_index_file_not_the_working_directory(
 
     report = load_report(index)
 
-    assert report.model_dump(mode="json")["blocks"] == [_dumped_part("Nested", "deep")]
+    assert report.model_dump(mode="json")["blocks"] == [dumped_part("Nested", "deep")]
 
 
 def test_a_part_is_loaded_with_its_own_includes(tmp_path: Path) -> None:
@@ -142,7 +132,7 @@ def test_a_part_is_loaded_with_its_own_includes(tmp_path: Path) -> None:
     )
     index = write_report(tmp_path, make_index_report(["parts/a.yaml"]), "index.yaml")
 
-    assert load_report(index).model_dump(mode="json")["blocks"] == [_dumped_part("A", "included")]
+    assert load_report(index).model_dump(mode="json")["blocks"] == [dumped_part("A", "included")]
     assert content_files(index) == (
         index.resolve(),
         (tmp_path / "parts" / "a.yaml").resolve(),
@@ -411,6 +401,40 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
     )
 
 
+def test_a_part_reached_through_a_symlink_out_of_the_index_folder_is_refused(tmp_path: Path) -> None:
+    folder = tmp_path / "idx"
+    outside = tmp_path / "elsewhere"
+    write_report(outside, _part("Outside", "x"), "p.yaml")
+    folder.mkdir()
+    (folder / "link").symlink_to(outside, target_is_directory=True)
+    index = write_report(folder, make_index_report(["link/p.yaml"]), "index.yaml")
+
+    assert _refusal(index) == (
+        f"part link/p.yaml resolves to {(outside / 'p.yaml').resolve()}, "
+        f"outside the index file's folder {folder.resolve()}"
+    )
+
+
+def test_a_symlink_that_stays_inside_the_index_folder_is_a_valid_part_path(tmp_path: Path) -> None:
+    folder = tmp_path / "idx"
+    write_report(folder, _part("Real", "x"), "real/p.yaml")
+    (folder / "alias").symlink_to(folder / "real", target_is_directory=True)
+    index = write_report(folder, make_index_report(["alias/p.yaml"]), "index.yaml")
+
+    assert content_files(index)[-1] == (folder / "real" / "p.yaml").resolve()
+
+
+def test_a_part_whose_index_key_is_not_an_index_is_refused_as_invalid_not_as_an_index(
+    tmp_path: Path,
+) -> None:
+    index = write_index_document(tmp_path, {"one.yaml": {**_part("A", "a"), "index": False}})
+
+    assert _refusal(index) == (
+        f"in part {tmp_path / 'one.yaml'}: invalid content data: index: "
+        "Input should be a valid dictionary or instance of Index"
+    )
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
@@ -437,6 +461,18 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
             id="blank-path",
         ),
         pytest.param(
+            {"index": {"parts": ["../elsewhere/one.yaml"]}},
+            "invalid content data: index.parts.0: Value error, a part path stays inside the index file's "
+            "folder, not above it: ../elsewhere/one.yaml",
+            id="above-the-index-folder",
+        ),
+        pytest.param(
+            {"index": {"parts": ["a/../../elsewhere/one.yaml"]}},
+            "invalid content data: index.parts.0: Value error, a part path stays inside the index file's "
+            "folder, not above it: a/../../elsewhere/one.yaml",
+            id="above-the-index-folder-after-normalising",
+        ),
+        pytest.param(
             {"index": {"parts": ["one.yaml"], "layout": "child_pages"}},
             "invalid content data: index.layout: Input should be 'one_page'",
             id="child-pages-not-yet",
@@ -445,6 +481,12 @@ def test_a_part_that_is_itself_an_index_is_refused(tmp_path: Path) -> None:
             {"index": ["one.yaml"]},
             "invalid content data: index: Input should be a valid dictionary or instance of Index",
             id="index-is-a-list",
+        ),
+        pytest.param(
+            {"blocks": []},
+            "invalid content data: blocks: an index's `blocks` is its optional intro and needs at least "
+            "one block; leave `blocks` out for no intro",
+            id="empty-intro",
         ),
         pytest.param(
             {"blocks": "hello"},
@@ -528,6 +570,21 @@ def _combined(tmp_path: Path, **overrides: Any) -> Report:
     return load_report(write_index_document(tmp_path, parts, **overrides))
 
 
+def test_the_build_summary_counts_the_blocks_inside_each_part(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    index = write_index_document(
+        tmp_path,
+        {"one.yaml": _part("A", "a1", "a2"), "two.yaml": _part("B", "b1", "b2", "b3")},
+        blocks=[_text("intro")],
+    )
+    out = tmp_path / "out.html"
+
+    assert main([str(index), "-o", str(out)]) == 0
+
+    assert capsys.readouterr().out == f"OK  {out}\n    6 blocks, 0 badges\n"
+
+
 def _collapsed(tmp_path: Path) -> Report:
     return _combined(tmp_path, index={"parts": ["one.yaml", "two.yaml"], "collapsed": True})
 
@@ -548,10 +605,16 @@ def test_an_open_part_renders_as_a_titled_region_with_its_blocks(tmp_path: Path)
     html = render_html(_combined(tmp_path))
 
     assert (
-        '<section class="part" id="details"><h1 class="part-title">Details</h1><p class="text">second</p>'
+        '<section class="part" id="details"><h2 class="part-title">Details</h2><p class="text">second</p>'
         in html
     )
     assert html.index('class="part-title">Overview<') < html.index("Inside one") < html.index("Details")
+
+
+def test_a_combined_page_has_one_h1_whatever_the_number_of_parts(tmp_path: Path) -> None:
+    html = render_html(_combined(tmp_path))
+
+    assert re.findall(r"<h1[ >][^<]*", html) == ["<h1>Combined"]
 
 
 def test_a_collapsed_part_renders_as_a_closed_disclosure_holding_its_blocks(tmp_path: Path) -> None:
@@ -567,6 +630,27 @@ def test_expand_opens_a_collapsed_part(tmp_path: Path) -> None:
     html = render_html(_collapsed(tmp_path), expand=True)
 
     assert '<details class="part" id="details" open><summary>' in html
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        pytest.param('<details class="part" id="details"><summary>', id="part-is-a-details-element"),
+        pytest.param(
+            'window.addEventListener("beforeprint", function () {\n'
+            '\t\tdocument.querySelectorAll("details").forEach(function (item) {\n',
+            id="print-script-opens-every-details",
+        ),
+        pytest.param(
+            "details::details-content{content-visibility:visible !important}", id="print-css-shows-content"
+        ),
+        pytest.param('details.part:not([open])>summary::before{content:""', id="print-css-part-marker"),
+    ],
+)
+def test_a_collapsed_part_page_carries_what_the_print_script_and_print_css_open(
+    tmp_path: Path, snippet: str
+) -> None:
+    assert snippet in render_html(_collapsed(tmp_path))
 
 
 @pytest.mark.parametrize("collapsed", [False, True])
@@ -635,8 +719,8 @@ def test_emit_json_of_an_index_prints_the_combined_page(
 
     assert main([str(index), "--emit-json"]) == 0
     assert json.loads(capsys.readouterr().out)["blocks"] == [
-        _dumped_part("Part one", "first"),
-        _dumped_part("Part two", "second"),
+        dumped_part("Part one", "first"),
+        dumped_part("Part two", "second"),
     ]
 
 

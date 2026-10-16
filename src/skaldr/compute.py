@@ -74,6 +74,7 @@ __all__ = [
     "LinkCard",
     "Provenance",
     "anchor_slugs",
+    "badge_legend_slot",
     "col_sum",
     "favicon_href",
     "first_table_index",
@@ -216,6 +217,11 @@ def first_table_index(report: Report) -> int | None:
         if isinstance(block, Table):
             return index
     return None
+
+
+def badge_legend_slot(report: Report) -> int:
+    table_index = first_table_index(report)
+    return 0 if table_index is None else table_index
 
 
 BADGE_LEGEND_SUBJECT: Final = "badges used on this page"
@@ -948,10 +954,10 @@ class DerivedCardTally(NamedTuple):
 
 def derived_card_tally(
     card: Card,
-    badge: str,
     matrix_tallies: Mapping[str, DerivedTally],
     table_tallies: Mapping[str, DerivedTally],
 ) -> DerivedCardTally:
+    badge = card.counted_badge
     if card.of_matrix:
         tally = matrix_tallies[card.of_matrix]
         return DerivedCardTally(tally["counts"].get(badge, 0), tally["total"])
@@ -1034,10 +1040,6 @@ def read_recorded_body(body: str) -> RecordedBody:
     if "\n" in body.strip() or not isinstance(parsed, dict | list):
         return RecordedBody(body, is_json=True)
     return RecordedBody(json.dumps(parsed, indent=2, ensure_ascii=False), is_json=True)
-
-
-def recorded_body(body: str) -> str:
-    return read_recorded_body(body).text
 
 
 def resolve_case(text: str, block: RequestLike, case: RequestCase) -> str:
@@ -1214,12 +1216,12 @@ def rail_rule(name: str, width: int) -> str:
         f"@container (width < {width}px){{"
         f".{name}{{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; "
         f"gap:0 var(--s3)}}"
-        f".{name} > .rq-tabs{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
+        f".{name} > .tab-list{{flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
         f"border-inline-end:1px solid var(--line); margin-inline-end:0; "
         f"max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}}"
-        f".{name} > .rq-tabs > *{{border-radius:var(--r-sm); border:0; text-align:start; "
+        f".{name} > .tab-list > *{{border-radius:var(--r-sm); border:0; text-align:start; "
         f"white-space:normal; overflow:visible; text-overflow:clip}}"
-        f".{name} > .rq-case{{grid-row:1; grid-column:2}}"
+        f".{name} > .tab-pane{{grid-row:1; grid-column:2}}"
         "}"
     )
 

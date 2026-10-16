@@ -99,7 +99,7 @@ def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> Lowered
     header = PagePart("header", (*_subtitle(report), *_table_of_contents(report, lowering)))
     legend = PagePart("legend", tuple(_legend(lowering, compute.used_badges(report))))
     closing = PagePart("footer", _footer(report, lowering))
-    page = [header, *_with_the_legend(regions, legend, compute.first_table_index(report)), closing]
+    page = [header, *_with_the_legend(regions, legend, compute.badge_legend_slot(report)), closing]
     return _without_empty_parts(report.meta.title, page, icon=report.meta.icon, cover=report.meta.cover)
 
 

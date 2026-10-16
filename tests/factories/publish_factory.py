@@ -7,9 +7,9 @@ from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoun
 from skaldr.export.notion import render_notion_regions
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import ExportTarget
-from skaldr.models import Report
+from skaldr.models import Report, Section
 from skaldr.publish import ConnectorRegistry, ContentLimit
-from skaldr.publish.connector import WriteGranularity
+from skaldr.publish.connector import NO_SECTION_DEFAULTS, SectionDefaults, WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
 from skaldr.publish.state import PublishState
@@ -532,6 +532,11 @@ class FakeConnector:
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)
+
+    def section_defaults(
+        self, _report: Report, _section: Section, _source_index: int, _target: TargetBase, /
+    ) -> SectionDefaults:
+        return NO_SECTION_DEFAULTS
 
     def existing_item_id(self, target: TargetBase, /) -> str | None:
         if isinstance(target, NotionTarget) and target.where.page is not None:

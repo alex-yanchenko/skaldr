@@ -1,3 +1,4 @@
+import re
 import time
 from collections.abc import Iterator
 from html.parser import HTMLParser
@@ -9,8 +10,8 @@ from pygments.lexer import Lexer
 from pygments.token import Keyword, Text, _TokenType  # pyright: ignore[reportPrivateUsage]
 
 from skaldr import highlight
-from skaldr.models import parse_report
-from skaldr.render import render_html
+from skaldr.models import Code, parse_report
+from skaldr.render import html_environment, render_html
 from tests.factories.report_factory import make_report
 
 
@@ -206,6 +207,67 @@ def test_the_size_cap_counts_the_text_after_line_endings_are_normalised(
     assert code_panel(content="x=1\r\ny", lang="python") == (
         '<div class="code"><pre>x<span class="t-op">=</span><span class="t-num">1</span>\ny</pre></div>'
     )
+
+
+def _panels_of(blocks: list[dict[str, str]]) -> list[str]:
+    html = render_html(parse_report(make_report(blocks=[{"type": "code", **block} for block in blocks])))
+    return re.findall(r'<div class="code"><pre>(.*?)</pre></div>', html)
+
+
+def test_blocks_past_the_document_budget_render_plain_in_document_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("skaldr.highlight.MAX_HIGHLIGHTED_DOCUMENT_CHARACTERS", 8)
+    block = {"content": "x = 1", "lang": "python"}
+
+    assert _panels_of([block, block, block]) == [
+        'x <span class="t-op">=</span> <span class="t-num">1</span>',
+        "x = 1",
+        "x = 1",
+    ]
+
+
+def test_a_block_that_does_not_fit_the_budget_leaves_room_for_a_smaller_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("skaldr.highlight.MAX_HIGHLIGHTED_DOCUMENT_CHARACTERS", 8)
+    large = {"content": "x = 1 + 2", "lang": "python"}
+    small = {"content": "x=1", "lang": "python"}
+
+    assert _panels_of([small, large, small]) == [
+        'x<span class="t-op">=</span><span class="t-num">1</span>',
+        "x = 1 + 2",
+        'x<span class="t-op">=</span><span class="t-num">1</span>',
+    ]
+
+
+def test_the_document_budget_is_fresh_for_every_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("skaldr.highlight.MAX_HIGHLIGHTED_DOCUMENT_CHARACTERS", 5)
+    block = {"content": "x = 1", "lang": "python"}
+
+    assert (_panels_of([block]), _panels_of([block])) == (
+        ['x <span class="t-op">=</span> <span class="t-num">1</span>'],
+    ) * 2
+
+
+def test_the_bare_html_environment_registers_no_unbudgeted_highlighter() -> None:
+    registered = set(html_environment().globals)
+
+    assert registered & {"highlighted_code", "highlighted_diff_lines", "highlighted_query"} == set()
+
+
+def test_a_diff_and_a_query_draw_on_the_same_document_budget() -> None:
+    budget = highlight.HighlightBudget(remaining=30)
+    diff = Code(type="code", content="+x = 1\n y", mode="diff", lang="python")
+
+    outcomes = (
+        highlight.highlighted_diff_lines(diff, budget) == highlight.highlighted_diff_lines(diff),
+        highlight.highlighted_query_keeping_slots_whole("SELECT 1 AS one", "sql", budget) is not None,
+        highlight.highlighted_query_keeping_slots_whole("SELECT 2 AS two", "sql", budget),
+        budget.remaining,
+    )
+
+    assert outcomes == (True, True, None, 7)
 
 
 def test_a_console_line_without_a_trailing_newline_is_kept() -> None:

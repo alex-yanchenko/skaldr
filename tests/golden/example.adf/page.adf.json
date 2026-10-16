@@ -7,6 +7,23 @@
       "content": [
         {
           "type": "text",
+          "text": "Cover image",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://example.com/covers/warehouse.png"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
           "text": "Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.",
           "marks": [
             {
@@ -24,7 +41,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Mixed audience: ops reads the impact, the floor team reads the fix.",
+          "text": "Ops can read the impact of each category; the floor team can read the fix.",
           "marks": [
             {
               "type": "textColor",
@@ -37,95 +54,129 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Source",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Source"
                     }
                   ]
-                },
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
                 {
-                  "type": "text",
-                  "text": ": WMS export"
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Period"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Site"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Owner"
+                    }
+                  ]
                 }
               ]
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Period",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "WMS export"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": Q3 2026"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Site",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Q3 2026"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": DC-West"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Owner",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "DC-West"
                     }
                   ]
-                },
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
                 {
-                  "type": "text",
-                  "text": ": Inventory Ops"
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Inventory Ops"
+                    }
+                  ]
                 }
               ]
             }
@@ -166,79 +217,38 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Count date",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Count date"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 2026-07-09 14:22 UTC"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Units expected",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 10,000"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
-            {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "Method",
-                  "marks": [
-                    {
-                      "type": "strong"
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "text": ": "
-                },
-                {
-                  "type": "text",
-                  "text": "full cycle count",
-                  "marks": [
-                    {
-                      "type": "code"
+                      "type": "text",
+                      "text": "2026-07-09 14:22 UTC"
                     }
                   ]
                 }
@@ -247,23 +257,104 @@
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Mode",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Units expected"
                     }
                   ]
-                },
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
                 {
-                  "type": "text",
-                  "text": ": strict"
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "10,000"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Method"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "full cycle count",
+                      "marks": [
+                        {
+                          "type": "code"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Mode"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "strict"
+                    }
+                  ]
                 }
               ]
             }
@@ -272,181 +363,268 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Matched cleanly",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Matched cleanly"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 8,500 (85.0%) "
-                },
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "▲ +3%",
-                    "color": "green"
-                  }
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
-            {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "Floor: fixable",
-                  "marks": [
-                    {
-                      "type": "strong"
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 1,100 (11.0%) "
-                },
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "Floor",
-                    "color": "yellow"
-                  }
                 }
               ]
             },
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Miscounts + mislabeled bins we can correct.",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "textColor",
-                      "attrs": {
-                        "color": "#6B778C"
-                      }
+                      "type": "text",
+                      "text": "Floor: fixable"
                     }
                   ]
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Vendor: escalate",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Vendor: escalate"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 400 (4.0%) "
-                },
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "▼ −90",
-                    "color": "green"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": " "
-                },
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "Vendor",
-                    "color": "red"
-                  }
                 }
               ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Count status"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#EAE6FF"
+              }
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Total units"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Count status",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "8,500 (85.0%) "
                     },
                     {
-                      "type": "textColor",
+                      "type": "status",
                       "attrs": {
-                        "color": "#6554C0"
+                        "text": "▲ +3%",
+                        "color": "green"
                       }
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": HEALTHY"
                 }
               ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "1,100 (11.0%) "
+                    },
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Floor",
+                        "color": "yellow"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "400 (4.0%) "
+                    },
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "▼ −90",
+                        "color": "green"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "text": " "
+                    },
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Vendor",
+                        "color": "red"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "HEALTHY"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#EAE6FF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "10,000"
+                    }
+                  ]
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Total units",
-                  "marks": [
-                    {
-                      "type": "strong"
-                    },
-                    {
-                      "type": "textColor",
-                      "attrs": {
-                        "color": "#6B778C"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 10,000"
+                  "type": "paragraph"
                 }
               ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Miscounts + mislabeled bins we can correct.",
+                      "marks": [
+                        {
+                          "type": "textColor",
+                          "attrs": {
+                            "color": "#6B778C"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#EAE6FF"
+              }
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ],
+              "attrs": {
+                "background": "#F4F5F7"
+              }
             }
           ]
         }
@@ -2793,62 +2971,86 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Owner",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Owner"
                     }
                   ]
-                },
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
                 {
-                  "type": "text",
-                  "text": ": Inventory Ops. "
-                },
-                {
-                  "type": "text",
-                  "text": "@site-lead",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Inventory Ops. "
+                    },
+                    {
+                      "type": "text",
+                      "text": "@site-lead",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " signs off each fix."
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": " signs off each fix."
                 }
               ]
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Rollback",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Rollback"
                     }
                   ]
-                },
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
                 {
-                  "type": "text",
-                  "text": ": Re-disable the scan flag; the widened bins fall back to the 5-digit read."
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Re-disable the scan flag; the widened bins fall back to the 5-digit read."
+                    }
+                  ]
                 }
               ]
             }
@@ -3043,179 +3245,314 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "status",
-                  "attrs": {
-                    "text": "done",
-                    "color": "green"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": " "
-                },
-                {
-                  "type": "text",
-                  "text": "2026-06-30",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "When"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": Initial full count"
                 }
               ]
             },
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "12,400 units scanned; 88% matched clean."
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "State"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "What"
+                    }
+                  ]
                 }
               ]
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "status",
-                  "attrs": {
-                    "text": "done",
-                    "color": "green"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": " "
-                },
-                {
-                  "type": "text",
-                  "text": "2026-07-02",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "2026-06-30"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": Root-caused the double-count bug"
                 }
               ]
             },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Lexical tiebreak in "
-                },
-                {
-                  "type": "text",
-                  "text": "dedupe.ts",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "code"
+                      "type": "status",
+                      "attrs": {
+                        "text": "done",
+                        "color": "green"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Initial full count",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
                     }
                   ]
                 },
                 {
-                  "type": "text",
-                  "text": "."
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "12,400 units scanned; 88% matched clean."
+                    }
+                  ]
                 }
               ]
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "status",
-                  "attrs": {
-                    "text": "current",
-                    "color": "blue"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": " "
-                },
-                {
-                  "type": "text",
-                  "text": "2026-07-09",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "2026-07-02"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": Fix drafted, awaiting re-count"
                 }
               ]
             },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Placeholder-aware ordering; recovers 1,140 units."
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "done",
+                        "color": "green"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Root-caused the double-count bug",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Lexical tiebreak in "
+                    },
+                    {
+                      "type": "text",
+                      "text": "dedupe.ts",
+                      "marks": [
+                        {
+                          "type": "code"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": "."
+                    }
+                  ]
                 }
               ]
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "status",
-                  "attrs": {
-                    "text": "pending",
-                    "color": "neutral"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": " "
-                },
-                {
-                  "type": "text",
-                  "text": "next count",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "2026-07-09"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "current",
+                        "color": "blue"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Fix drafted, awaiting re-count",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
                     }
                   ]
                 },
                 {
-                  "type": "text",
-                  "text": ": Re-verify reconciliation"
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Placeholder-aware ordering; recovers 1,140 units."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "next count"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "pending",
+                        "color": "neutral"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Re-verify reconciliation",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -3425,39 +3762,23 @@
       ]
     },
     {
-      "type": "blockquote",
+      "type": "blockCard",
+      "attrs": {
+        "url": "https://example.com/runbooks/aggregate-lots"
+      }
+    },
+    {
+      "type": "paragraph",
       "content": [
         {
-          "type": "paragraph",
-          "content": [
+          "type": "text",
+          "text": "example.com · Revision 7",
+          "marks": [
             {
-              "type": "text",
-              "text": "Aggregate lot runbook",
-              "marks": [
-                {
-                  "type": "link",
-                  "attrs": {
-                    "href": "https://example.com/runbooks/aggregate-lots"
-                  }
-                },
-                {
-                  "type": "strong"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "paragraph",
-          "content": [
-            {
-              "type": "text",
-              "text": "example.com · Revision 7",
-              "marks": [
-                {
-                  "type": "em"
-                }
-              ]
+              "type": "textColor",
+              "attrs": {
+                "color": "#6B778C"
+              }
             }
           ]
         }
@@ -3517,194 +3838,213 @@
       ]
     },
     {
-      "type": "panel",
+      "type": "table",
       "attrs": {
-        "panelType": "note"
+        "isNumberColumnEnabled": false,
+        "layout": "default"
       },
       "content": [
         {
-          "type": "bulletList",
+          "type": "tableRow",
           "content": [
             {
-              "type": "listItem",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "paragraph",
+                  "type": "bulletList",
                   "content": [
                     {
-                      "type": "text",
-                      "text": "Matched cleanly",
-                      "marks": [
+                      "type": "listItem",
+                      "content": [
                         {
-                          "type": "strong"
-                        },
-                        {
-                          "type": "textColor",
-                          "attrs": {
-                            "color": "#00875A"
-                          }
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Matched cleanly",
+                              "marks": [
+                                {
+                                  "type": "strong"
+                                },
+                                {
+                                  "type": "textColor",
+                                  "attrs": {
+                                    "color": "#00875A"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": ": 8,500 (85.0%)"
+                            }
+                          ]
                         }
                       ]
                     },
                     {
-                      "type": "text",
-                      "text": ": 8,500 (85.0%)"
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Needs work",
+                              "marks": [
+                                {
+                                  "type": "strong"
+                                },
+                                {
+                                  "type": "textColor",
+                                  "attrs": {
+                                    "color": "#FF8B00"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": ": 1,500 (15.0%)"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 }
-              ]
+              ],
+              "attrs": {
+                "background": "#EAE6FF"
+              }
             },
             {
-              "type": "listItem",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "paragraph",
+                  "type": "panel",
+                  "attrs": {
+                    "panelType": "info"
+                  },
                   "content": [
                     {
-                      "type": "text",
-                      "text": "Needs work",
-                      "marks": [
+                      "type": "paragraph",
+                      "content": [
                         {
-                          "type": "strong"
-                        },
-                        {
-                          "type": "textColor",
-                          "attrs": {
-                            "color": "#FF8B00"
-                          }
+                          "type": "text",
+                          "text": "Reading this section",
+                          "marks": [
+                            {
+                              "type": "strong"
+                            }
+                          ]
                         }
                       ]
                     },
                     {
-                      "type": "text",
-                      "text": ": 1,500 (15.0%)"
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "The cards on the left summarise; the panels below break down count progress and checks side by side."
+                        }
+                      ]
                     }
                   ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "panel",
-      "attrs": {
-        "panelType": "info"
-      },
-      "content": [
-        {
-          "type": "paragraph",
-          "content": [
-            {
-              "type": "text",
-              "text": "Reading this section",
-              "marks": [
+                },
                 {
-                  "type": "strong"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "paragraph",
-          "content": [
-            {
-              "type": "text",
-              "text": "The cards on the left summarise; the panels below break down count progress and checks side by side."
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "bulletList",
-      "content": [
-        {
-          "type": "listItem",
-          "content": [
-            {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "Zone C",
-                  "marks": [
+                  "type": "bulletList",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Zone C",
+                              "marks": [
+                                {
+                                  "type": "strong"
+                                },
+                                {
+                                  "type": "textColor",
+                                  "attrs": {
+                                    "color": "#FF8B00"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": ": █████████░ 88.0%"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "bulletList",
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "status",
+                              "attrs": {
+                                "text": "done",
+                                "color": "green"
+                              }
+                            },
+                            {
+                              "type": "text",
+                              "text": " Reconciliation gate passes."
+                            }
+                          ]
+                        }
+                      ]
                     },
                     {
-                      "type": "textColor",
-                      "attrs": {
-                        "color": "#FF8B00"
-                      }
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "status",
+                              "attrs": {
+                                "text": "blocked",
+                                "color": "yellow"
+                              }
+                            },
+                            {
+                              "type": "text",
+                              "text": " Awaiting "
+                            },
+                            {
+                              "type": "text",
+                              "text": "OPS-1234",
+                              "marks": [
+                                {
+                                  "type": "code"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "text": "."
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": █████████░ 88.0%"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "bulletList",
-      "content": [
-        {
-          "type": "listItem",
-          "content": [
-            {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "done",
-                    "color": "green"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": " Reconciliation gate passes."
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
-            {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "blocked",
-                    "color": "yellow"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": " Awaiting "
-                },
-                {
-                  "type": "text",
-                  "text": "OPS-1234",
-                  "marks": [
-                    {
-                      "type": "code"
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "text": "."
                 }
               ]
             }
@@ -3725,187 +4065,241 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Status",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Status"
                     }
                   ]
-                },
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
                 {
-                  "type": "text",
-                  "text": ": In Progress"
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Priority"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Assignee"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Due"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Labels"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Estimate"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Relates"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "team"
+                    }
+                  ]
                 }
               ]
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Priority",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "In Progress"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": High"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Assignee",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "High"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": ada"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Due",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "ada"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 2026-10-15"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Labels",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "2026-10-15"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": recount, bins"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Estimate",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "recount, bins"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": 3"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Relates",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "3"
                     }
                   ]
-                },
-                {
-                  "type": "text",
-                  "text": ": Appendix: discrepancy-reason raw counts"
                 }
               ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
+            },
             {
-              "type": "paragraph",
+              "type": "tableCell",
               "content": [
                 {
-                  "type": "text",
-                  "text": "team",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "strong"
+                      "type": "text",
+                      "text": "Appendix: discrepancy-reason raw counts"
                     }
                   ]
-                },
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
                 {
-                  "type": "text",
-                  "text": ": Floor ops"
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Floor ops"
+                    }
+                  ]
                 }
               ]
             }
@@ -5240,81 +5634,151 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "table",
+      "attrs": {
+        "isNumberColumnEnabled": false,
+        "layout": "default"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "tableRow",
           "content": [
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "status",
-                  "attrs": {
-                    "text": "Floor",
-                    "color": "yellow"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": ": 7 (43.8%)"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
-            {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "System",
-                    "color": "blue"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": ": 2 (12.5%)"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "listItem",
-          "content": [
-            {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "status",
-                  "attrs": {
-                    "text": "Vendor",
-                    "color": "red"
-                  }
-                },
-                {
-                  "type": "text",
-                  "text": ": 2 (12.5%)"
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Floor",
+                        "color": "yellow"
+                      }
+                    }
+                  ]
                 }
               ]
             },
             {
-              "type": "paragraph",
+              "type": "tableHeader",
               "content": [
                 {
-                  "type": "text",
-                  "text": "Awaiting the vendor's corrected ASN.",
-                  "marks": [
+                  "type": "paragraph",
+                  "content": [
                     {
-                      "type": "textColor",
+                      "type": "status",
                       "attrs": {
-                        "color": "#6B778C"
+                        "text": "System",
+                        "color": "blue"
                       }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "status",
+                      "attrs": {
+                        "text": "Vendor",
+                        "color": "red"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "7 (43.8%)"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "2 (12.5%)"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "2 (12.5%)"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Awaiting the vendor's corrected ASN.",
+                      "marks": [
+                        {
+                          "type": "textColor",
+                          "attrs": {
+                            "color": "#6B778C"
+                          }
+                        }
+                      ]
                     }
                   ]
                 }
@@ -7143,7 +7607,23 @@
       "content": [
         {
           "type": "text",
-          "text": "Method definitions follow the warehouse counting SOP [1]; the discrepancy thresholds come from the Q2 reconciliation audit "
+          "text": "Method definitions follow the warehouse counting SOP "
+        },
+        {
+          "type": "text",
+          "text": "[1]",
+          "marks": [
+            {
+              "type": "subsup",
+              "attrs": {
+                "type": "sup"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "; the discrepancy thresholds come from the Q2 reconciliation audit "
         },
         {
           "type": "text",
@@ -7153,6 +7633,12 @@
               "type": "link",
               "attrs": {
                 "href": "https://example.com/q2-audit"
+              }
+            },
+            {
+              "type": "subsup",
+              "attrs": {
+                "type": "sup"
               }
             }
           ]

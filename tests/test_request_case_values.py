@@ -20,6 +20,7 @@ from tests.factories import (
     make_step,
     markdown_of,
     notion_of,
+    parsed_block,
 )
 
 RECORDS_URL = "https://api.example.test/v1/records"
@@ -76,15 +77,11 @@ def _built_request(**overrides: Any) -> dict[str, Any]:
 
 
 def _parsed_request(block: dict[str, Any]) -> Request:
-    parsed = parse_report(make_report(blocks=[block])).blocks[0]
-    assert isinstance(parsed, Request)
-    return parsed
+    return parsed_block(Request, block)
 
 
 def _parsed_flow(block: dict[str, Any]) -> RequestFlow:
-    parsed = parse_report(make_report(blocks=[block])).blocks[0]
-    assert isinstance(parsed, RequestFlow)
-    return parsed
+    return parsed_block(RequestFlow, block)
 
 
 def test_a_shared_command_is_written_out_for_each_case_with_that_cases_values() -> None:

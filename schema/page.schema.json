@@ -2360,6 +2360,12 @@
           "description": "Field values for every created issue (labels, priority, components, custom fields); `overrides` changes them for one item.",
           "title": "Fields",
           "type": "object"
+        },
+        "fields_from_sections": {
+          "default": false,
+          "description": "Whether each split section's own `fields` (priority, due, labels, assignee) set the Jira fields of its issue, under this target's `fields` and the section's `overrides`. Off by default; turning it on makes skaldr own those fields on every split issue.",
+          "title": "Fields From Sections",
+          "type": "boolean"
         }
       },
       "required": [
@@ -5043,7 +5049,7 @@
                 }
               ],
               "maximum": 1e+300,
-              "minimum": -1e+300
+              "minimum": 0
             },
             {
               "type": "null"
@@ -6573,6 +6579,18 @@
     }
   },
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "blocks"
+      ]
+    },
+    {
+      "required": [
+        "index"
+      ]
+    }
+  ],
   "properties": {
     "version": {
       "const": 1,

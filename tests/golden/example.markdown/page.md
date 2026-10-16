@@ -4,7 +4,7 @@
 
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category.
 
-Mixed audience: ops reads the impact, the floor team reads the fix.
+Ops can read the impact of each category; the floor team can read the fix.
 
 - [Overview](#overview)
 - [Discrepancies & fixes](#discrepancies--fixes)

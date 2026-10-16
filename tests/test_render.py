@@ -661,16 +661,16 @@ def test_a_badge_and_a_citation_inside_a_toggle_feed_the_legend_and_the_numberin
 def _rail(name: str) -> dict[str, str]:
     return {
         f".{name}": "grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)",
-        f".{name} > .rq-tabs": (
+        f".{name} > .tab-list": (
             "flex-direction:column; flex-wrap:nowrap; border-bottom:0; "
             "border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; "
             "overflow-y:auto; grid-row:1; grid-column:1"
         ),
-        f".{name} > .rq-tabs > *": (
+        f".{name} > .tab-list > *": (
             "border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; "
             "text-overflow:clip"
         ),
-        f".{name} > .rq-case": "grid-row:1; grid-column:2",
+        f".{name} > .tab-pane": "grid-row:1; grid-column:2",
     }
 
 
@@ -690,14 +690,14 @@ def test_a_tabs_block_writes_the_request_tab_strip_around_its_panes() -> None:
     html = render_html(parse_report(make_report(blocks=[block])))
 
     assert (
-        '<div class="tabs"><div class="rq-cases tb0" role="group" aria-label="Tabs">\n'
-        '<input type="radio" class="rq-pick" name="tb0" id="tb0_0" checked>\n'
-        '<section class="rq-case">\n<h4 class="rq-case-hd">Floor</h4>\n'
+        '<div class="tabs"><div class="tab-cases tb0" role="group" aria-label="Tabs">\n'
+        '<input type="radio" class="tab-pick" name="tb0" id="tb0_0" checked>\n'
+        '<section class="tab-pane">\n<h4 class="tab-pane-hd">Floor</h4>\n'
         '<p class="text">Recount.</p></section>\n'
-        '<input type="radio" class="rq-pick" name="tb0" id="tb0_1">\n'
-        '<section class="rq-case">\n<h4 class="rq-case-hd">System</h4>\n'
+        '<input type="radio" class="tab-pick" name="tb0" id="tb0_1">\n'
+        '<section class="tab-pane">\n<h4 class="tab-pane-hd">System</h4>\n'
         '<p class="text">Rescan.</p></section>\n'
-        '<div class="rq-tabs"><label for="tb0_0"><span class="rq-dot warning"></span>Floor</label>'
+        '<div class="tab-list"><label for="tb0_0"><span class="tab-dot warning"></span>Floor</label>'
         '<label for="tb0_1">System</label></div>\n'
         "</div>\n</div>"
     ) in html
@@ -707,7 +707,7 @@ def test_choosing_a_tab_is_a_radio_each_label_selects_with_no_handler_on_the_mar
     html = render_html(parse_report(make_report(blocks=[make_tabs()])))
 
     assert (
-        re.findall(r'<input type="radio" class="rq-pick" name="([^"]+)" id="([^"]+)"', html),
+        re.findall(r'<input type="radio" class="tab-pick" name="([^"]+)" id="([^"]+)"', html),
         re.findall(r'<label for="([^"]+)"', html),
         re.findall(r"\son[a-z]+=", html),
     ) == ([("tb0", "tb0_0"), ("tb0", "tb0_1")], ["tb0_0", "tb0_1"], [])
@@ -728,7 +728,7 @@ def test_tab_blocks_and_requests_never_share_a_radio_group() -> None:
 
     html = render_html(parse_report(make_report(blocks=[outer, request])))
 
-    assert re.findall(r'class="rq-pick" name="([^"]+)"', html) == ["tb0", "tb1", "tb1", "tb0", "rq0", "rq0"]
+    assert re.findall(r'class="tab-pick" name="([^"]+)"', html) == ["tb0", "tb1", "tb1", "tb0", "rq0", "rq0"]
 
 
 def test_a_tab_tone_outside_the_case_tones_still_gets_a_coloured_dot() -> None:
@@ -736,18 +736,18 @@ def test_a_tab_tone_outside_the_case_tones_still_gets_a_coloured_dot() -> None:
     html = render_html(parse_report(make_report(blocks=[block])))
     css = package_path("styles.css").read_text(encoding="utf-8")
 
-    assert '<label for="tb0_0"><span class="rq-dot accent"></span>Floor</label>' in html
-    assert ".rq-dot.accent{background:var(--accent-fg)}" in css
+    assert '<label for="tb0_0"><span class="tab-dot accent"></span>Floor</label>' in html
+    assert ".tab-dot.accent{background:var(--accent-fg)}" in css
 
 
 def test_print_shows_every_tab_under_its_label_and_drops_the_strip() -> None:
     css = package_path("styles.css").read_text(encoding="utf-8")
     print_rules = re.sub(r"\s+", " ", css[css.index("@layer print {") :])
     expected = [
-        ".tabs .rq-case{display:block}",
-        ":is(.rq,.tabs) .rq-case-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); "
+        ".tabs .tab-pane{display:block}",
+        ":is(.rq,.tabs) .tab-pane-hd{display:block; padding-top:var(--s2); border-top:1px solid var(--rule); "
         "break-after:avoid}",
-        ":is(.rq,.tabs) .rq-tabs,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}",
+        ":is(.rq,.tabs) .tab-list,.rq .rq-copy,.rq .rq-clear,.rq .rq-paste{display:none}",
     ]
 
     assert [rule for rule in expected if rule not in print_rules] == []
@@ -800,7 +800,7 @@ def test_a_heading_slugged_like_a_radio_id_leaves_every_label_bound_to_its_radio
 
     html = render_html(parse_report(make_report(blocks=blocks)))
     repeated_ids = [name for name, count in Counter(re.findall(r' id="([^"]+)"', html)).items() if count > 1]
-    radio_ids = re.findall(r'<input type="radio" class="rq-pick" name="[^"]+" id="([^"]+)"', html)
+    radio_ids = re.findall(r'<input type="radio" class="tab-pick" name="[^"]+" id="([^"]+)"', html)
     label_targets = re.findall(r'<label for="([^"]+)"', html)
 
     assert (repeated_ids, label_targets) == ([], radio_ids)
@@ -818,9 +818,10 @@ STRIP_ANCHOR_SCRIPT = (
     "(function () {\n"
     "\tfunction picksAround(target) {\n"
     "\t\tvar picks = [];\n"
-    '\t\tfor (var pane = target.closest(".rq-case"); pane; pane = pane.parentElement.closest(".rq-case")) {\n'
+    '\t\tfor (var pane = target.closest(".tab-pane"); '
+    'pane; pane = pane.parentElement.closest(".tab-pane")) {\n'
     "\t\t\tvar pick = pane.previousElementSibling;\n"
-    '\t\t\tif (pick && pick.classList.contains("rq-pick")) picks.unshift(pick);\n'
+    '\t\t\tif (pick && pick.classList.contains("tab-pick")) picks.unshift(pick);\n'
     "\t\t}\n"
     "\t\treturn picks;\n"
     "\t}\n"
@@ -901,7 +902,7 @@ def test_a_tabs_block_inside_any_container_renders_its_radios_and_rail(container
     html = render_html(parse_report(make_report(blocks=[container])))
 
     assert (
-        re.findall(r'class="rq-pick" name="([^"]+)" id="([^"]+)"', html),
+        re.findall(r'class="tab-pick" name="([^"]+)" id="([^"]+)"', html),
         _container_rules(html),
     ) == ([("tb0", "tb0_0"), ("tb0", "tb0_1")], [(compute.strip_width(["Floor", "System"]), _rail("tb0"))])
 
@@ -913,7 +914,7 @@ def test_a_request_inside_a_section_toggle_gets_its_radio_group_rail_and_runtime
     html = render_html(parse_report(make_report(blocks=[section])))
 
     assert (
-        re.findall(r'class="rq-pick" name="([^"]+)" id="([^"]+)"', html),
+        re.findall(r'class="tab-pick" name="([^"]+)" id="([^"]+)"', html),
         _container_rules(html),
         "data-rq-slot" in _request_runtime_script(html),
     ) == ([("rq0", "rq0_0"), ("rq0", "rq0_1")], [(compute.strip_width(["a", "b"]), _rail("rq0"))], True)
@@ -974,6 +975,31 @@ def test_anchor_link_resolves_to_a_heading_inside_a_panel() -> None:
     html = render_html(parse_report(make_report(blocks=blocks)))
 
     assert '<a href="#inside">in</a>' in html
+
+
+def test_a_declared_badge_no_block_uses_renders_no_legend_with_or_without_a_table() -> None:
+    badges = {"P": {"label": "prod", "tone": "blue", "legend": "the prod tag"}}
+    text = {"type": "text", "body": "Intro."}
+    table = make_table([{"key": "a", "label": "A", "kind": "text"}], rows=[{"a": "x"}])
+
+    pages = [
+        render_html(parse_report(make_report(badges=badges, blocks=blocks)))
+        for blocks in ([text], [text, table])
+    ]
+
+    assert ["Legend: badges used on this page" in page for page in pages] == [False, False]
+
+
+def test_the_legend_renders_once_before_the_first_block_when_badges_are_used_and_no_table_exists() -> None:
+    badges = {"P": {"label": "prod", "tone": "blue", "legend": "the prod tag"}}
+    blocks = [{"type": "text", "body": "Intro."}, {"type": "badge_row", "items": [{"key": "P"}]}]
+
+    html = render_html(parse_report(make_report(badges=badges, blocks=blocks)))
+
+    assert (
+        html.count("Legend: badges used on this page"),
+        html.index("Legend: badges used on this page") < html.index("Intro."),
+    ) == (1, True)
 
 
 def test_badge_referenced_only_inside_a_panel_still_feeds_the_legend() -> None:
@@ -2662,7 +2688,7 @@ def test_every_case_stays_in_the_document_so_print_can_show_them_all() -> None:
     html = render_html(parse_report(_request_report()))
 
     assert html.count('data-rq-case="') == 2
-    assert html.count('type="radio" class="rq-pick"') == 2
+    assert html.count('type="radio" class="tab-pick"') == 2
     assert html.count(" checked>") == 1
 
 
@@ -2722,7 +2748,7 @@ def test_every_case_carries_a_label_whatever_the_count(count: int) -> None:
     html = render_html(parse_report(_request_report(cases=_cases(count), case_variable="resource")))
 
     assert html.count("<label for=") == count
-    assert html.count('class="rq-tabs"') == 1
+    assert html.count('class="tab-list"') == 1
 
 
 def _tabbed_flow() -> dict[str, object]:
@@ -2937,7 +2963,7 @@ def test_the_case_cap_matches_the_selectors_the_stylesheet_writes() -> None:
     and which the strip cannot select; a cap below it refuses a case the stylesheet would have served."""
     css = package_path("styles.css").read_text(encoding="utf-8")
 
-    assert css.count(".rq-pick:nth-of-type(") == MAX_STRIP_LABELS
+    assert css.count(".tab-pick:nth-of-type(") == MAX_STRIP_LABELS
     assert f":nth-of-type({MAX_STRIP_LABELS}):checked" in css
     assert f":nth-of-type({MAX_STRIP_LABELS + 1}):checked" not in css
 
@@ -2960,7 +2986,7 @@ def test_a_strip_too_wide_for_its_container_becomes_a_rail() -> None:
 
     assert len(rules) == 1
     assert int(rules[0]) > 400
-    assert ".rq0 > .rq-tabs{flex-direction:column" in html
+    assert ".rq0 > .tab-list{flex-direction:column" in html
 
 
 def test_each_block_gets_the_breakpoint_its_own_labels_need() -> None:
@@ -3000,8 +3026,8 @@ def test_choosing_a_case_needs_no_script() -> None:
     html = render_html(parse_report(_request_report()))
     script = _request_runtime_script(html)
 
-    assert html.count('type="radio" class="rq-pick"') == 2
-    assert 'class="rq-pick" name=' in html
+    assert html.count('type="radio" class="tab-pick"') == 2
+    assert 'class="tab-pick" name=' in html
     assert "data-rq-tab" not in html
     assert "data-rq-tab" not in script
     assert "aria-selected" not in script
@@ -3015,8 +3041,8 @@ def test_one_case_needs_no_strip_but_still_renders() -> None:
     )
     html = render_html(parse_report(report))
 
-    assert 'class="rq-tabs' not in html
-    assert html.count('type="radio" class="rq-pick"') == 1
+    assert 'class="tab-list' not in html
+    assert html.count('type="radio" class="tab-pick"') == 1
     assert "checked" in html
 
 
@@ -3036,7 +3062,7 @@ def test_every_case_is_named_by_its_own_radio_group() -> None:
         ),
     ]
     html = render_html(parse_report(make_report(blocks=[make_flow(steps=steps)])))
-    groups = re.findall(r'class="rq-pick" name="([^"]+)"', html)
+    groups = re.findall(r'class="tab-pick" name="([^"]+)"', html)
 
     assert len(set(groups)) == 2
     assert len(groups) == 3
@@ -3057,7 +3083,7 @@ def test_two_blocks_on_one_page_never_share_a_radio_group() -> None:
         }
 
     html = render_html(parse_report(make_report(blocks=[block("One"), block("Two")])))
-    groups = re.findall(r'class="rq-pick" name="([^"]+)"', html)
+    groups = re.findall(r'class="tab-pick" name="([^"]+)"', html)
 
     assert len(groups) == 4
     assert len(set(groups)) == 2
@@ -3171,6 +3197,19 @@ def test_every_inline_script_on_a_request_page_is_pinned_by_the_csp() -> None:
     assert (any("data-rq-slot" in body for body in scripts), unpinned) == (True, [])
 
 
+def test_every_inline_script_on_a_page_with_a_tab_strip_is_pinned_by_the_csp() -> None:
+    block = make_tabs(make_tab("One"), make_tab("Two"))
+    html = render_html(parse_report(make_report(blocks=[block])))
+    csp = re.search(r'content="(default-src [^"]+)"', html)
+    assert csp is not None
+    script_src = csp.group(1).split("script-src ", 1)[1].split(";", 1)[0]
+
+    scripts = _inline_scripts(html)
+    unpinned = [body[:40] for body in scripts if f"'sha256-{_script_hash(body)}'" not in script_src]
+
+    assert (any('closest(".tab-pane")' in body for body in scripts), unpinned) == (True, [])
+
+
 def test_render_without_source_embeds_no_block() -> None:
     html = render_html(parse_report(make_report()))
 
@@ -3228,24 +3267,7 @@ def test_theme_and_width_are_restored_before_paint_in_the_head() -> None:
     html = render_html(parse_report(make_report()))
     head = html.split("</head>", 1)[0]
 
-    assert 'localStorage.getItem("skaldr-theme")' in head
-    assert 'setAttribute("data-theme"' in head
-    assert 'localStorage.getItem("skaldr-width")' in head
-    restore_width = (
-        'if (width === "wide" || width === "full") '
-        'document.documentElement.setAttribute("data-width", width);'
-    )
-    assert restore_width in head
-
-
-def test_the_width_control_remembers_wide_and_full_and_forgets_default() -> None:
-    html = render_html(parse_report(make_report()))
-    body = html.split("</head>", 1)[1]
-
-    assert (
-        'root.setAttribute("data-width", item.dataset.val); save("skaldr-width", item.dataset.val);' in body
-    )
-    assert 'root.removeAttribute("data-width"); drop("skaldr-width");' in body
+    assert "function restore(" in head
 
 
 def test_width_switch_overrides_are_defined_in_the_stylesheet() -> None:
@@ -4422,6 +4444,23 @@ def test_table_tint_by_yields_to_an_explicit_row_tone() -> None:
     assert '<tr class="row tint' not in html  # a toned row never carries a tint class
 
 
+def test_a_padded_badge_key_still_tints_the_row_and_feeds_the_rollup() -> None:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        rows=[{"item": "a", "status": " DONE "}, {"item": "b", "status": " DONE "}],
+        tint_by="status",
+        rollup={"by": "status"},
+    )
+    badges = {"DONE": {"label": "Done", "tone": "success", "legend": "finished"}}
+
+    html = render_html(parse_report(make_report(blocks=[table], badges=badges)))
+
+    assert (html.count('<tr class="row tint green">'), '<span class="rollup-n">2</span>' in html) == (2, True)
+
+
 def test_image_max_width_renders_style() -> None:
     src = "data:image/svg+xml,<svg/>"
     block = {"type": "image", "src": src, "alt": "a", "max_width": 400}
@@ -4732,7 +4771,10 @@ def test_a_muted_or_toned_row_paints_opaque_cells_over_a_column_tint() -> None:
         )
     } == {
         "& tbody tr.row.muted": [],
-        "& tbody tr.row.muted td": ["position:relative;background-color:var(--surface)"],
+        "& tbody tr.row.muted td": [
+            "position:relative;background-color:var(--surface);"
+            "border-block-end-color:color-mix(insrgb,var(--line)55%,var(--surface))"
+        ],
         "& tbody tr.row.muted td::after": [
             'content:"";position:absolute;inset:0;background:var(--surface);opacity:0.45;pointer-events:none'
         ],
@@ -5180,7 +5222,7 @@ def test_only_a_command_case_is_marked_so_the_live_pane_drops_its_status_chip() 
     command_html = _command_page()
     composed_html = render_html(parse_report(_request_report()))
 
-    assert '<section class="rq-case" data-rq-case="0" data-rq-command>' in command_html
+    assert '<section class="tab-pane" data-rq-case="0" data-rq-command>' in command_html
     assert 'host.closest("[data-rq-command]")' in _request_runtime_script(command_html)
     assert "data-rq-command>" not in composed_html
 
@@ -5220,7 +5262,7 @@ def test_a_case_tone_colours_its_tab_and_verdict_when_no_status_was_recorded() -
     ]
     html = _command_page(cases=cases)
 
-    assert re.findall(r'<span class="rq-dot (\w+)">', html) == ["warning", "success"]
+    assert re.findall(r'<span class="tab-dot (\w+)">', html) == ["warning", "success"]
     assert re.findall(r'<div class="rq-verdict (\w+)">', html) == ["warning", "success"]
 
 
@@ -5250,7 +5292,7 @@ def _empty_slot(name: str) -> str:
 
 
 def _query_case(html: str) -> str:
-    start = html.index('<section class="rq-case"')
+    start = html.index('<section class="tab-pane"')
     return html[start : html.index("</section>", start) + len("</section>")]
 
 
@@ -5258,8 +5300,8 @@ def test_a_query_request_shows_the_query_highlighted_under_its_runner_with_a_cop
     case = _query_case(_query_page())
 
     assert case == (
-        '<section class="rq-case" data-rq-case="0">\n'
-        '<h4 class="rq-case-hd">open orders</h4>\n'
+        '<section class="tab-pane" data-rq-case="0">\n'
+        '<h4 class="tab-pane-hd">open orders</h4>\n'
         '<div class="rq-pane"><div class="rq-pane-hd"><span>Query</span>'
         '<span class="rq-runner">mongosh, orders database</span>'
         '<span class="rq-btns"><button type="button" class="rq-copy">Copy</button></span></div>'

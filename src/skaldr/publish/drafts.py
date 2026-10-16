@@ -13,7 +13,14 @@ from skaldr.errors import PublishError
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import Lowering, assemble_item_page, lower_regions, lowering_for
 from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
-from skaldr.publish.connector import SPLIT_ADVICE, Connector, ConnectorRegistry, ContentLimit
+from skaldr.publish.connector import (
+    NO_SECTION_DEFAULTS,
+    SPLIT_ADVICE,
+    Connector,
+    ConnectorRegistry,
+    ContentLimit,
+    SectionDefaults,
+)
 from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
 from skaldr.services import SERVICE_NAMES
@@ -118,9 +125,14 @@ def published_targets(report: models.Report) -> Publish:
     return report.publish
 
 
-def _section_title(report: models.Report, region: BlockRegion) -> str:
+def _section_of(report: models.Report, region: BlockRegion) -> models.Section | None:
     block = report.blocks[region.source_index]
-    return block.title if isinstance(block, models.Section) else ""
+    return block if isinstance(block, models.Section) else None
+
+
+def _section_title(report: models.Report, region: BlockRegion) -> str:
+    section = _section_of(report, region)
+    return "" if section is None else section.title
 
 
 @dataclass(frozen=True)
@@ -132,12 +144,25 @@ class _TargetContext:
     connector: Connector
     position: int
 
-    def fields_path(self, section_id: str | None) -> str:
+    def fields_path(self, section_id: str | None, section_defaults: SectionDefaults) -> str:
         target_path = f"publish.targets[{self.position}]"
         override = None if section_id is None else self.target.overrides.get(section_id)
-        if override is not None and override.fields:
-            return f"{target_path}.overrides.{section_id}.fields"
-        return f"{target_path}.where.fields"
+        override_fields = {} if override is None else override.fields
+        taken_from_the_target = override_fields.keys() | self.target.where_fields().keys()
+        section_supplies_a_value = any(name not in taken_from_the_target for name in section_defaults.values)
+        if section_defaults.authored_path is not None and section_supplies_a_value:
+            return section_defaults.authored_path
+        return (
+            f"{target_path}.overrides.{section_id}.fields"
+            if override_fields
+            else f"{target_path}.where.fields"
+        )
+
+    def section_defaults_of(self, region: BlockRegion) -> SectionDefaults:
+        section = _section_of(self.report, region)
+        if section is None:
+            return NO_SECTION_DEFAULTS
+        return self.connector.section_defaults(self.report, section, region.source_index, self.target)
 
 
 def _look_paths(section_id: str | None) -> dict[Part, str]:
@@ -145,24 +170,33 @@ def _look_paths(section_id: str | None) -> dict[Part, str]:
 
 
 def _item_draft(
-    context: _TargetContext, page: LoweredDocument, section_id: str | None, title_path: str
+    context: _TargetContext,
+    page: LoweredDocument,
+    section_id: str | None,
+    title_path: str,
+    section_defaults: SectionDefaults,
 ) -> ItemDraft:
     reject_what_the_target_cannot_show(context.report, page, context.connector.export_target)
+    if section_defaults.refusals:
+        raise PublishError(
+            f"{context.target.location_label()}, {item_label(section_id)}: {section_defaults.refusals[0]}"
+        )
     texts = context.connector.render_regions(context.report, page)
     keys = region_keys(context.authored_blocks, page.regions)
     carries_look = context.connector.carries_look
+    fields = {**section_defaults.values, **context.target.fields_for(section_id)}
     return ItemDraft(
         section_id,
         ItemContent(
             title=page.title,
             sections=dict(zip(keys, texts, strict=True)),
-            fields=context.target.fields_for(section_id),
+            fields=fields,
             icon=page.icon if carries_look else None,
             cover=page.cover if carries_look else None,
         ),
         {
             TITLE: title_path,
-            FIELDS: context.fields_path(section_id),
+            FIELDS: context.fields_path(section_id, section_defaults),
             **(_look_paths(section_id) if carries_look else {}),
             **{
                 section_part(key): region_path(region) for key, region in zip(keys, page.regions, strict=True)
@@ -207,6 +241,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
         ),
         None,
         "meta.title",
+        NO_SECTION_DEFAULTS,
     )
     children = tuple(
         _item_draft(
@@ -216,6 +251,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
             ),
             region.section_id,
             f"blocks[{region.source_index}].title",
+            context.section_defaults_of(region),
         )
         for region in chosen
         if region.section_id in target.split

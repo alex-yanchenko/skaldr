@@ -892,31 +892,22 @@ API_LEGEND: Json = {
 
 
 @pytest.mark.parametrize(
-    ("tone", "label_marks"),
+    ("tone", "fill"),
     [
-        pytest.param("danger", [STRONG, {"type": "textColor", "attrs": {"color": "#DE350B"}}], id="other"),
-        pytest.param("info", [STRONG], id="same"),
+        pytest.param("danger", {"attrs": {"background": "#FFEBE6"}}, id="other"),
+        pytest.param("info", {}, id="same"),
     ],
 )
-def test_a_card_label_keeps_its_colour_unless_a_badge_of_the_same_tone_shows_it(
-    tone: str, label_marks: list[Json]
-) -> None:
+def test_a_card_column_keeps_its_fill_unless_a_badge_of_the_same_tone_shows_it(tone: str, fill: Json) -> None:
     card = {"label": "Err", "value": "3", "tone": tone, "badges": ["API"]}
+    lozenge = {"type": "status", "attrs": {"text": "api", "color": "blue"}}
 
     assert render_adf(lowered([{"type": "cards", "items": [card]}], badges=API_AND_RISK_BADGES)) == _doc(
         API_LEGEND,
-        {
-            "type": "bulletList",
-            "content": [
-                _item(
-                    _paragraph(
-                        _text("Err", *label_marks),
-                        _text(": 3 "),
-                        {"type": "status", "attrs": {"text": "api", "color": "blue"}},
-                    )
-                )
-            ],
-        },
+        _table(
+            _row({"type": "tableHeader", "content": [_words("Err")], **fill}),
+            _row({"type": "tableCell", "content": [_paragraph(_text("3 "), lozenge)], **fill}),
+        ),
     )
 
 
@@ -971,12 +962,12 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Columns: "paragraph",
     Tabs: "expand",
     Diagram: "table",
-    FactStrip: "bulletList",
-    KeyValueList: "bulletList",
-    DefinitionList: "bulletList",
-    Cards: "bulletList",
-    Timeline: "bulletList",
-    LinkCard: "blockquote",
+    FactStrip: "table",
+    KeyValueList: "table",
+    DefinitionList: "table",
+    Cards: "table",
+    Timeline: "table",
+    LinkCard: "blockCard",
     References: "bulletList",
 }
 NODES_WRITING_A_FIRST_BLOCK = {

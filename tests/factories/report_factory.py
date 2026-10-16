@@ -115,7 +115,6 @@ def make_swimlane(steps: list[dict[str, Any]], **overrides: Any) -> dict[str, An
 
 
 def make_request(**overrides: Any) -> dict[str, Any]:
-    """A minimal valid `request`: one reader field the url uses, and one recorded case."""
     block: dict[str, Any] = {
         "type": "request",
         "label": "Read an endpoint",
@@ -130,7 +129,6 @@ def make_request(**overrides: Any) -> dict[str, Any]:
 
 
 def make_command_request(**overrides: Any) -> dict[str, Any]:
-    """A minimal valid `request` that carries a verbatim command, with no reader field at all."""
     block: dict[str, Any] = {
         "type": "request",
         "label": "Tier mappings on the partner API",
@@ -157,7 +155,6 @@ def make_query_request(**overrides: Any) -> dict[str, Any]:
 
 
 def make_step(**overrides: Any) -> dict[str, Any]:
-    """A minimal valid `request_flow` step. Captures nothing unless a caller asks for it."""
     step: dict[str, Any] = {
         "label": "A step",
         "method": "GET",
@@ -169,7 +166,6 @@ def make_step(**overrides: Any) -> dict[str, Any]:
 
 
 def make_flow(**overrides: Any) -> dict[str, Any]:
-    """A minimal valid `request_flow`: step one captures a token, step two spends it."""
     block: dict[str, Any] = {
         "type": "request_flow",
         "label": "Token, then read",
