@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 from skaldr.errors import ReportError
-from skaldr.replace_file import replace_bytes
+from skaldr.replace_file import refuse_an_unreplaceable_target, replace_bytes
 
 # A hang shouldn't wedge the CLI forever; a module constant so tests can shorten it.
 _TIMEOUT_SECONDS = 120
@@ -74,6 +74,7 @@ def html_to_pdf(html: str, pdf_path: Path, *, browser: str | None = None) -> Non
             "no Chrome/Chromium/Edge found to render a PDF. Install one, set SKALDR_BROWSER to its "
             "path, or drop --pdf and print the HTML from a browser."
         )
+    refuse_an_unreplaceable_target(pdf_path)
     with tempfile.TemporaryDirectory(prefix="skaldr-pdf-") as tmp:
         work = Path(tmp)
         source = work / "page.html"

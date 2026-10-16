@@ -1,10 +1,12 @@
+import errno
+import os
 import stat
 from pathlib import Path
 
 import pytest
 
 from skaldr import pdf
-from skaldr.errors import ReportError
+from skaldr.errors import ReadOnlyFileError, ReportError
 
 
 def _executable(path: Path, script: str = "#!/bin/sh\nexit 0\n") -> Path:
@@ -138,6 +140,24 @@ def test_html_to_pdf_leaves_an_earlier_pdf_alone_when_the_browser_fails_after_wr
         pdf.html_to_pdf("<html></html>", out, browser=str(fake))
 
     assert (out.read_bytes(), sorted(tmp_path.iterdir())) == (b"earlier pdf", [fake, out])
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes a read-only file")
+def test_html_to_pdf_refuses_a_read_only_target_before_it_runs_the_browser(tmp_path: Path) -> None:
+    ran = tmp_path / "browser-ran"
+    fake = _executable(tmp_path / "fake-browser", f"#!/bin/sh\n: > {ran}\nexit 0\n")
+    out = tmp_path / "out.pdf"
+    out.write_bytes(b"earlier pdf")
+    out.chmod(0o444)
+
+    with pytest.raises(ReadOnlyFileError) as raised:
+        pdf.html_to_pdf("<html></html>", out, browser=str(fake))
+
+    assert (str(raised.value), ran.exists(), out.read_bytes()) == (
+        f"[Errno {errno.EACCES}] the file is read-only, so skaldr leaves it as it is: '{out}'",
+        False,
+        b"earlier pdf",
+    )
 
 
 def test_html_to_pdf_writes_through_a_symlink_and_keeps_the_link(tmp_path: Path) -> None:

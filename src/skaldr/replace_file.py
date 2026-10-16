@@ -28,38 +28,44 @@ def _rewrite_in_place(path: Path) -> bool:
     return path.is_file() and path.stat().st_nlink > 1
 
 
+def _write_and_flush(path: Path, encoded: bytes) -> None:
+    path.write_bytes(encoded)
+    with path.open("r+b") as written_file:
+        os.fsync(written_file.fileno())
+
+
 def _write_in_place_restoring_on_failure(path: Path, encoded: bytes) -> None:
     earlier = path.read_bytes() if path.is_file() else None
     try:
-        path.write_bytes(encoded)
-    except OSError:
+        _write_and_flush(path, encoded)
+    except BaseException:
         if earlier is not None:
             with contextlib.suppress(OSError):
                 path.write_bytes(earlier)
         raise
 
 
-def _write_and_flush(path: Path, encoded: bytes) -> None:
-    path.write_bytes(encoded)
-    with path.open("r+b") as staged_file:
-        os.fsync(staged_file.fileno())
-
-
 def _flush_directory(directory: Path) -> None:
     if os.name != "posix":
         return
-    descriptor = os.open(directory, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    with contextlib.suppress(OSError):
+        descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
-def replace_bytes(path: Path, encoded: bytes) -> None:
+def refuse_an_unreplaceable_target(path: Path) -> Path:
     path = resolved_path(path)
     if path.is_dir():
         raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(path))
     _refuse_a_read_only_file(path)
+    return path
+
+
+def replace_bytes(path: Path, encoded: bytes) -> None:
+    path = refuse_an_unreplaceable_target(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if _rewrite_in_place(path):
         _write_in_place_restoring_on_failure(path, encoded)
