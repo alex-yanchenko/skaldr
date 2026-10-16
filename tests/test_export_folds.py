@@ -63,6 +63,9 @@ WRITTEN_NATIVELY_ON_GITHUB = frozenset(
         "quote holding lists",
         "table cell holding a list",
         "long list cell beside a short cell",
+        "fact strip",
+        "definition list",
+        "cards",
     }
 )
 FOLDED_WRITER_CASES = [

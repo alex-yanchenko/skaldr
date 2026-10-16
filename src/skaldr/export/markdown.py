@@ -1,3 +1,4 @@
+import html
 import unicodedata
 from collections import Counter
 from collections.abc import Generator, Iterator, Mapping, Sequence
@@ -12,7 +13,8 @@ from skaldr.errors import ExportInvariantError
 from skaldr.export.folds import folded, folded_except
 from skaldr.export.github_html import HtmlRuns, date_tag, details_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
-from skaldr.export.inline import plain
+from skaldr.export.inline import one_line, plain
+from skaldr.export.lower.context import joined_by_breaks, toned
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
@@ -33,10 +35,11 @@ from skaldr.export.markup import (
     wrap_around_core,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
-from skaldr.export.runs import ExportRich, export_visible_text
+from skaldr.export.runs import Chip, ExportRich, export_visible_text
 from skaldr.export.swaps import data_table_swapped_in, figure_mermaid_draws, swaps_the_figure, web_address_of
 from skaldr.export.tree import (
     Callout,
+    Card,
     Cards,
     CodeBlock,
     Columns,
@@ -60,6 +63,7 @@ from skaldr.export.tree import (
     TableCell,
     TableNode,
     TableOfContents,
+    TableRow,
     Tabs,
     TextNumbering,
     Timeline,
@@ -247,8 +251,24 @@ def _is_written_natively(node: Node) -> bool:
             return node.open
         case ListNode():
             return node.numbering is not None
+        case FactStrip() | Cards() | DefinitionList():
+            return True
         case _:
             return False
+
+
+def _label_text(label: str | None) -> str:
+    return one_line(label or "").removesuffix(":").rstrip()
+
+
+def _card_header(card: Card) -> ExportRich:
+    if card.badge is not None:
+        return (Chip.on_one_line(card.label or "", card.badge),)
+    return toned(card.tone, plain(_label_text(card.label)))
+
+
+def _card_value(card: Card) -> ExportRich:
+    return joined_by_breaks([card.value, plain(card.note)])
 
 
 def _marker_family(node: Node) -> MarkerFamily | None:
@@ -359,6 +379,25 @@ class _MarkdownWriter:
         cite = [styled("italic", self.inline(node.cite))] if node.cite else []
         return quoted(joined([body, cite]))
 
+    def fact_strip_lines(self, node: FactStrip) -> list[str]:
+        header = tuple(TableCell(plain(_label_text(fact.label))) for fact in node.facts)
+        row = TableRow(tuple(TableCell(fact.value) for fact in node.facts))
+        return self.table_lines(TableNode(header, (row,))) if node.facts else []
+
+    def cards_lines(self, node: Cards) -> list[str]:
+        header = tuple(TableCell(_card_header(card)) for card in node.cards)
+        row = TableRow(tuple(TableCell(_card_value(card)) for card in node.cards))
+        return self.table_lines(TableNode(header, (row,))) if node.cards else []
+
+    def definition_list_lines(self, node: DefinitionList) -> list[str]:
+        lines = ["<dl>"]
+        for definition in node.definitions:
+            lines.append(f"<dt>{html.escape(_label_text(definition.term), quote=False)}</dt>")
+            with self.inside_a_container():
+                body = self.blocks(definition.body)
+            lines += ["<dd>", "", *body, "", "</dd>"] if body else ["<dd></dd>"]
+        return [*lines, "</dl>"]
+
     def ordered_html_lines(self, node: ListNode, numbering: TextNumbering) -> list[str]:
         start = f' start="{node.start}"' if node.start != 1 else ""
         lines = [f'<ol type="{ORDERED_LIST_TYPE[numbering]}"{start}>']
@@ -448,7 +487,13 @@ class _MarkdownWriter:
                 )
             case TableOfContents():
                 return _Written.of(self.toc_lines(node, alternate), _ListTail("dash", alternate))
-            case FactStrip() | KeyValueList() | DefinitionList() | Cards() | Timeline() | LinkCard():
+            case FactStrip():
+                return _Written.of(self.fact_strip_lines(node))
+            case Cards():
+                return _Written.of(self.cards_lines(node))
+            case DefinitionList():
+                return _Written.of(self.definition_list_lines(node))
+            case KeyValueList() | Timeline() | LinkCard():
                 raise ExportInvariantError(
                     f"the GitHub writer folds a {type(node).__name__} before it writes it"
                 )

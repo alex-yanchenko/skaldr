@@ -24,10 +24,9 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 - [Reconciling a bin against the live system](#reconciling-a-bin-against-the-live-system)
 - [Sources](#sources)
 
-* **Source**: WMS export
-* **Period**: Q3 2026
-* **Site**: DC-West
-* **Owner**: Inventory Ops
+| Source | Period | Site | Owner |
+| --- | --- | --- | --- |
+| WMS export | Q3 2026 | DC-West | Inventory Ops |
 
 ## Overview
 
@@ -38,13 +37,9 @@ Mixed audience: ops reads the impact, the floor team reads the fix.
 - **Method**: `full cycle count`
 - **Mode**: strict
 
-* **Matched cleanly**: 8,500 (85.0%) 🟢 **▲ +3%**
-* **Floor: fixable**: 1,100 (11.0%) 🟡 **Floor**
-
-  Miscounts + mislabeled bins we can correct.
-* **Vendor: escalate**: 400 (4.0%) 🟢 **▼ −90** 🔴 **Vendor**
-* 🟣 **Count status**: HEALTHY
-* ⚪ **Total units**: 10,000
+| Matched cleanly | Floor: fixable | Vendor: escalate | 🟣 Count status | ⚪ Total units |
+| --- | --- | --- | --- | --- |
+| 8,500 (85.0%) 🟢 **▲ +3%** | 1,100 (11.0%) 🟡 **Floor**<br>Miscounts + mislabeled bins we can correct. | 400 (4.0%) 🟢 **▼ −90** 🔴 **Vendor** | HEALTHY | 10,000 |
 
 The count reconciles exactly: every unit lands in one bucket and the counts sum to the expected total. Reconciliation is a **hard gate**: a page that does not balance *will not build*. The old ~~bin \> 12~~ scan rule is under review; see the [method](https://example.com/runbook).
 
@@ -155,8 +150,20 @@ Reconciles: 1,500 + 8,500 matched cleanly = 10,000.
 
 #### Sign-off and rollback
 
-- **Owner**: Inventory Ops. **@site-lead** signs off each fix.
-- **Rollback**: Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+<dl>
+<dt>Owner</dt>
+<dd>
+
+Inventory Ops. **@site-lead** signs off each fix.
+
+</dd>
+<dt>Rollback</dt>
+<dd>
+
+Re-disable the scan flag; the widened bins fall back to the 5-digit read.
+
+</dd>
+</dl>
 
 ---
 
@@ -261,8 +268,9 @@ Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough
 
 > 📌
 >
-> - 🟢 **Matched cleanly**: 8,500 (85.0%)
-> - 🟡 **Needs work**: 1,500 (15.0%)
+> | 🟢 Matched cleanly | 🟡 Needs work |
+> | --- | --- |
+> | 8,500 (85.0%) | 1,500 (15.0%) |
 
 > 💡 **Reading this section**
 >
@@ -275,14 +283,9 @@ Video: [Dock walkthrough, 4 minutes](https://example.com/videos/dock-walkthrough
 
 ## Recount Zone C
 
-- **Status**: In Progress
-- **Priority**: High
-- **Assignee**: ada
-- **Due**: 2026-10-15
-- **Labels**: recount, bins
-- **Estimate**: 3
-- **Relates**: [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts)
-- **team**: Floor ops
+| Status | Priority | Assignee | Due | Labels | Estimate | Relates | team |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| In Progress | High | ada | 2026-10-15 | recount, bins | 3 | [Appendix: discrepancy-reason raw counts](#appendix-discrepancy-reason-raw-counts) | Floor ops |
 
 Zone C holds most of the mislabeled bins, so it is recounted first.
 
@@ -355,11 +358,9 @@ pie
 
 ## Readiness by zone
 
-- 🟡 **Floor**: 7 (43.8%)
-- 🔵 **System**: 2 (12.5%)
-- 🔴 **Vendor**: 2 (12.5%)
-
-  Awaiting the vendor's corrected ASN.
+| 🟡 **Floor** | 🔵 **System** | 🔴 **Vendor** |
+| --- | --- | --- |
+| 7 (43.8%) | 2 (12.5%) | 2 (12.5%)<br>Awaiting the vendor's corrected ASN. |
 
 |  | Scanned | Reconciled | Re-labeled | Signed off |
 | --- | --- | --- | --- | --- |

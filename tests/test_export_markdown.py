@@ -700,7 +700,7 @@ def test_a_toned_item_label_is_preceded_by_its_dot() -> None:
     ]
 
     assert markdown_of(blocks) == (
-        "- 🟡 **Disk**: ████████░░ 75.0%\n\n* 🔴 **Errors**: 3\n\n1. 🔴 **Stop**\n\n   x\n"
+        "- 🟡 **Disk**: ████████░░ 75.0%\n\n| 🔴 Errors |\n| --- |\n| 3 |\n\n1. 🔴 **Stop**\n\n   x\n"
     )
 
 
@@ -709,22 +709,22 @@ def test_a_toned_item_label_is_preceded_by_its_dot() -> None:
     [
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "badges": ["API"]},
-            "- 🔴 **Err**: 3 🔵 **api**\n",
+            "| 🔴 Err |\n| --- |\n| 3 🔵 **api** |\n",
             id="a-tone-unlike-the-badge-color-keeps-its-dot",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "info", "badges": ["API"]},
-            "- **Err**: 3 🔵 **api**\n",
+            "| Err |\n| --- |\n| 3 🔵 **api** |\n",
             id="a-tone-like-the-badge-color-leaves-the-dot-to-the-badge",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "info", "badges": ["RISK", "API"]},
-            "- **Err**: 3 🔴 **risk** 🔵 **api**\n",
+            "| Err |\n| --- |\n| 3 🔴 **risk** 🔵 **api** |\n",
             id="a-tone-like-any-badge-color-leaves-the-dot-to-that-badge",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "badges": ["API"]},
-            "- **Err**: 3 🔵 **api**\n",
+            "| Err |\n| --- |\n| 3 🔵 **api** |\n",
             id="a-badge-without-a-card-tone",
         ),
     ],
@@ -740,17 +740,17 @@ def test_a_card_dot_gives_way_to_a_badge_of_its_color(card: dict[str, Any], writ
     [
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up", "tone": "danger"}},
-            "- **Err**: 3 🔴 **up**\n",
+            "| Err |\n| --- |\n| 3 🔴 **up** |\n",
             id="a-tone-like-the-delta-chip-leaves-the-dot-to-the-chip",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up", "tone": "success"}},
-            "- 🔴 **Err**: 3 🟢 **up**\n",
+            "| 🔴 Err |\n| --- |\n| 3 🟢 **up** |\n",
             id="a-tone-unlike-the-delta-chip-keeps-its-dot",
         ),
         pytest.param(
             {"label": "Err", "value": "3", "tone": "danger", "delta": {"label": "up"}},
-            "- 🔴 **Err**: 3 up\n",
+            "| 🔴 Err |\n| --- |\n| 3 up |\n",
             id="a-delta-without-a-tone-leaves-the-dot-to-the-card",
         ),
     ],
@@ -1986,16 +1986,106 @@ def test_the_badge_legend_is_a_collapsed_details_block_over_its_list() -> None:
 def test_every_badge_and_state_block_becomes_github_markdown() -> None:
     assert markdown_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
         f"{API_LEGEND}"
-        "- **Site**: West\n- **Owner**: ops\n\n"
-        "* **Lead**: **Ana**\n\n"
-        "- **Drift**: first\n\n  second\n- **Gap**\n\n"
-        "* **Clean**: 9 (90.0%) 🟢 **▲ +1** 🔵 **api**\n\n  since Monday\n* **Lag**: 3 days → flat\n\n"
+        "| Site | Owner |\n| --- | --- |\n| West | ops |\n\n"
+        "- **Lead**: **Ana**\n\n"
+        "<dl>\n<dt>Drift</dt>\n<dd>\n\nfirst\n\nsecond\n\n</dd>\n<dt>Gap</dt>\n<dd></dd>\n</dl>\n\n"
+        "| Clean | Lag |\n| --- | --- |\n"
+        "| 9 (90.0%) 🟢 **▲ +1** 🔵 **api**<br>since Monday | 3 days → flat |\n\n"
         "**Affects**: 🔵 **api** 🟢 **ops**\n\n"
         "- **Owners**: 🟣 **web**\n\n"
         "* ✅ Ship\n* ⏸️ Vendor\n\n"
         "- 🔵 **Mon**: Start 🔵 **api**\n\n  kick-off\n- Later\n\n"
         "* 🟡 **Zone**: ████░░░░░░ 42.9%\n"
     )
+
+
+def test_a_fact_strip_is_a_one_row_pipe_table_with_its_labels_as_the_header() -> None:
+    block = {
+        "type": "fact_strip",
+        "facts": [
+            {"label": "Site:", "value": "West | dock"},
+            {"label": "Owner", "value": "**ops**"},
+            {"label": " ", "value": "no label"},
+        ],
+    }
+
+    assert markdown_of([block]) == (
+        "| Site | Owner |  |\n| --- | --- | --- |\n| West \\| dock | \\*\\*ops\\*\\* | no label |\n"
+    )
+
+
+def test_section_fields_are_a_one_row_pipe_table_under_the_heading() -> None:
+    section = {
+        "type": "section",
+        "title": "Recount",
+        "collapsed": False,
+        "fields": {"status": "Open", "estimate": 3, "labels": ["a", "b"]},
+        "blocks": [{"type": "text", "body": "Body."}],
+    }
+
+    assert markdown_of([section]) == (
+        "## Recount\n\n| Status | Labels | Estimate |\n| --- | --- | --- |\n| Open | a, b | 3 |\n\nBody.\n"
+    )
+
+
+def test_cards_are_a_pipe_table_with_a_column_per_card_and_its_note_under_the_value() -> None:
+    cards = {
+        "type": "cards",
+        "items": [
+            {"label": "Clean:", "value": 9, "of": 10, "note": "since Monday", "tone": "success"},
+            {"label": "Lag", "value": "3 | 4 days"},
+            {"label": " ", "value": "unlabelled"},
+            {"label": "Quiet", "value": ""},
+        ],
+    }
+
+    assert markdown_of([cards]) == (
+        "| 🟢 Clean | Lag |  | Quiet |\n| --- | --- | --- | --- |\n"
+        "| 9 (90.0%)<br>since Monday | 3 \\| 4 days | unlabelled |  |\n"
+    )
+
+
+def test_a_derived_card_is_a_column_led_by_its_badge_chip() -> None:
+    blocks = [
+        {"type": "cards", "items": [{"badge": "API", "of_matrix": "m", "note": "live"}]},
+        {
+            "type": "matrix",
+            "id": "m",
+            "rows": ["r1", "r2"],
+            "columns": ["c"],
+            "cells": [{"row": "r1", "col": "c", "badge": "API"}],
+        },
+    ]
+
+    assert markdown_of(blocks, badges=API_BADGES) == (
+        f"{API_LEGEND}| 🔵 **api** |\n| --- |\n| 1 (50.0%)<br>live |\n\n"
+        "|  | c |\n| --- | --- |\n| **r1** | 🔵 api |\n| **r2** |  |\n"
+    )
+
+
+def test_a_definition_list_is_a_dl_with_each_body_between_blank_lines_in_its_dd() -> None:
+    block = {
+        "type": "def_list",
+        "items": [
+            {"term": "Drift & gap:", "body": "first **bold**\n\n- a\n- b"},
+            {"term": "Open", "body": " "},
+        ],
+    }
+
+    assert markdown_of([block]) == (
+        "<dl>\n<dt>Drift &amp; gap</dt>\n<dd>\n\nfirst **bold**\n\n- a\n- b\n\n</dd>\n"
+        "<dt>Open</dt>\n<dd></dd>\n</dl>\n"
+    )
+
+
+def test_a_list_after_a_definition_list_starts_with_the_first_marker_again() -> None:
+    blocks = [
+        {"type": "list", "items": ["a"]},
+        {"type": "def_list", "items": [{"term": "T", "body": "b"}]},
+        {"type": "list", "items": ["c"]},
+    ]
+
+    assert markdown_of(blocks) == "- a\n\n<dl>\n<dt>T</dt>\n<dd>\n\nb\n\n</dd>\n</dl>\n\n- c\n"
 
 
 def test_a_badge_is_its_dot_and_bold_label_and_a_label_colon_is_not_doubled() -> None:
@@ -2105,7 +2195,7 @@ def test_the_table_of_contents_and_anchor_links_point_at_github_slugs() -> None:
 
 def test_a_list_right_after_the_table_of_contents_stays_its_own_list() -> None:
     blocks = [
-        {"type": "fact_strip", "facts": [{"label": "Site", "value": "West"}]},
+        {"type": "key_value", "pairs": [{"label": "Site", "value": "West"}]},
         {"type": "heading", "text": "A"},
     ]
 
