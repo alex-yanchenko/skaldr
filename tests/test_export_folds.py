@@ -83,8 +83,22 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
     return list(feature_hits(report, LoweredDocument("Plan", (BlockRegion(0, tuple(nodes)),))))
 
 
+WRITTEN_NATIVELY_ON_GITHUB = frozenset(
+    {
+        "open toggle",
+        "roman list",
+        "letter list",
+        "quote holding lists",
+        "table cell holding a list",
+        "long list cell beside a short cell",
+        "fact strip",
+        "definition list",
+        "cards",
+    }
+)
 WRITTEN_IN_ITS_OWN_FORM: Mapping[str, frozenset[str]] = {
     "slack": frozenset({"table cell holding a list", "long list cell beside a short cell"}),
+    "markdown": WRITTEN_NATIVELY_ON_GITHUB,
 }
 CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND: Final = frozenset(
     {
@@ -130,7 +144,7 @@ def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block
     assert _outcome(write, wrap((fold.named,))) == _outcome(write, wrap(fold.today))
 
 
-@pytest.mark.parametrize("case", ["cards", "fact strip", "timeline"])
+@pytest.mark.parametrize("case", ["cards", "fact strip", "timeline", "references"])
 def test_a_named_list_block_folds_to_exactly_the_nodes_it_lowered_to_before(case: str) -> None:
     fold = FOLD_CASES[case]
 

@@ -52,6 +52,7 @@ from skaldr.export.capabilities import (
 from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import one_line
 from skaldr.export.markup import table_width
+from skaldr.export.mermaid import loses_meaning_in_a_diagram_label
 from skaldr.export.runs import (
     Break,
     CheckMark,
@@ -66,6 +67,7 @@ from skaldr.export.runs import (
     StatusMark,
     SwimlaneMark,
     TonedLabel,
+    every_run_within,
     export_visible_text,
     nested_runs,
     tint_kind,
@@ -146,16 +148,6 @@ _NODE_TERMS: Final[Mapping[type, str]] = {
     Diagram: "diagram",
 }
 _GRID_CELL_AUTHORED_AS: Final = "grid cell"
-
-
-_RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD: Final[tuple[type[ExportRun], ...]] = (
-    Link,
-    AnchorLink,
-    IssueLink,
-    DocumentLink,
-    Citation,
-    InlineMath,
-)
 
 
 DocumentPosition = tuple[tuple[int, int, str], ...]
@@ -408,28 +400,8 @@ def _inline_details_in(runs: Iterable[ExportRun], place: _RunPlace) -> Iterator[
         yield from _inline_details_in(nested_runs(run), place.around(run))
 
 
-def _every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
-    for run in runs:
-        yield run
-        yield from _every_run_within(nested_runs(run))
-
-
 def _authored_on_its_own(child: Node, holder: ListNode) -> bool:
     return child.authored_at != holder.authored_at
-
-
-def _a_diagram_label_cannot_hold(run: ExportRun) -> bool:
-    match run:
-        case ScriptText():
-            return character_without_a_unicode_form(run.position, run.text) is not None
-        case Styled():
-            return run.style == "strike"
-        case _:
-            return isinstance(run, _RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD)
-
-
-def _loses_meaning_in_a_diagram_label(runs: ExportRich) -> bool:
-    return any(map(_a_diagram_label_cannot_hold, _every_run_within(runs)))
 
 
 def _item_feature(child: Node, holder: ListNode) -> ListItemFeature:
@@ -514,7 +486,7 @@ class _TreeWalk:
     def math_hits(self, node: Node, texts: Iterable[ExportRich]) -> Iterator[FeatureHit]:
         if isinstance(node, DisplayMath):
             yield self.hit(Occurrence("math block"), node.authored_at)
-        runs = _every_run_within(chain.from_iterable(texts))
+        runs = every_run_within(chain.from_iterable(texts))
         if any(isinstance(run, InlineMath) for run in runs):
             yield self.hit(Occurrence("inline math"), node.authored_at)
 
@@ -564,7 +536,7 @@ class _TreeWalk:
         yield self.hit(Occurrence(figure_feature(node.figure)), node.authored_at)
         figure = node.figure
         if isinstance(figure, Graph) and any(
-            _loses_meaning_in_a_diagram_label(step.note) for step in figure.nodes
+            loses_meaning_in_a_diagram_label(step.note) for step in figure.nodes
         ):
             yield self.hit(Occurrence(RICH_STEP_NOTE), node.authored_at)
 

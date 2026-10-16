@@ -1,3 +1,4 @@
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -134,6 +135,12 @@ def nested_runs(run: ExportRun) -> Rich:
             return ()
         case _:
             assert_never(run)
+
+
+def every_run_within(runs: Iterable[ExportRun]) -> Iterator[ExportRun]:
+    for run in runs:
+        yield run
+        yield from every_run_within(nested_runs(run))
 
 
 def holds_a_chip(runs: ExportRich) -> bool:
