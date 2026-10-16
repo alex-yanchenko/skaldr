@@ -395,6 +395,10 @@ def uses_heading_level_1(nodes: Iterable[Node]) -> bool:
     return False
 
 
+def canvas_heading_shift(body: Iterable[Node]) -> int:
+    return 0 if uses_heading_level_1(body) else 1
+
+
 def _all_authored_at(nodes: tuple[Node, ...], path: str) -> tuple[Node, ...]:
     return tuple(with_authored_path(node, path) for node in nodes)
 

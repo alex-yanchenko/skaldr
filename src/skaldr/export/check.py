@@ -47,7 +47,6 @@ from skaldr.export.capabilities import (
     TextMarkFeature,
     TextNumbering,
     TonedCell,
-    canvas_heading_shift,
     character_without_a_unicode_form,
 )
 from skaldr.export.folds import cell_text, folded, quote_lines
@@ -96,6 +95,7 @@ from skaldr.export.tree import (
     TableOfContents,
     Tabs,
     Toggle,
+    canvas_heading_shift,
     nested_nodes,
 )
 from skaldr.export_targets import ExportTarget
@@ -454,11 +454,11 @@ def _nodes_adf_cannot_place_in_a_list_item(child: GenericNode) -> Iterator[Gener
             return
 
 
-def _nodes_as_checked(nodes: Iterable[Node]) -> Iterator[GenericNode]:
+def _nodes_as_checked(nodes: Iterable[Node], definitions_as_blocks: bool) -> Iterator[GenericNode]:
     for node in nodes:
-        if isinstance(node, DefinitionList):
+        if definitions_as_blocks and isinstance(node, DefinitionList):
             for definition in node.definitions:
-                yield from _nodes_as_checked(definition.body)
+                yield from _nodes_as_checked(definition.body, definitions_as_blocks)
         else:
             yield from folded([node])
 
@@ -468,7 +468,8 @@ def _document_position(path: str) -> DocumentPosition:
 
 
 class _TreeWalk:
-    def __init__(self, located: Iterable[LocatedDetails]) -> None:
+    def __init__(self, located: Iterable[LocatedDetails], definitions_as_blocks: bool) -> None:
+        self.definitions_as_blocks = definitions_as_blocks
         self.heading = ""
         self.heading_shift = 0
         self.located = deque(located)
@@ -500,7 +501,7 @@ class _TreeWalk:
             yield self.hit(details, path)
 
     def nodes(self, nodes: Iterable[Node], place: _Place) -> Iterator[FeatureHit]:
-        for node in _nodes_as_checked(nodes):
+        for node in _nodes_as_checked(nodes, self.definitions_as_blocks):
             yield from self.node(node, place)
 
     def inline_hits(self, node: Node, texts: Iterable[ExportRich]) -> Iterator[FeatureHit]:
@@ -695,8 +696,11 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
     return ", ".join(places) or None
 
 
-def feature_hits(report: Report, document: LoweredDocument) -> Iterator[FeatureHit]:
-    return _TreeWalk(_model_hits_in_document_order(report, document)).document(document.body)
+def feature_hits(
+    report: Report, document: LoweredDocument, target: ExportTarget | None = None
+) -> Iterator[FeatureHit]:
+    walk = _TreeWalk(_model_hits_in_document_order(report, document), target == "slack")
+    return walk.document(document.body)
 
 
 def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget) -> None:
@@ -715,4 +719,4 @@ def _raise_the_first_rejection(hits: Iterable[FeatureHit], target: ExportTarget)
 def reject_what_the_target_cannot_show(
     report: Report, document: LoweredDocument, target: ExportTarget
 ) -> None:
-    _raise_the_first_rejection(feature_hits(report, document), target)
+    _raise_the_first_rejection(feature_hits(report, document, target), target)

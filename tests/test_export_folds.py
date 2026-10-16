@@ -8,12 +8,32 @@ from skaldr.export.adf import adf_json, render_adf
 from skaldr.export.budget import character_budget
 from skaldr.export.check import FeatureHit, feature_hits
 from skaldr.export.folds import cell_text, folded, quote_lines
+from skaldr.export.inline import plain
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import chunk_notion, render_notion, render_notion_regions
 from skaldr.export.slack import render_slack
-from skaldr.export.tree import BlockRegion, CodeBlock, LoweredDocument, Node, Quote, TableCell
+from skaldr.export.tree import (
+    BlockRegion,
+    CodeBlock,
+    Definition,
+    DefinitionList,
+    LoweredDocument,
+    Node,
+    Quote,
+    TableCell,
+    TableNode,
+)
+from skaldr.export_targets import ExportTarget
 from skaldr.models import parse_report
-from tests.factories import FOLD_CASES, FOLD_CONTEXTS, authored, make_paragraph, make_report
+from tests.factories import (
+    FOLD_CASES,
+    FOLD_CONTEXTS,
+    authored,
+    check_nodes,
+    make_paragraph,
+    make_report,
+    refusal_of,
+)
 
 Write = Callable[[Sequence[Node]], str]
 NOTION_CHUNK_CHARACTERS = 60
@@ -111,6 +131,36 @@ def test_a_quote_or_a_table_cell_holding_another_block_is_an_internal_error(
         ),
     ):
         fold()
+
+
+DEFINITION_BODY_BLOCKS: Mapping[str, Node] = {
+    "table": TableNode((TableCell(plain("A")),), ()),
+    "quote": Quote((make_paragraph("said"),)),
+}
+
+
+@pytest.mark.parametrize("held", DEFINITION_BODY_BLOCKS)
+@pytest.mark.parametrize("target", ["markdown", "notion", "slack"])
+def test_a_definition_body_block_a_list_item_cannot_hold_is_accepted_where_the_writer_has_a_place_for_it(
+    held: str, target: ExportTarget
+) -> None:
+    check_nodes([_definition_holding(DEFINITION_BODY_BLOCKS[held])], target)
+
+
+@pytest.mark.parametrize("held", DEFINITION_BODY_BLOCKS)
+def test_a_definition_body_block_adf_cannot_place_in_the_list_item_it_folds_to_is_still_refused(
+    held: str,
+) -> None:
+    assert vars(refusal_of([_definition_holding(DEFINITION_BODY_BLOCKS[held])], "adf")) == {
+        "target": "adf",
+        "why": f"ADF cannot place a {held} inside a list item",
+        "instead": f"move the {held} out of the list, after the list",
+        "where": "at blocks.0",
+    }
+
+
+def _definition_holding(held: Node) -> Node:
+    return authored(DefinitionList((Definition("Fix", (make_paragraph("lead"), held)),)))
 
 
 @pytest.mark.parametrize("case", FOLD_CASES)

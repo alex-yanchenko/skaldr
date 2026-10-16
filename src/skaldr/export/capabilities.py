@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Final, Literal
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.tree import Node, PanesKind, ToneName, uses_heading_level_1
+from skaldr.export.tree import PanesKind, ToneName
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
 
@@ -651,10 +651,6 @@ GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
     "callout": "callout inside a grid cell",
     "divider": "divider inside a grid cell",
 }
-
-
-def canvas_heading_shift(body: Iterable[Node]) -> int:
-    return 0 if uses_heading_level_1(body) else 1
 
 
 def swaps(feature: Feature, target: ExportTarget) -> bool:

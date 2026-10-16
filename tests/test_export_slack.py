@@ -450,12 +450,41 @@ def test_a_bullet_list_in_a_table_cell_is_dash_items_joined_by_line_breaks() -> 
     assert slack_of([block]) == "| N |\n| --- |\n| - a<br>- b |\n"
 
 
-def test_a_nested_list_in_a_table_cell_writes_every_item_with_its_own_kind_of_marker() -> None:
-    nested = make_bullets(make_list_entry("b"))
-    items = ListNode("number", (make_list_entry("a", nested), make_list_entry("c")))
-    table = TableNode((make_table_cell("N"),), (TableRow((TableCell((), blocks=(items,)),)),))
+def _one_cell_table(*blocks: Node) -> TableNode:
+    return TableNode((make_table_cell("N"),), (TableRow((TableCell((), blocks=blocks),)),))
 
-    assert render_slack([table]) == "| N |\n| --- |\n| 1. a<br>- b<br>2. c |\n"
+
+@pytest.mark.parametrize(
+    ("kind", "nested_kind", "cell"),
+    [
+        pytest.param("bullet", "bullet", "- a<br>  - b<br>- c", id="bullets-under-bullets"),
+        pytest.param("number", "number", "1. a<br>  1. b<br>2. c", id="numbers-under-numbers"),
+        pytest.param("number", "bullet", "1. a<br>  1. • b<br>2. c", id="bullets-under-numbers-as-numbers"),
+        pytest.param("bullet", "number", "- a<br>  - 1\\. b<br>- c", id="numbers-under-bullets-as-bullets"),
+    ],
+)
+def test_a_nested_list_in_a_table_cell_is_indented_two_spaces_and_takes_its_parents_kind(
+    kind: ListKind, nested_kind: ListKind, cell: str
+) -> None:
+    nested = ListNode(nested_kind, (make_list_entry("b"),))
+    items = ListNode(kind, (make_list_entry("a", nested), make_list_entry("c")))
+
+    assert render_slack([_one_cell_table(items)]) == f"| N |\n| --- |\n| {cell} |\n"
+
+
+def test_text_then_a_list_in_a_table_cell_is_a_paragraph_followed_by_a_real_list() -> None:
+    items = make_bullets(make_list_entry("a"), make_list_entry("b"))
+
+    assert render_slack([_one_cell_table(make_paragraph("intro"), items)]) == (
+        "| N |\n| --- |\n| intro<br>- a<br>- b |\n"
+    )
+
+
+def test_a_list_cell_on_a_danger_row_keeps_the_row_dot_before_its_list() -> None:
+    row = TableRow((TableCell((), blocks=(make_bullets(make_list_entry("a")),)),), "danger")
+    table = TableNode((make_table_cell("N"),), (row,))
+
+    assert render_slack([table]) == "| N |\n| --- |\n| 🔴 - a |\n"
 
 
 def test_a_fact_strip_is_one_paragraph_of_its_facts_joined_by_middle_dots() -> None:

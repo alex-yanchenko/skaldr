@@ -1,6 +1,6 @@
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Final, NoReturn
@@ -10,7 +10,7 @@ from typing_extensions import Self, assert_never
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, markers_flank
-from skaldr.export.folds import ItemMarker, cell_text
+from skaldr.export.folds import cell_text
 from skaldr.export.glyphs import gauge_bar, mark_glyph
 from skaldr.export.runs import (
     Chip,
@@ -38,6 +38,7 @@ from skaldr.richtext import (
     write_runs,
 )
 
+BlockCellWriter = Callable[[TableCell, Sequence[ToneName]], str]
 STYLE_MARKER: Final[Mapping[MarkerStyle, str]] = {"bold": "**", "italic": "*", "strike": "~~"}
 STYLE_TAG: Final[Mapping[MarkerStyle, str]] = {"bold": "strong", "italic": "em", "strike": "del"}
 ENTITY_LOOKALIKE: Final = re.compile(r"&(?=#?\w+;)")
@@ -412,11 +413,12 @@ class CommonMarkRuns(MarkupRuns, ABC):
 
 
 def pipe_table_lines(
-    table: TableNode, writer: CommonMarkRuns, item_marker: ItemMarker | None = None
+    table: TableNode, writer: CommonMarkRuns, block_cell: BlockCellWriter | None = None
 ) -> list[str]:
     def cell_markup(cell: TableCell, tones: Sequence[ToneName]) -> str:
-        text = cell_text(cell) if item_marker is None else cell_text(cell, item_marker)
-        return writer.write_toned(tones, text).replace("|", "\\|")
+        if cell.blocks and block_cell is not None:
+            return block_cell(cell, tones).replace("|", "\\|")
+        return writer.write_toned(tones, cell_text(cell)).replace("|", "\\|")
 
     width = table_width(table)
     lines = [

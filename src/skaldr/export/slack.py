@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Final, Literal, NoReturn, TypeGuard
@@ -12,10 +12,9 @@ from skaldr.export.capabilities import (
     CANVAS_TABLE_CELL_LIMIT,
     FIRST_LIST_NUMBER,
     TARGET_SUBJECTS,
-    canvas_heading_shift,
     in_unicode_script_form,
 )
-from skaldr.export.folds import card_text, dash_item_marker, folded, quote_lines
+from skaldr.export.folds import card_text, folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import bold, plain
 from skaldr.export.lower.context import spaced as spaced_runs
@@ -61,10 +60,13 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
     TableNode,
     TableOfContents,
     Tabs,
     Toggle,
+    ToneName,
+    canvas_heading_shift,
 )
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import MEDIA_KIND_LABELS, Person
@@ -84,6 +86,10 @@ BULLET_INDENT: Final = len(BULLET_MARKER) + 1
 LIST_SEPARATOR: Final = "&nbsp;"
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
+CELL_BULLET_MARKER: Final = "- "
+CELL_TEXT_BULLET: Final = "• "
+CELL_TEXT_CHECK: Final = "☐ "
+CELL_LIST_INDENT: Final = "  "
 FACT_SEPARATOR: Final = " · "
 COVER_LINK_LABEL: Final = "Cover image"
 Place = Literal["top", "callout", "column"]
@@ -270,20 +276,25 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
 
 def _fact_strip_paragraph(strip: FactStrip) -> Paragraph:
     facts = [with_bold_label(fact.label, fact.value) for fact in strip.facts]
-    return Paragraph(spaced_runs([fact for fact in facts if fact], FACT_SEPARATOR))
+    return Paragraph(
+        spaced_runs([fact for fact in facts if fact], FACT_SEPARATOR), authored_at=strip.authored_at
+    )
 
 
 def _canvas_definitions(node: DefinitionList, place: Place) -> list[_CanvasBlock]:
     return [
         block
         for definition in node.definitions
-        for block in (Paragraph(bold(definition.term)), *_canvas_blocks(definition.body, place))
+        for block in (
+            Paragraph(bold(definition.term), authored_at=node.authored_at),
+            *_canvas_blocks(definition.body, place),
+        )
     ]
 
 
-def _card_column(card: Card) -> tuple[_CanvasBlock, ...]:
-    note = (Paragraph(plain(card.note)),) if card.note else ()
-    return (Paragraph(card_text(card)), *note)
+def _card_column(card: Card, path: str | None) -> tuple[_CanvasBlock, ...]:
+    note = (Paragraph(plain(card.note), "muted", authored_at=path),) if card.note else ()
+    return (Paragraph(card_text(card), authored_at=path), *note)
 
 
 def _canvas_cards(node: Cards) -> list[_CanvasBlock]:
@@ -291,9 +302,9 @@ def _canvas_cards(node: Cards) -> list[_CanvasBlock]:
     for start in range(0, len(node.cards), CANVAS_LAYOUT_COLUMN_LIMIT):
         row = node.cards[start : start + CANVAS_LAYOUT_COLUMN_LIMIT]
         if len(row) == 1:
-            blocks.extend(_card_column(row[0]))
+            blocks.extend(_card_column(row[0], node.authored_at))
         else:
-            blocks.append(_Layout(tuple(_card_column(card) for card in row)))
+            blocks.append(_Layout(tuple(_card_column(card, node.authored_at) for card in row)))
     return blocks
 
 
@@ -367,6 +378,49 @@ def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
             assert_never(kind)
 
 
+def _cell_marker(kind: ListKind, number: int) -> str:
+    match kind:
+        case "bullet" | "check":
+            return CELL_BULLET_MARKER
+        case "number":
+            return f"{number}. "
+        case _:
+            assert_never(kind)
+
+
+def _cell_text_marker(kind: ListKind, number: int) -> str:
+    match kind:
+        case "bullet":
+            return CELL_TEXT_BULLET
+        case "number":
+            return f"{number}\\. "
+        case "check":
+            return CELL_TEXT_CHECK
+        case _:
+            assert_never(kind)
+
+
+def _cell_lines(
+    nodes: Sequence[Node], depth: int, enclosing_kind: ListKind | None
+) -> Iterator[tuple[str, ExportRich]]:
+    for node in folded(nodes):
+        match node:
+            case Paragraph():
+                yield "", node.text
+            case ListNode():
+                kind = node.kind if enclosing_kind is None else enclosing_kind
+                for number, entry in enumerate(node.entries, start=node.start):
+                    marker = _cell_marker(kind, number)
+                    own = "" if kind == node.kind else _cell_text_marker(node.kind, number)
+                    yield f"{CELL_LIST_INDENT * depth}{marker}{own}", entry.text
+                    yield from _cell_lines(entry.children, depth + 1, kind)
+            case _:
+                raise ExportInvariantError(
+                    "a quote or a table cell holds only paragraphs and lists, "
+                    f"not a {type(node).__name__}; the lowering should not have put one there"
+                )
+
+
 def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:
     return ExportRejectedError(
         SLACK_TARGET,
@@ -424,7 +478,16 @@ class _CanvasWriter:
                 f"a Slack canvas table holds at most {CANVAS_TABLE_CELL_LIMIT} cells, not {cells}; "
                 "the export check should have refused it"
             )
-        return pipe_table_lines(table, self.table_cell_runs, dash_item_marker)
+        return pipe_table_lines(table, self.table_cell_runs, self.list_cell)
+
+    def list_cell(self, cell: TableCell, tones: Sequence[ToneName]) -> str:
+        lines = [self.cell_line(prefix, text) for prefix, text in _cell_lines(cell.blocks, 0, None)]
+        text = HTML_LINE_BREAK.join(lines)
+        dots = self.table_cell_runs.write_toned(tones, ())
+        return f"{dots} {text}" if dots else text
+
+    def cell_line(self, prefix: str, text: ExportRich) -> str:
+        return prefix + self.table_cell_runs.write(text)
 
     def heading_line(self, heading: Heading) -> str:
         level = heading.level - self.heading_shift
