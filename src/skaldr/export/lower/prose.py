@@ -113,10 +113,8 @@ def lower_cards(block: models.Cards, lowering: Lowering) -> list[Node]:
     return [Cards(tuple(_card(card, lowering) for card in block.items))]
 
 
-def _derived_card(card: models.Card, badge_key: str, badge: models.Badge, lowering: Lowering) -> Card:
-    count, total = compute.derived_card_tally(
-        card, badge_key, lowering.matrix_tallies, lowering.table_tallies
-    )
+def _derived_card(card: models.Card, badge: models.Badge, lowering: Lowering) -> Card:
+    count, total = compute.derived_card_tally(card, lowering.matrix_tallies, lowering.table_tallies)
     share = plain(f"{compute.fmt(count)} ({compute.pct(count, total)})")
     return Card(card.label or badge.label, share, note=card.note or "", badge=badge.tone)
 
@@ -127,8 +125,8 @@ def _delta(delta: models.CardDelta) -> ExportRich:
 
 
 def _card(card: models.Card, lowering: Lowering) -> Card:
-    if card.derived and card.badge is not None:
-        return _derived_card(card, card.badge, lowering.report.badges[card.badge], lowering)
+    if card.derived:
+        return _derived_card(card, lowering.report.badges[card.counted_badge], lowering)
     parts: list[ExportRich] = [plain(compute.fmt(card.value))]
     if card.of and isinstance(card.value, int | float):
         parts.append(plain(f"({compute.pct(card.value, card.of)})"))

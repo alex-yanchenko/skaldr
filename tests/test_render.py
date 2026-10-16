@@ -4422,6 +4422,23 @@ def test_table_tint_by_yields_to_an_explicit_row_tone() -> None:
     assert '<tr class="row tint' not in html  # a toned row never carries a tint class
 
 
+def test_a_padded_badge_key_still_tints_the_row_and_feeds_the_rollup() -> None:
+    table = make_table(
+        columns=[
+            {"key": "item", "label": "Item", "kind": "text"},
+            {"key": "status", "label": "", "kind": "badge"},
+        ],
+        rows=[{"item": "a", "status": " DONE "}, {"item": "b", "status": " DONE "}],
+        tint_by="status",
+        rollup={"by": "status"},
+    )
+    badges = {"DONE": {"label": "Done", "tone": "success", "legend": "finished"}}
+
+    html = render_html(parse_report(make_report(blocks=[table], badges=badges)))
+
+    assert (html.count('<tr class="row tint green">'), '<span class="rollup-n">2</span>' in html) == (2, True)
+
+
 def test_image_max_width_renders_style() -> None:
     src = "data:image/svg+xml,<svg/>"
     block = {"type": "image", "src": src, "alt": "a", "max_width": 400}

@@ -248,7 +248,7 @@ def html_environment() -> Environment:
         delta_glyphs=compute.DELTA_GLYPHS,
         status_glyphs=compute.STATUS_GLYPHS,
         badge_legend_subject=compute.BADGE_LEGEND_SUBJECT,
-        recorded_body=compute.recorded_body,
+        read_recorded_body=compute.read_recorded_body,
         chart_svg=chart_svg,
         chart_legend=chart_legend,
         display_math=display_math,

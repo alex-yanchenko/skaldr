@@ -1,12 +1,12 @@
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
 from skaldr.export.runs import ExportRich
-from skaldr.models import BadgeColor, MediaKind, TimelineState, ToneLiteral
+from skaldr.models import BadgeColor, ListKind, MediaKind, TimelineState, ToneLiteral
 
 ToneName = Literal[ToneLiteral, "muted"]
 LinkCardDisplay = Literal["card", "embed"]
-ListKind = Literal["bullet", "number", "check"]
 TextNumbering = Literal["letters", "roman"]
 AuthoredName = Literal[
     "panel",
@@ -33,6 +33,7 @@ XYChartMark = Literal["bar", "line"]
 GraphKind = Literal["flow", "fan"]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 COLUMN_RATIO_TOTAL: Final = 100
+MOST_COLUMNS_PER_STRIP: Final = 4
 
 
 @dataclass(frozen=True)
@@ -384,6 +385,18 @@ def heading_of(node: Node) -> Heading | None:
     if isinstance(node, Toggle) and node.heading_level is not None:
         return Heading(node.heading_level, node.title, node.anchor)
     return None
+
+
+def uses_heading_level_1(nodes: Iterable[Node]) -> bool:
+    for node in nodes:
+        heading = heading_of(node)
+        if (heading is not None and heading.level == 1) or uses_heading_level_1(nested_nodes(node)):
+            return True
+    return False
+
+
+def canvas_heading_shift(body: Iterable[Node]) -> int:
+    return 0 if uses_heading_level_1(body) else 1
 
 
 def _all_authored_at(nodes: tuple[Node, ...], path: str) -> tuple[Node, ...]:

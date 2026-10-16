@@ -179,7 +179,7 @@ class AdfCodeBlock(TypedDict):
 
 class AdfBlockquote(TypedDict):
     type: Literal["blockquote"]
-    content: list[AdfParagraph]
+    content: "list[AdfBlock]"
 
 
 class AdfRule(TypedDict):
@@ -203,13 +203,13 @@ class AdfCellAttrs(TypedDict):
 class AdfTableCell(TypedDict):
     type: Literal["tableCell"]
     attrs: NotRequired[AdfCellAttrs]
-    content: list[AdfParagraph]
+    content: "list[AdfBlock]"
 
 
 class AdfTableHeader(TypedDict):
     type: Literal["tableHeader"]
     attrs: NotRequired[AdfCellAttrs]
-    content: list[AdfParagraph]
+    content: "list[AdfBlock]"
 
 
 class AdfTableRow(TypedDict):
@@ -244,6 +244,25 @@ class AdfNestedExpand(TypedDict):
     content: "list[AdfBlock]"
 
 
+class AdfBlockCardAttrs(TypedDict):
+    url: str
+
+
+class AdfBlockCard(TypedDict):
+    type: Literal["blockCard"]
+    attrs: AdfBlockCardAttrs
+
+
+class AdfEmbedCardAttrs(TypedDict):
+    url: str
+    layout: Literal["center"]
+
+
+class AdfEmbedCard(TypedDict):
+    type: Literal["embedCard"]
+    attrs: AdfEmbedCardAttrs
+
+
 AdfBlock = (
     AdfParagraph
     | AdfHeading
@@ -257,6 +276,8 @@ AdfBlock = (
     | AdfTable
     | AdfExpand
     | AdfNestedExpand
+    | AdfBlockCard
+    | AdfEmbedCard
 )
 
 

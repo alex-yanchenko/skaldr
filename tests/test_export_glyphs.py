@@ -89,6 +89,20 @@ def test_an_indicator_glyph_is_a_coloured_dot_for_every_tone() -> None:
     }
 
 
+def test_a_callout_icon_is_pinned_for_every_tone_including_the_palette_only_ones() -> None:
+    assert dict(CALLOUT_ICON) == {
+        "info": "💡",
+        "success": "✅",
+        "warning": "⚠️",
+        "danger": "🛑",
+        "accent": "📌",
+        "neutral": "📝",
+        "muted": "📝",
+        "teal": "💡",
+        "sky": "💡",
+    }
+
+
 def test_a_check_glyph_is_a_tick_or_a_cross() -> None:
     assert (check_glyph(checked=True), check_glyph(checked=False)) == ("✓", "✗")
 

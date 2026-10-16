@@ -2,5 +2,7 @@
   "title": "Q3 Warehouse Inventory Count: Discrepancies & Fixes",
   "files": [
     "page.md"
-  ]
+  ],
+  "icon": "📦",
+  "cover": "https://example.com/covers/warehouse.png"
 }

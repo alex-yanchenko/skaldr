@@ -82,6 +82,7 @@ from tests.factories import (
     make_table,
     make_tabs,
     make_toggle,
+    parsed_block,
 )
 
 
@@ -394,8 +395,13 @@ def _report_with_derived_card(card: dict[str, object], *, matrix_id: str = "cov"
 
 
 def test_derived_card_without_badge_is_rejected() -> None:
-    with pytest.raises(ReportError, match=r"needs a `badge` to count"):
+    with pytest.raises(ReportError) as raised:
         parse_report(_report_with_derived_card({"of_matrix": "cov"}))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.cards.items.0: Value error, "
+        "a derived card (`of_matrix`/`of_tables`) needs a `badge` to count"
+    )
 
 
 def test_derived_card_with_an_authored_value_is_rejected() -> None:
@@ -1075,6 +1081,28 @@ def test_a_toggle_in_a_grid_cell_parses_to_the_inner_toggle_holding_leaf_blocks(
     ],
 )
 def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location: str) -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
+
+
+@pytest.mark.parametrize(
+    ("block", "location"),
+    [
+        pytest.param(make_request(label=" "), "blocks.0.request.label", id="request"),
+        pytest.param(
+            make_request(cases=[{"label": "\t", "response": {"status": 200, "body": "[]"}}]),
+            "blocks.0.request.cases.0.label",
+            id="request-case",
+        ),
+        pytest.param(make_flow(label=" "), "blocks.0.request_flow.label", id="request-flow"),
+        pytest.param(
+            make_flow(steps=[make_step(label=" ")]), "blocks.0.request_flow.steps.0.label", id="flow-step"
+        ),
+    ],
+)
+def test_a_request_label_that_is_blank_is_rejected(block: dict[str, Any], location: str) -> None:
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
@@ -4543,9 +4571,7 @@ def test_a_request_is_accepted_inside_a_panel() -> None:
 
 
 def _parsed_request(block: dict[str, Any]) -> Request:
-    parsed = parse_report(make_report(blocks=[block])).blocks[0]
-    assert isinstance(parsed, Request)
-    return parsed
+    return parsed_block(Request, block)
 
 
 def test_a_command_request_needs_no_method_url_or_reader_field() -> None:

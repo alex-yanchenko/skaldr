@@ -5049,7 +5049,7 @@
                 }
               ],
               "maximum": 1e+300,
-              "minimum": -1e+300
+              "minimum": 0
             },
             {
               "type": "null"
@@ -6579,6 +6579,18 @@
     }
   },
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "blocks"
+      ]
+    },
+    {
+      "required": [
+        "index"
+      ]
+    }
+  ],
   "properties": {
     "version": {
       "const": 1,

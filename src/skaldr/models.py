@@ -10,6 +10,7 @@ state glyphs for status lists and timelines.
 """
 
 import math
+import os
 import re
 import sys
 from collections import Counter, defaultdict
@@ -38,6 +39,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    JsonValue,
     StrictBool,
     StringConstraints,
     Tag,
@@ -141,6 +143,20 @@ def _refuse_an_unusable_number(value: int | float, location: str) -> None:
 _NUMBER_GUARD = BeforeValidator(_reject_bool_and_non_finite)
 _NUMBER_BOUND_IN_SCHEMA = Field(json_schema_extra={"minimum": -LARGEST_NUMBER, "maximum": LARGEST_NUMBER})
 Number = Annotated[int | float, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
+
+
+def _refuse_a_negative_number(value: int | float) -> int | float:
+    if value < 0:
+        raise ValueError("must not be negative")
+    return value
+
+
+NonNegativeNumber = Annotated[
+    int | float,
+    _NUMBER_GUARD,
+    AfterValidator(_refuse_a_negative_number),
+    Field(json_schema_extra={"minimum": 0, "maximum": LARGEST_NUMBER}),
+]
 Count = Annotated[int, _NUMBER_GUARD, _NUMBER_BOUND_IN_SCHEMA]
 SixthsCount = Annotated[int, Field(ge=1, le=6), _NUMBER_GUARD]
 
@@ -490,7 +506,8 @@ def _any_item_flagged(items: list["str | ListItem"], flagged: Callable[["ListIte
     )
 
 
-ListStyle = Literal["bullet", "number", "check", "decision"]
+ListKind = Literal["bullet", "number", "check"]
+ListStyle = Literal[ListKind, "decision"]
 ListNumbering = Literal["decimal", "letters", "roman"]
 LARGEST_LIST_START: Final = 999_999_999
 
@@ -636,6 +653,12 @@ class Card(FrozenModel):
     @property
     def derived(self) -> bool:
         return self.of_matrix is not None or self.of_tables is not None
+
+    @property
+    def counted_badge(self) -> str:
+        if not self.derived or self.badge is None:
+            raise ValueError("a card that is not derived counts no badge")
+        return self.badge
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":
@@ -1198,7 +1221,6 @@ class RowGroup:
 
 
 def col_sum(rows: Sequence[Row], key: str) -> float:
-    """Sum a number column's values (ints stay ints; floats are not truncated)."""
     return sum(row.numbers[key] for row in rows)
 
 
@@ -1243,7 +1265,7 @@ def _badge_cell(value: object, placement: ColumnPlacement, loc: str) -> tuple[st
         keys = _as_badge_list(value)
         if not keys or not all(isinstance(key, str) for key in keys):
             raise ValueError(f"{loc}: cell badge needs a key or a non-empty list of keys")
-    return tuple(key.strip() for key in cast("list[str]", keys) if key.strip())
+    return tuple(trimmed for key in cast("list[str]", keys) if (trimmed := key.strip()))
 
 
 def _indicator_cell(value: object, loc: str) -> ToneLiteral | None:
@@ -1385,11 +1407,6 @@ class Table(_Block):
     @model_validator(mode="before")
     @classmethod
     def _expand_positional_rows(cls, data: Any) -> Any:
-        """Normalise a positional (list) row to a mapping before field validation: zip its values with
-        the column keys in declared order. A list whose length doesn't match the columns is an error
-        (a silent zip would drop or blank cells). Every mapping row, expanded or authored, then has its
-        row tone and indicator values read through the palette aliases (red → danger), so the model and
-        the typed rows hold canonical tones."""
         if not isinstance(data, dict):
             return data
         fields = cast("dict[str, Any]", data)
@@ -2881,7 +2898,7 @@ class SectionFields(FrozenModel):
     labels: Annotated[list[NonBlank], Field(min_length=1)] | None = Field(
         default=None, description="Labels, each shown as a chip."
     )
-    estimate: Number | None = Field(default=None, description="Effort estimate as a number.")
+    estimate: NonNegativeNumber | None = Field(default=None, description="Effort estimate as a number.")
     links: SectionLinks = Field(
         default_factory=SectionLinks,
         description="Links to other sections: a link type (`blocks`, `relates`, ...) mapped to the ids of "
@@ -3229,8 +3246,8 @@ def _badge_keys_in_cell(path: str, value: Any) -> Iterator[tuple[str, str]]:
         else [(path, value)]
     )
     for place, candidate in placed:
-        if isinstance(candidate, str) and candidate.strip():
-            yield place, candidate.strip()
+        if isinstance(candidate, str) and (trimmed := candidate.strip()):
+            yield place, trimmed
 
 
 def iter_reference_items(blocks: Sequence[AnyBlock]) -> Iterator[ReferenceItem]:
@@ -3260,6 +3277,8 @@ def iter_tables(blocks: Sequence[AnyBlock]) -> Iterator[Table]:
 def _relative_part_path(path: str) -> str:
     if Path(path).is_absolute():
         raise ValueError(f"a part path is relative to the index file, not absolute: {path}")
+    if Path(os.path.normpath(path)).parts[:1] == ("..",):
+        raise ValueError(f"a part path stays inside the index file's folder, not above it: {path}")
     return path
 
 
@@ -3293,7 +3312,14 @@ class Index(FrozenModel):
         return parts
 
 
+_BLOCKS_OR_AN_INDEX_IN_SCHEMA: Final[dict[str, JsonValue]] = {
+    "anyOf": [{"required": ["blocks"]}, {"required": ["index"]}]
+}
+
+
 class Report(FrozenModel):
+    model_config = ConfigDict(json_schema_extra=_BLOCKS_OR_AN_INDEX_IN_SCHEMA)
+
     version: Literal[1] = Field(description="Content-file schema version.")
     meta: Meta
     badges: dict[str, Badge] = Field(
@@ -3585,9 +3611,22 @@ def _parsed_index(data: object) -> Index:
         raise ReportError(_format_validation_error(err, ("index",))) from err
 
 
+def _part_file(index_path: Path, part_path: str) -> Path:
+    part = index_path.parent / part_path
+    try:
+        resolved, folder = part.resolve(), index_path.parent.resolve()
+    except (OSError, RuntimeError) as err:
+        raise ReportError(f"could not resolve {part}: {err}") from err
+    if not resolved.is_relative_to(folder):
+        raise ReportError(
+            f"part {part_path} resolves to {resolved}, outside the index file's folder {folder}"
+        )
+    return part
+
+
 def _loaded_part(path: Path) -> _LoadedPart:
     data = _load_yaml_with_includes(path, (), [])
-    if _index_of(data) is not None:
+    if isinstance(_index_of(data), Mapping):
         raise ReportError(f"part {path} is itself an index; an index lists document files, not other indexes")
     try:
         report = parse_report(data)
@@ -3722,6 +3761,11 @@ _INTRO_BLOCKS: Final = TypeAdapter(list[PageBlock])
 
 def _intro_blocks(data: Mapping[str, Any]) -> list[object]:
     intro: object = data.get("blocks", [])
+    if isinstance(intro, list) and not intro and "blocks" in data:
+        raise ReportError(
+            "invalid content data: blocks: an index's `blocks` is its optional intro and needs at least "
+            "one block; leave `blocks` out for no intro"
+        )
     try:
         _INTRO_BLOCKS.validate_python(intro, context={BUILT_BY_AN_INDEX: False})
     except ValidationError as err:
@@ -3738,7 +3782,7 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
     if data.get("publish") is not None:
         raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
     intro = _intro_blocks(data)
-    parts = [_loaded_part(path.parent / part_path) for part_path in index.parts]
+    parts = [_loaded_part(_part_file(path, part_path)) for part_path in index.parts]
     _refuse_a_doc_id_published_twice(parts)
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
@@ -3793,5 +3837,5 @@ def content_files(path: Path) -> tuple[Path, ...]:
     index = _index_of(_load_yaml_with_includes(path, (), loaded))
     if index is not None:
         for part_path in _parsed_index(index).parts:
-            _load_yaml_with_includes(path.parent / part_path, (), loaded)
+            _load_yaml_with_includes(_part_file(path, part_path), (), loaded)
     return tuple(loaded)
