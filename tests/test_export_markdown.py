@@ -2478,8 +2478,23 @@ def test_a_check_list_in_a_table_cell_leads_each_item_with_its_box_as_text() -> 
         pytest.param(render_notion, '<span color="yellow_bg">x</span>\n', id="notion-writes-it"),
         pytest.param(
             render_adf,
-            "a Jira description does not show a text highlight; the export check should have refused it",
-            id="adf-refuses-it",
+            {
+                "version": 1,
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "x",
+                                "marks": [{"type": "backgroundColor", "attrs": {"color": "#FFFAE6"}}],
+                            }
+                        ],
+                    }
+                ],
+            },
+            id="adf-writes-it",
         ),
         pytest.param(
             render_slack,
@@ -2489,7 +2504,7 @@ def test_a_check_list_in_a_table_cell_leads_each_item_with_its_box_as_text() -> 
     ],
 )
 def test_the_other_writers_keep_their_own_answer_to_a_highlight_span(
-    write: Callable[[Sequence[Node]], object], outcome: str
+    write: Callable[[Sequence[Node]], object], outcome: object
 ) -> None:
     nodes = [Paragraph((Tinted(None, "warning", (Plain("x"),)),))]
 

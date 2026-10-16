@@ -786,7 +786,23 @@
         },
         {
           "type": "text",
-          "text": ", its recount is due Friday, and the "
+          "text": ", its recount is "
+        },
+        {
+          "type": "text",
+          "text": "due Friday",
+          "marks": [
+            {
+              "type": "backgroundColor",
+              "attrs": {
+                "color": "#FFFAE6"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", and the "
         },
         {
           "type": "text",
@@ -796,6 +812,12 @@
               "type": "textColor",
               "attrs": {
                 "color": "#6554C0"
+              }
+            },
+            {
+              "type": "backgroundColor",
+              "attrs": {
+                "color": "#B3D4FF"
               }
             }
           ]
@@ -1484,7 +1506,8 @@
       "type": "table",
       "attrs": {
         "isNumberColumnEnabled": false,
-        "layout": "default"
+        "layout": "center",
+        "width": 760
       },
       "content": [
         {
@@ -1492,6 +1515,11 @@
           "content": [
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1506,6 +1534,11 @@
             },
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1520,6 +1553,11 @@
             },
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1534,6 +1572,11 @@
             },
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1548,6 +1591,11 @@
             },
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1567,6 +1615,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1582,54 +1636,63 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             }
           ]
         },
@@ -1638,6 +1701,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1669,13 +1738,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1686,13 +1758,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1703,13 +1778,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1720,13 +1798,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1750,10 +1831,7 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             }
           ]
         },
@@ -1762,6 +1840,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#DEEBFF",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1779,13 +1863,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#DEEBFF"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1796,13 +1883,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#DEEBFF",
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1813,13 +1903,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#DEEBFF"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#DEEBFF",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1830,13 +1923,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#DEEBFF"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#DEEBFF",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1847,10 +1943,7 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#DEEBFF"
-              }
+              ]
             }
           ]
         },
@@ -1859,6 +1952,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1874,54 +1973,63 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             }
           ]
         },
@@ -1930,6 +2038,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1947,13 +2061,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1964,13 +2081,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1981,13 +2101,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -1998,13 +2121,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2028,10 +2154,7 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             }
           ]
         },
@@ -2040,6 +2163,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2055,54 +2184,63 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#F4F5F7",
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
                 }
-              ],
-              "attrs": {
-                "background": "#F4F5F7"
-              }
+              ]
             }
           ]
         },
@@ -2111,6 +2249,11 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2130,6 +2273,11 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  60
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
@@ -2138,6 +2286,11 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  76
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
@@ -2146,6 +2299,11 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
@@ -2154,6 +2312,11 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  208
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph"
@@ -2369,7 +2532,8 @@
       "type": "table",
       "attrs": {
         "isNumberColumnEnabled": false,
-        "layout": "default"
+        "layout": "center",
+        "width": 760
       },
       "content": [
         {
@@ -2377,6 +2541,11 @@
           "content": [
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  190
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2391,6 +2560,11 @@
             },
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2405,6 +2579,11 @@
             },
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2419,6 +2598,11 @@
             },
             {
               "type": "tableHeader",
+              "attrs": {
+                "colwidth": [
+                  380
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2438,6 +2622,11 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  190
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2452,6 +2641,11 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2466,6 +2660,12 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2476,13 +2676,15 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  380
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2502,6 +2704,11 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  190
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2516,6 +2723,11 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2530,6 +2742,12 @@
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFFAE6",
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2540,13 +2758,15 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFFAE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  380
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2566,6 +2786,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  190
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2576,13 +2802,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2593,13 +2822,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  95
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2610,13 +2842,16 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#FFEBE6",
+                "colwidth": [
+                  380
+                ]
+              },
               "content": [
                 {
                   "type": "paragraph",
@@ -2640,10 +2875,7 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#FFEBE6"
-              }
+              ]
             }
           ]
         }
@@ -3186,36 +3418,42 @@
       ]
     },
     {
-      "type": "bulletList",
+      "type": "decisionList",
+      "attrs": {
+        "localId": "skaldr-decision-list-8"
+      },
       "content": [
         {
-          "type": "listItem",
+          "type": "decisionItem",
+          "attrs": {
+            "localId": "skaldr-decision-9",
+            "state": "DECIDED"
+          },
           "content": [
             {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "☑️ De-duplicate on the pallet ID and keep the most recent scan."
-                }
-              ]
+              "type": "text",
+              "text": "De-duplicate on the pallet ID and keep the most recent scan."
             }
           ]
         },
         {
-          "type": "listItem",
+          "type": "decisionItem",
+          "attrs": {
+            "localId": "skaldr-decision-10",
+            "state": "DECIDED"
+          },
           "content": [
             {
-              "type": "paragraph",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "☑️ Hold the vendor line until a corrected ASN arrives."
-                }
-              ]
+              "type": "text",
+              "text": "Hold the vendor line until a corrected ASN arrives."
             }
           ]
-        },
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
         {
           "type": "listItem",
           "content": [
@@ -3841,7 +4079,8 @@
       "type": "table",
       "attrs": {
         "isNumberColumnEnabled": false,
-        "layout": "default"
+        "layout": "center",
+        "width": 760
       },
       "content": [
         {
@@ -3849,6 +4088,12 @@
           "content": [
             {
               "type": "tableCell",
+              "attrs": {
+                "background": "#EAE6FF",
+                "colwidth": [
+                  251
+                ]
+              },
               "content": [
                 {
                   "type": "bulletList",
@@ -3913,13 +4158,15 @@
                     }
                   ]
                 }
-              ],
-              "attrs": {
-                "background": "#EAE6FF"
-              }
+              ]
             },
             {
               "type": "tableCell",
+              "attrs": {
+                "colwidth": [
+                  509
+                ]
+              },
               "content": [
                 {
                   "type": "panel",
@@ -7531,13 +7778,13 @@
         {
           "type": "taskList",
           "attrs": {
-            "localId": "skaldr-task-list-8"
+            "localId": "skaldr-task-list-11"
           },
           "content": [
             {
               "type": "taskItem",
               "attrs": {
-                "localId": "skaldr-task-9",
+                "localId": "skaldr-task-12",
                 "state": "DONE"
               },
               "content": [
@@ -7563,7 +7810,7 @@
             {
               "type": "taskItem",
               "attrs": {
-                "localId": "skaldr-task-10",
+                "localId": "skaldr-task-13",
                 "state": "TODO"
               },
               "content": [
@@ -7576,7 +7823,7 @@
             {
               "type": "taskItem",
               "attrs": {
-                "localId": "skaldr-task-11",
+                "localId": "skaldr-task-14",
                 "state": "TODO"
               },
               "content": [

@@ -748,12 +748,31 @@ def test_a_table_in_a_toggle_is_allowed_and_in_a_nested_toggle_is_not() -> None:
     )
 
 
-def test_columns_are_written_one_after_another() -> None:
+def test_columns_are_a_one_row_table_with_a_cell_width_per_column() -> None:
     node = Columns(
         (GridColumn(50, (_para("left"),)), GridColumn(50, (_para("right"), Divider()))),
     )
 
-    assert _rendered(node) == _doc(_words("left"), _words("right"), {"type": "rule"})
+    assert _rendered(node) == _doc(
+        {
+            "type": "table",
+            "attrs": {"isNumberColumnEnabled": False, "layout": "center", "width": 760},
+            "content": [
+                _row(
+                    {
+                        "type": "tableCell",
+                        "content": [_words("left")],
+                        "attrs": {"colwidth": [380]},
+                    },
+                    {
+                        "type": "tableCell",
+                        "content": [_words("right"), {"type": "rule"}],
+                        "attrs": {"colwidth": [380]},
+                    },
+                )
+            ],
+        }
+    )
 
 
 def test_a_table_in_a_column_is_an_ordinary_table_after_the_columns_before_it() -> None:
@@ -959,7 +978,7 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Divider: "rule",
     Media: "paragraph",
     Toggle: "expand",
-    Columns: "paragraph",
+    Columns: "table",
     Tabs: "expand",
     Diagram: "table",
     FactStrip: "table",

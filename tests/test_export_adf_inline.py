@@ -59,6 +59,7 @@ CODE = {"type": "code"}
 SUPERSCRIPT = {"type": "subsup", "attrs": {"type": "sup"}}
 UNDERLINE = {"type": "underline"}
 STRIKE = {"type": "strike"}
+TEXT_COLOR_DANGER = {"type": "textColor", "attrs": {"color": "#DE350B"}}
 
 
 def _link(href: str) -> dict[str, object]:
@@ -139,16 +140,51 @@ def test_a_tinted_run_becomes_a_text_colour() -> None:
     assert _written(runs) == [_text("x", {"type": "textColor", "attrs": {"color": "#DE350B"}})]
 
 
-@pytest.mark.parametrize(
-    "tone", [pytest.param(None, id="highlight-alone"), pytest.param("danger", id="colour-and-highlight")]
-)
-def test_a_highlight_is_an_invariant_the_check_backs(tone: ToneLiteral | None) -> None:
-    with pytest.raises(ExportInvariantError) as raised:
-        _written((Tinted(tone, "warning", (Plain("x"),)),))
+def _background(color: str) -> dict[str, object]:
+    return {"type": "backgroundColor", "attrs": {"color": color}}
 
-    assert str(raised.value) == (
-        "a Jira description does not show a text highlight; the export check should have refused it"
-    )
+
+@pytest.mark.parametrize(
+    ("tone", "color"),
+    [
+        ("neutral", "#F4F5F7"),
+        ("muted", "#F4F5F7"),
+        ("info", "#DEEBFF"),
+        ("success", "#E3FCEF"),
+        ("warning", "#FFFAE6"),
+        ("danger", "#FFEBE6"),
+        ("accent", "#EAE6FF"),
+        ("teal", "#E6FCFF"),
+        ("sky", "#B3D4FF"),
+    ],
+)
+def test_a_highlight_becomes_a_background_colour_mark_of_its_tone(tone: ToneLiteral, color: str) -> None:
+    assert _written((Tinted(None, tone, (Plain("x"),)),)) == [_text("x", _background(color))]
+
+
+def test_a_colour_and_a_highlight_together_carry_both_marks() -> None:
+    runs = (Tinted("danger", "sky", (Plain("x"),)),)
+
+    assert _written(runs) == [_text("x", TEXT_COLOR_DANGER, _background("#B3D4FF"))]
+
+
+def test_a_highlight_keeps_the_bold_and_the_link_around_it_in_a_fixed_order() -> None:
+    runs = (Styled("bold", (Link((Tinted(None, "warning", (Plain("x"),)),), "https://example.com/x"),)),)
+
+    assert _written(runs) == [_text("x", _link("https://example.com/x"), STRONG, _background("#FFFAE6"))]
+
+
+def test_a_colour_inside_a_highlight_carries_both_marks() -> None:
+    runs = (Tinted(None, "sky", (Plain("a "), Tinted("danger", None, (Plain("b"),)))),)
+
+    assert _written(runs) == [
+        _text("a ", _background("#B3D4FF")),
+        _text("b", TEXT_COLOR_DANGER, _background("#B3D4FF")),
+    ]
+
+
+def test_a_highlight_drops_off_inline_code_like_a_colour_does() -> None:
+    assert _written((Tinted(None, "warning", (Code("x"),)),)) == [_text("x", CODE)]
 
 
 @pytest.mark.parametrize(("position", "kind"), [("subscript", "sub"), ("superscript", "sup")])
@@ -185,8 +221,14 @@ def test_a_citation_without_a_url_is_its_number_as_a_superscript() -> None:
     assert _written((Citation("k", 3),)) == [_text("[3]", SUPERSCRIPT)]
 
 
-def test_a_placeholder_is_code() -> None:
-    assert _written((Placeholder("who"),)) == [_text("{{who}}", CODE)]
+def test_a_placeholder_is_its_braces_on_a_yellow_background() -> None:
+    assert _written((Placeholder("who"),)) == [_text("{{who}}", _background("#FFFAE6"))]
+
+
+def test_a_placeholder_inside_a_highlight_keeps_its_own_yellow() -> None:
+    runs = (Tinted(None, "sky", (Placeholder("who"),)),)
+
+    assert _written(runs) == [_text("{{who}}", _background("#FFFAE6"))]
 
 
 def test_inline_math_is_code() -> None:

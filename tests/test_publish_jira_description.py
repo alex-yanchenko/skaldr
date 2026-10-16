@@ -1,10 +1,23 @@
+import json
 import re
 
 import pytest
 from pydantic import JsonValue
 
 from skaldr.errors import ConnectorError
-from skaldr.export.adf import compact_adf_length
+from skaldr.export.adf import compact_adf_length, render_adf
+from skaldr.export.inline import plain
+from skaldr.export.runs import DecisionMark
+from skaldr.export.tree import (
+    ListEntry,
+    ListNode,
+    Node,
+    Paragraph,
+    TableCell,
+    TableColumn,
+    TableNode,
+    TableRow,
+)
 from skaldr.publish.jira.description import (
     UNKEYED_SECTION,
     Layout,
@@ -19,6 +32,7 @@ from skaldr.publish.jira.description import (
     section_text,
     split_description,
 )
+from skaldr.richtext import Plain, Tinted
 
 
 def _words(text: str) -> JsonValue:
@@ -118,7 +132,7 @@ def test_the_comparable_form_drops_what_jira_adds_or_reorders_and_keeps_the_rest
     }
 
 
-def test_the_comparable_form_drops_default_attributes_and_keeps_widths_skaldr_never_writes() -> None:
+def test_the_comparable_form_drops_default_attributes_and_keeps_table_and_column_widths() -> None:
     cell: JsonValue = {"type": "tableCell", "content": [_words("Shed")]}
     saved: JsonValue = [
         {
@@ -151,6 +165,86 @@ def test_the_comparable_form_drops_default_attributes_and_keeps_widths_skaldr_ne
         {"type": "orderedList", "attrs": {"order": 4}},
         {"type": "tableCell", "attrs": {"colspan": 2}},
     ]
+
+
+def _written_by_skaldr() -> list[JsonValue]:
+    nodes: tuple[Node, ...] = (
+        TableNode(
+            (TableCell(plain("A")), TableCell(plain("B"))),
+            (TableRow((TableCell(plain("1")), TableCell(plain("2")))),),
+            columns=(TableColumn(share=0.25), TableColumn(share=0.75)),
+        ),
+        ListNode("bullet", (ListEntry((DecisionMark(True), Plain(" "), Plain("Ship Friday"))),)),
+        Paragraph((Tinted("danger", "sky", (Plain("marked"),)),)),
+    )
+    return json.loads(json.dumps(render_adf(nodes)["content"]))
+
+
+ATTRS_JIRA_ADDS: dict[str, dict[str, JsonValue]] = {
+    "table": {"displayMode": "default", "localId": "jira-table-id"},
+    "decisionList": {"localId": "jira-decision-list-id"},
+    "decisionItem": {"localId": "jira-decision-id"},
+}
+
+
+def _as_jira_saves(node: JsonValue) -> JsonValue:
+    if isinstance(node, list):
+        return [_as_jira_saves(member) for member in node]
+    if not isinstance(node, dict):
+        return node
+    saved = {name: _as_jira_saves(value) for name, value in node.items()}
+    kind = node.get("type")
+    adds = ATTRS_JIRA_ADDS.get(kind) if isinstance(kind, str) else None
+    if adds is None:
+        return saved
+    attrs = node.get("attrs")
+    return {**saved, "attrs": {**(attrs if isinstance(attrs, dict) else {}), **adds}}
+
+
+def test_a_sized_table_a_decision_list_and_a_background_colour_survive_the_description_comparison() -> None:
+    written = _written_by_skaldr()
+    marks = [
+        {"type": "backgroundColor", "attrs": {"color": "#B3D4FF"}},
+        {"type": "textColor", "attrs": {"color": "#DE350B"}},
+    ]
+
+    assert (
+        comparable_node(_as_jira_saves(written))
+        == comparable_node(written)
+        == [
+            {
+                "type": "table",
+                "attrs": {"width": 760},
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {"type": "tableHeader", "attrs": {"colwidth": [190]}, "content": [_words("A")]},
+                            {"type": "tableHeader", "attrs": {"colwidth": [570]}, "content": [_words("B")]},
+                        ],
+                    },
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {"type": "tableCell", "attrs": {"colwidth": [190]}, "content": [_words("1")]},
+                            {"type": "tableCell", "attrs": {"colwidth": [570]}, "content": [_words("2")]},
+                        ],
+                    },
+                ],
+            },
+            {
+                "type": "decisionList",
+                "content": [
+                    {
+                        "type": "decisionItem",
+                        "attrs": {"state": "DECIDED"},
+                        "content": [{"type": "text", "text": "Ship Friday"}],
+                    }
+                ],
+            },
+            {"type": "paragraph", "content": [{"type": "text", "text": "marked", "marks": marks}]},
+        ]
+    )
 
 
 def test_a_mention_compares_by_its_account_id_alone_whatever_name_and_access_jira_saves_with_it() -> None:

@@ -48,6 +48,15 @@ class AdfTextColor(TypedDict):
     attrs: AdfTextColorAttrs
 
 
+class AdfBackgroundColorAttrs(TypedDict):
+    color: str
+
+
+class AdfBackgroundColor(TypedDict):
+    type: Literal["backgroundColor"]
+    attrs: AdfBackgroundColorAttrs
+
+
 class AdfSubsupAttrs(TypedDict):
     type: SubsupKind
 
@@ -57,7 +66,17 @@ class AdfSubsup(TypedDict):
     attrs: AdfSubsupAttrs
 
 
-AdfMark = AdfStrong | AdfEm | AdfUnderline | AdfStrike | AdfCode | AdfLink | AdfTextColor | AdfSubsup
+AdfMark = (
+    AdfStrong
+    | AdfEm
+    | AdfUnderline
+    | AdfStrike
+    | AdfCode
+    | AdfLink
+    | AdfTextColor
+    | AdfBackgroundColor
+    | AdfSubsup
+)
 
 
 class AdfText(TypedDict):
@@ -167,6 +186,27 @@ class AdfTaskList(TypedDict):
     content: "list[AdfTaskItem | AdfTaskList]"
 
 
+class AdfDecisionItemAttrs(TypedDict):
+    localId: str
+    state: Literal["DECIDED"]
+
+
+class AdfDecisionItem(TypedDict):
+    type: Literal["decisionItem"]
+    attrs: AdfDecisionItemAttrs
+    content: NotRequired[list[AdfInline]]
+
+
+class AdfDecisionListAttrs(TypedDict):
+    localId: str
+
+
+class AdfDecisionList(TypedDict):
+    type: Literal["decisionList"]
+    attrs: AdfDecisionListAttrs
+    content: list[AdfDecisionItem]
+
+
 class AdfCodeBlockAttrs(TypedDict):
     language: str
 
@@ -197,7 +237,8 @@ class AdfPanel(TypedDict):
 
 
 class AdfCellAttrs(TypedDict):
-    background: str
+    background: NotRequired[str]
+    colwidth: NotRequired[list[int]]
 
 
 class AdfTableCell(TypedDict):
@@ -219,7 +260,8 @@ class AdfTableRow(TypedDict):
 
 class AdfTableAttrs(TypedDict):
     isNumberColumnEnabled: bool
-    layout: Literal["default"]
+    layout: Literal["default", "center"]
+    width: NotRequired[int]
 
 
 class AdfTable(TypedDict):
@@ -269,6 +311,7 @@ AdfBlock = (
     | AdfBulletList
     | AdfOrderedList
     | AdfTaskList
+    | AdfDecisionList
     | AdfCodeBlock
     | AdfBlockquote
     | AdfRule

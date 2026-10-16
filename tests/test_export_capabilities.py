@@ -173,13 +173,8 @@ REJECTION_CELLS: set[tuple[Feature, ExportTarget]] = {
 }
 TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "colour span": {"markdown": "reject", "slack": "reject"},
-    "highlight span": {"adf": "reject", "slack": "reject"},
-    "colour and highlight span": {
-        "markdown": "reject",
-        "notion": "reject",
-        "adf": "reject",
-        "slack": "reject",
-    },
+    "highlight span": {"slack": "reject"},
+    "colour and highlight span": {"markdown": "reject", "notion": "reject", "slack": "reject"},
     "underline": {"slack": "reject"},
     "link to a heading of the same document": {"notion": "reject", "adf": "reject", "slack": "reject"},
     "link to another skaldr document": {"notion": "reject", "adf": "reject", "slack": "reject"},
