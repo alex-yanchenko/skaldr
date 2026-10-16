@@ -68,7 +68,7 @@ MARK_RANK: Final[Mapping[str, int]] = {
     "backgroundColor": 7,
     "code": 8,
 }
-PLACEHOLDER_HIGHLIGHT: Final[ToneName] = "warning"
+PLACEHOLDER_TONE: Final[ToneName] = "warning"
 STATUS_LOZENGE: Final[Mapping[StatusState, LozengeColor]] = {
     "done": "green",
     "current": "blue",
@@ -304,7 +304,7 @@ class AdfRuns:
         return with_mark(linked, _script_mark("superscript"))
 
     def placeholder(self, name: str, /) -> AdfInlines:
-        return with_mark((_plain_text("{{" + name + "}}"),), background_color_mark(PLACEHOLDER_HIGHLIGHT))
+        return with_mark((_plain_text("{{" + name + "}}"),), background_color_mark(PLACEHOLDER_TONE))
 
     def styled(self, style: StyleName, inner: AdfInlines, /) -> AdfInlines:
         return with_mark(inner, _style_mark(style))

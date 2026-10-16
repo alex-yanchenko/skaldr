@@ -52,7 +52,7 @@ from skaldr.export.adf.nodes import (
     AdfTaskListAttrs,
     AdfText,
 )
-from skaldr.export.apportion import apportioned
+from skaldr.export.apportion import apportioned, apportioned_at_least
 from skaldr.export.folds import LINK_CARD_SEPARATOR, folded
 from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, StatusMark, export_visible_text
@@ -130,6 +130,8 @@ GROUP_ROW_FALLBACK_TONE: Final[ToneName] = "neutral"
 PLAIN_GRID_COLUMN_LIMIT: Final = 3
 TABLE_WIDTH: Final = 760
 UNSHARED_COLUMN_MINIMUM_SHARE: Final = 0.1
+MINIMUM_COLUMN_WIDTH: Final = 60
+DECISION_MARK_SEPARATOR: Final = " "
 MOST_TOGGLE_LEVELS_IN_A_CELL: Final = 1
 COVER_LABEL: Final = "Cover image"
 WHEN_COLUMN: Final = "When"
@@ -227,6 +229,24 @@ def _table_cell(
     return cell
 
 
+def _sized_cell(cell: AdfTableCell | AdfTableHeader, width: int) -> AdfTableCell | AdfTableHeader:
+    background = cell.get("attrs", AdfCellAttrs()).get("background")
+    attrs = (
+        AdfCellAttrs(colwidth=[width])
+        if background is None
+        else AdfCellAttrs(background=background, colwidth=[width])
+    )
+    if cell["type"] == "tableHeader":
+        return AdfTableHeader(type="tableHeader", attrs=attrs, content=cell["content"])
+    return AdfTableCell(type="tableCell", attrs=attrs, content=cell["content"])
+
+
+def _sized_row(
+    row: Sequence[AdfTableCell | AdfTableHeader], widths: Sequence[int]
+) -> list[AdfTableCell | AdfTableHeader]:
+    return [_sized_cell(cell, width) for cell, width in zip(row, widths, strict=True)]
+
+
 def _table_of(
     rows: Sequence[Sequence[AdfTableCell | AdfTableHeader]], widths: Sequence[int] | None = None
 ) -> AdfTable:
@@ -234,11 +254,7 @@ def _table_of(
         attrs = AdfTableAttrs(isNumberColumnEnabled=False, layout="default")
     else:
         attrs = AdfTableAttrs(isNumberColumnEnabled=False, layout="center", width=TABLE_WIDTH)
-        for row in rows:
-            for table_cell, width in zip(row, widths, strict=True):
-                cell_attrs = table_cell.get("attrs", AdfCellAttrs())
-                cell_attrs["colwidth"] = [width]
-                table_cell["attrs"] = cell_attrs
+        rows = [_sized_row(row, widths) for row in rows]
     return AdfTable(
         type="table", attrs=attrs, content=[AdfTableRow(type="tableRow", content=list(row)) for row in rows]
     )
@@ -252,12 +268,20 @@ def _column_widths(columns: Sequence[TableColumn], column_count: int) -> list[in
         return None
     left_over = max(0.0, 1 - sum(share or 0 for share in shares))
     unshared_share = max(left_over / unshared, UNSHARED_COLUMN_MINIMUM_SHARE) if unshared else 0.0
-    return apportioned([unshared_share if share is None else share for share in shares], TABLE_WIDTH)
+    return _widths_over_the_table([unshared_share if share is None else share for share in shares])
+
+
+def _widths_over_the_table(weights: Sequence[float]) -> list[int]:
+    if len(weights) * MINIMUM_COLUMN_WIDTH > TABLE_WIDTH:
+        return apportioned([1] * len(weights), TABLE_WIDTH)
+    return apportioned_at_least(weights, TABLE_WIDTH, MINIMUM_COLUMN_WIDTH)
 
 
 def _decided_words(entry: ListEntry) -> ExportRich | None:
     match entry.text:
-        case (DecisionMark(decided=True), Plain(text=" "), *words) if not entry.children:
+        case (DecisionMark(decided=True), Plain(text=separator), *words) if (
+            separator == DECISION_MARK_SEPARATOR and not entry.children
+        ):
             return tuple(words)
         case _:
             return None
@@ -281,7 +305,8 @@ def _holds_a_table(nodes: Iterable[Node]) -> bool:
 
 def _toggle_levels(nodes: Iterable[Node]) -> int:
     return max(
-        (_toggle_levels(nested_nodes(node)) + isinstance(node, Toggle | Tabs) for node in nodes), default=0
+        (_toggle_levels(nested_nodes(node)) + int(isinstance(node, Toggle | Tabs)) for node in nodes),
+        default=0,
     )
 
 
@@ -462,7 +487,7 @@ class _AdfBlocks:
             if decided:
                 blocks.append(self.decision_list(list(entries)))
             else:
-                blocks.append(self.listed("bullet", [self.list_item(entry) for entry in entries], 1))
+                blocks.append(self.listed("bullet", [self.list_item(entry) for entry in entries]))
         return blocks
 
     def decision_list(self, entries: Sequence[ListEntry]) -> AdfDecisionList:
@@ -479,7 +504,7 @@ class _AdfBlocks:
             item["content"] = words
         return item
 
-    def listed(self, kind: Literal["bullet", "number"], items: list[AdfListItem], first: int) -> AdfBlock:
+    def listed(self, kind: Literal["bullet", "number"], items: list[AdfListItem], first: int = 1) -> AdfBlock:
         if kind == "bullet":
             return AdfBulletList(type="bulletList", content=items)
         if first == 1:
@@ -663,7 +688,7 @@ class _AdfBlocks:
         return cells
 
     def grid_table(self, node: Columns) -> AdfTable:
-        widths = apportioned([column.ratio for column in node.columns], TABLE_WIDTH)
+        widths = _widths_over_the_table([column.ratio for column in node.columns])
         return _table_of([[self.grid_cell(column) for column in node.columns]], widths)
 
     def grid_cell(self, column: GridColumn) -> AdfTableCell | AdfTableHeader:

@@ -8,7 +8,7 @@ from typing_extensions import assert_never
 
 from skaldr import compute
 from skaldr.errors import ExportInvariantError
-from skaldr.export.apportion import apportioned
+from skaldr.export.apportion import apportioned, apportioned_at_least
 from skaldr.export.budget import Budget, Cost, RenderedBlock
 from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
 from skaldr.export.folds import cell_text, folded, quote_lines
@@ -532,15 +532,7 @@ def _shares_with_the_rest_by_text(table: TableNode, shares: Sequence[float | Non
 
 
 def _readable_widths(weights: Sequence[float], width: int) -> list[int]:
-    floored: set[int] = set()
-    while True:
-        free = [index for index in range(len(weights)) if index not in floored]
-        shared = apportioned([weights[index] for index in free], width - NARROWEST_COLUMN_PX * len(floored))
-        too_narrow = {index for index, part in zip(free, shared, strict=True) if part < NARROWEST_COLUMN_PX}
-        if not too_narrow:
-            widths = dict.fromkeys(floored, NARROWEST_COLUMN_PX) | dict(zip(free, shared, strict=True))
-            return [widths[index] for index in range(len(weights))]
-        floored |= too_narrow
+    return apportioned_at_least(weights, width, NARROWEST_COLUMN_PX)
 
 
 def _width_attribute(width: int | None) -> str:

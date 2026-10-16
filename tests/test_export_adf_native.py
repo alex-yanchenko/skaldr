@@ -28,10 +28,12 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    Tab,
     TableCell,
     TableColumn,
     TableNode,
     TableRow,
+    Tabs,
     Timeline,
     TimelineEvent,
     Toggle,
@@ -617,6 +619,39 @@ def test_a_grid_of_three_plain_cells_holding_a_toggle_in_a_toggle_stays_its_cell
     )
 
 
+def test_a_grid_of_three_plain_cells_holding_tabs_is_a_table_with_the_tab_as_a_nested_expand() -> None:
+    node = _three_cells_ending_in(Tabs((Tab(plain("One"), (para("x"),)),)))
+
+    assert _rendered(node) == _doc(
+        _sized_table(
+            _row(
+                _body("c0", colwidth=251),
+                _body("c1", colwidth=251),
+                _cell(
+                    "tableCell",
+                    {"type": "nestedExpand", "attrs": {"title": "One"}, "content": [_words("x")]},
+                    colwidth=258,
+                ),
+            )
+        )
+    )
+
+
+def test_a_grid_of_three_plain_cells_holding_tabs_of_toggles_stays_its_cells_one_after_another() -> None:
+    inner = Toggle(plain("Inner"), None, (para("x"),))
+    node = _three_cells_ending_in(Tabs((Tab(plain("One"), (inner,)),)))
+
+    assert _rendered(node) == _doc(
+        _words("c0"),
+        _words("c1"),
+        {
+            "type": "expand",
+            "attrs": {"title": "One"},
+            "content": [{"type": "nestedExpand", "attrs": {"title": "Inner"}, "content": [_words("x")]}],
+        },
+    )
+
+
 def test_a_grid_of_three_plain_cells_holding_a_chart_stays_its_cells_one_after_another() -> None:
     node = _three_cells_ending_in(pie_over_its_table())
 
@@ -899,6 +934,36 @@ def test_a_table_column_with_no_share_keeps_a_width_when_the_other_columns_ask_f
     assert _rendered(node) == _sized_columns(346, 69, 345)
 
 
+def test_a_light_column_beside_heavy_ones_keeps_the_minimum_width_and_the_total_stays_760() -> None:
+    shares = (1 / 37, *([6 / 37] * 7))
+    node = _table_with_columns(*(TableColumn(share=share) for share in shares))
+
+    assert _rendered(node) == _sized_columns(60, 100, 100, 100, 100, 100, 100, 100)
+
+
+def test_a_table_with_one_column_and_a_share_is_the_whole_table_width() -> None:
+    assert _rendered(_table_with_columns(TableColumn(share=0.3))) == _sized_columns(760)
+
+
+def test_a_table_of_more_columns_than_the_minimum_fits_splits_the_width_evenly() -> None:
+    node = _table_with_columns(*(TableColumn(share=1 / 14) for _ in range(14)))
+
+    assert _rendered(node) == _sized_columns(*([55] * 4 + [54] * 10))
+
+
+def test_a_table_of_eleven_columns_keeps_every_column_at_or_over_the_minimum() -> None:
+    shares = (0.01, *([0.099] * 10))
+    node = _table_with_columns(*(TableColumn(share=share) for share in shares))
+
+    assert _rendered(node) == _sized_columns(60, *([70] * 10))
+
+
+def test_a_column_with_no_share_gets_the_minimum_when_the_other_shares_add_up_past_one() -> None:
+    node = _table_with_columns(TableColumn(share=0.7), TableColumn(), TableColumn(share=0.7))
+
+    assert _rendered(node) == _sized_columns(350, 60, 350)
+
+
 def test_a_table_whose_columns_carry_only_tones_keeps_the_default_layout_and_no_widths() -> None:
     node = _table_with_columns(TableColumn("info"), TableColumn())
 
@@ -1075,6 +1140,26 @@ def test_a_decision_list_in_a_muted_row_is_struck_through_item_by_item() -> None
                 )
             ),
         )
+    )
+
+
+def test_a_decision_list_in_a_grid_cell_inside_an_expand_is_a_decision_list() -> None:
+    node = Toggle(plain("More"), None, (_three_cells_ending_in(SHIP_FRIDAY_LIST),), open=True)
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "expand",
+            "attrs": {"title": "More"},
+            "content": [
+                _sized_table(
+                    _row(
+                        _body("c0", colwidth=251),
+                        _body("c1", colwidth=251),
+                        _cell("tableCell", SHIP_FRIDAY_WRITTEN, colwidth=258),
+                    )
+                )
+            ],
+        }
     )
 
 
