@@ -1278,6 +1278,19 @@ blocks:                       # optional: an intro shown before the first part
 - A part cannot be an index itself, and `index` takes only `layout: one_page` for now. An index document cannot carry `publish` yet, and a part's own `publish` block is left out of the combined page; publish each part file on its own.
 - `part` is the block an index builds; it is not written by hand, and the build refuses one outside an index. To group content inside one file, use a `section` or a `heading`.
 
+## Reading one region: `outline` and `show`
+
+A large document does not have to be read whole. `skaldr outline FILE` prints one row per heading (at any level) and per section, in document order: its anchor (the same id the page and its table of contents use), its kind and level, whether the anchor is an author-set `id` (`set`) or derived from the text (`derived`), the first and last line of its region in FILE, and an approximate token count (characters / 4). The last line gives the file's total lines and approximate tokens. `--json` prints the same as `{file, lines, tokens, regions}`.
+
+```bash
+skaldr outline plan.yaml            # find the anchor and the size of each region
+skaldr show plan.yaml#risks         # print that region word for word
+```
+
+`skaldr show FILE#ANCHOR` prints the region's lines exactly as FILE holds them, comments and indentation included, and nothing else. A section's region is its own item. A heading's region runs up to the next heading in the same list at its level or above, so the blocks and sections after it belong to it; a heading inside a section, grid cell, tab or panel is measured within that list. An unknown anchor fails, naming the closest anchors.
+
+Content an `!include` brings in is outlined at its include point only: its rows show `-` for lines and tokens, and `show` refuses it, naming the include, so read the included file instead. An index document is refused; outline each part file.
+
 ## Where it publishes: `publish`
 
 An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages, Jira issues and Slack canvases. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. The block changes nothing about what a render or an export does; the `skaldr publish`, `skaldr diff` and `skaldr status` commands read it (see Publishing below). `skaldr auth` keeps one sign-in per Jira site, per Notion workspace and per Slack workspace (`skaldr auth status` lists them, `skaldr auth logout jira <site>`, `skaldr auth logout notion <workspace>` and `skaldr auth logout slack <workspace>` remove one), so a second site or workspace never replaces the first. `where` has a different shape for each service; the other keys mean the same thing everywhere.
