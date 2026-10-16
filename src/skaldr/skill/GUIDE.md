@@ -1289,7 +1289,7 @@ skaldr show plan.yaml#risks         # print that region word for word
 
 `skaldr show FILE#ANCHOR` prints the region's lines exactly as FILE holds them, comments and indentation included, and nothing else. A section's region is the section alone, from its first line to its last. A heading's region runs from the heading to the last line of the last block before the next heading in the same list at the same level or a shallower one, so the blocks and sections after it belong to it, and comments or blank lines just before that next heading belong to no region; a heading inside a section, grid cell, tab or panel is measured within that list. An unknown anchor fails; the error names the closest anchors when there are some, and otherwise points to `skaldr outline FILE`.
 
-Content an `!include` brings in is outlined at its include point only: its rows show `-` for lines and tokens, and `show` refuses it, naming the include, so read the included file instead. A block reached through a YAML alias, or written on the same line as another block (a one-line flow list), shows `-` too. An index document is refused; outline each part file.
+Content an `!include` brings in is outlined at its include point only: its rows show `-` for lines and tokens, and `show` refuses it, naming the include, so read the included file instead. A block reached through a YAML alias, or written on a line it shares with another block or with the list around it (a flow list such as `blocks: [{…}, {…}]`), shows `-` too. An index document is refused; outline each part file.
 
 ## Where it publishes: `publish`
 

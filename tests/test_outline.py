@@ -93,6 +93,22 @@ blocks: [
 ]
 """
 
+FLOW_ON_THE_KEY_LINE = """version: 1
+meta: {title: T}
+blocks: [{type: heading, text: A},
+  {type: text, body: x},
+  {type: heading, text: B}]
+"""
+
+TRAILING_COMMENTS = """version: 1
+meta: {title: T}
+blocks:
+  - type: heading  # opens the page
+    text: A  # the heading
+  - type: text
+    body: y  # the last value
+"""
+
 KEPT_BLANK_LINE = """version: 1
 meta: {title: T}
 blocks:
@@ -409,6 +425,30 @@ def test_blocks_written_on_one_flow_line_share_their_lines(
             "",
             f"error: {path}#b shares its lines with the block before it, so {path} holds none of its lines\n",
         ),
+    )
+
+
+def test_blocks_that_share_a_line_with_the_list_around_them_have_no_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path / "doc.yaml", FLOW_ON_THE_KEY_LINE)
+    reason = "shares its lines with the list around it"
+
+    assert _outlined(path, capsys)[1]["regions"] == [_region("a", "A", 2, None), _region("b", "B", 2, None)]
+    assert [_shown(f"{path}#{anchor}", capsys) for anchor in ("a", "b")] == [
+        (1, ("", f"error: {path}#{anchor} {reason}, so {path} holds none of its lines\n"))
+        for anchor in ("a", "b")
+    ]
+
+
+def test_comments_after_a_regions_first_and_last_values_stay_in_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path / "doc.yaml", TRAILING_COMMENTS)
+
+    assert _outlined(path, capsys) == (
+        0,
+        {"file": str(path), "lines": 7, "tokens": 36, "regions": [_region("a", "A", 2, (4, 7, 27))]},
     )
 
 

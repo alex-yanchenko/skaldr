@@ -24,6 +24,8 @@ from skaldr.models import (
 _YAML_LINE_BREAKS = "".join(map(chr, (0x0D, 0x0A, 0x85, 0x2028, 0x2029)))
 _YAML_LINE = re.compile(f".*?(?:\r\n|[{_YAML_LINE_BREAKS}])|.+\\Z", re.DOTALL)
 _BLOCK_SCALAR_HEADER = re.compile(r"[|>][1-9+-]*")
+_INDENTATION_AND_DASHES = re.compile(r"[ \t]*(?:-[ \t]+)*")
+_COMMA_OR_COMMENT = re.compile(r"[ \t]*,?[ \t]*(?:#.*)?")
 _INCLUDE_TAG = "!include"
 _NULL_TAG = "tag:yaml.org,2002:null"
 _CHARACTERS_PER_TOKEN = 4
@@ -39,6 +41,7 @@ class OutsideFile:
 _NOT_WRITTEN_IN_PLACE = OutsideFile("is not written in place (it comes through a YAML alias or merge key)")
 _SHARES_WITH_THE_NEXT_BLOCK = OutsideFile("shares its lines with the next block")
 _SHARES_WITH_THE_BLOCK_BEFORE = OutsideFile("shares its lines with the block before it")
+_SHARES_WITH_THE_LIST_AROUND = OutsideFile("shares its lines with the list around it")
 
 Origin = yaml.Node | OutsideFile
 
@@ -184,27 +187,51 @@ def _keeps_trailing_blank_lines(scalar: yaml.ScalarNode, source_lines: Sequence[
     return header is not None and "+" in header.group()
 
 
-def _scalar_last_line(scalar: yaml.ScalarNode, source_lines: Sequence[str]) -> int:
-    end, start = scalar.end_mark, scalar.start_mark.line
-    last = min(end.line - 1 if end.column == 0 and end.line > start else end.line, len(source_lines) - 1)
-    if scalar.style in ("|", ">") and not _keeps_trailing_blank_lines(scalar, source_lines):
+def _end_position(node: yaml.Node) -> tuple[int, int | None]:
+    end = node.end_mark
+    if end.column == 0 and end.line > node.start_mark.line:
+        return end.line - 1, None
+    return end.line, end.column
+
+
+def _block_scalar_last_line(scalar: yaml.ScalarNode, source_lines: Sequence[str]) -> int:
+    start = scalar.start_mark.line
+    last = min(_end_position(scalar)[0], len(source_lines) - 1)
+    if not _keeps_trailing_blank_lines(scalar, source_lines):
         while last > start and not source_lines[last].strip():
             last -= 1
     return last
 
 
-def _last_line(node: yaml.Node, source_lines: Sequence[str]) -> int:
+def _whole_line(line: int) -> tuple[int, int | None]:
+    return line, None
+
+
+def _last_position(node: yaml.Node, source_lines: Sequence[str]) -> tuple[int, int | None]:
     if isinstance(node, yaml.MappingNode) and node.value and not node.flow_style:
         key, value = node.value[-1]
-        written = not _is_blank_plain_scalar(value) and not _starts_before(value, key)
-        return _last_line(value if written else key, source_lines)
+        if _is_blank_plain_scalar(value) or _starts_before(value, key):
+            return _whole_line(_last_line(key, source_lines))
+        return _last_position(value, source_lines)
     if isinstance(node, yaml.SequenceNode) and node.value and not node.flow_style:
         written = [item for item in _written_in_place(node) if isinstance(item, yaml.Node)]
-        return _last_line(written[-1], source_lines) if written else node.start_mark.line
-    if isinstance(node, yaml.ScalarNode):
-        return _scalar_last_line(node, source_lines)
-    end = node.end_mark
-    return end.line - 1 if end.column == 0 and end.line > node.start_mark.line else end.line
+        return _last_position(written[-1], source_lines) if written else _whole_line(node.start_mark.line)
+    if isinstance(node, yaml.ScalarNode) and node.style in ("|", ">"):
+        return _whole_line(_block_scalar_last_line(node, source_lines))
+    return _end_position(node)
+
+
+def _last_line(node: yaml.Node, source_lines: Sequence[str]) -> int:
+    return _last_position(node, source_lines)[0]
+
+
+def _shares_a_line_with_the_list_around(
+    start: yaml.Mark, end: tuple[int, int | None], source_lines: Sequence[str]
+) -> bool:
+    before = source_lines[start.line][: start.column]
+    end_line, end_column = end
+    after = "" if end_column is None else source_lines[end_line][end_column:].rstrip(_YAML_LINE_BREAKS)
+    return not (_INDENTATION_AND_DASHES.fullmatch(before) and _COMMA_OR_COMMENT.fullmatch(after))
 
 
 def _closes_a_heading_of(level: int, block: AnyBlock) -> bool:
@@ -230,13 +257,16 @@ def _region_lines(
     start = origin.start_mark.line
     after = _first_sibling_after_region(block, placed)
     covered = [item for item in placed.items[placed.position : after] if isinstance(item, yaml.Node)]
-    end = _last_line(covered[-1], source_lines)
+    end_position = _last_position(covered[-1], source_lines)
+    end = end_position[0]
     before = placed.items[placed.position - 1] if placed.position else None
     if isinstance(before, yaml.Node) and _last_line(before, source_lines) >= start:
         return _SHARES_WITH_THE_BLOCK_BEFORE
     following = placed.items[after] if after < len(placed.items) else None
     if end < start or (isinstance(following, yaml.Node) and following.start_mark.line <= end):
         return _SHARES_WITH_THE_NEXT_BLOCK
+    if _shares_a_line_with_the_list_around(origin.start_mark, end_position, source_lines):
+        return _SHARES_WITH_THE_LIST_AROUND
     return start + 1, end + 1
 
 
