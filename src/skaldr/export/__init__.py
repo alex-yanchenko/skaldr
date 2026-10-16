@@ -45,6 +45,17 @@ ExportedPageName = Annotated[
 class ExportManifest(FrozenModel):
     title: str
     files: tuple[ExportedPageName, ...]
+    icon: str | None = None
+    cover: str | None = None
+
+
+@dataclass(frozen=True)
+class PageChrome:
+    icon: str | None = None
+    cover: str | None = None
+
+
+NO_PAGE_CHROME: Final = PageChrome()
 
 
 @dataclass(frozen=True)
@@ -60,6 +71,8 @@ class RenderedExport:
     title: str
     pages: Mapping[str, str]
     oversized_sections: tuple[str, ...] = ()
+    icon: str | None = None
+    cover: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,9 +91,9 @@ def _earlier_export(manifest_path: Path) -> _EarlierExport:
     return _EarlierExport(frozenset(manifest.files))
 
 
-def _write_manifest(out_dir: Path, title: str, names: Collection[str]) -> None:
-    manifest = ExportManifest(title=title, files=tuple(sorted(names)))
-    replace_file(out_dir / EXPORT_MANIFEST, manifest.model_dump_json(indent=2) + "\n")
+def _write_manifest(out_dir: Path, title: str, names: Collection[str], chrome: PageChrome) -> None:
+    manifest = ExportManifest(title=title, files=tuple(sorted(names)), icon=chrome.icon, cover=chrome.cover)
+    replace_file(out_dir / EXPORT_MANIFEST, manifest.model_dump_json(indent=2, exclude_none=True) + "\n")
 
 
 def _refusal(paths: Sequence[Path], what_they_are: str) -> ReportError:
@@ -114,7 +127,11 @@ def _refuse_to_overwrite_what_skaldr_did_not_write(
 
 
 def _export_pages(
-    out_dir: Path, title: str, pages: Mapping[str, str], oversized_sections: tuple[str, ...] = ()
+    out_dir: Path,
+    title: str,
+    pages: Mapping[str, str],
+    oversized_sections: tuple[str, ...] = (),
+    chrome: PageChrome = NO_PAGE_CHROME,
 ) -> ExportResult:
     out_dir.mkdir(parents=True, exist_ok=True)
     earlier = _earlier_export(out_dir / EXPORT_MANIFEST)
@@ -124,12 +141,12 @@ def _export_pages(
         path = out_dir / name
         replace_file(path, text)
         written.append(path)
-        _write_manifest(out_dir, title, earlier.pages | {page.name for page in written})
+        _write_manifest(out_dir, title, earlier.pages | {page.name for page in written}, chrome)
     for stale in sorted(earlier.pages - set(pages)):
         path = out_dir / stale
         if path.is_file():
             path.unlink()
-    _write_manifest(out_dir, title, pages)
+    _write_manifest(out_dir, title, pages, chrome)
     return ExportResult(title, tuple(written), oversized_sections, earlier.unreadable_manifest)
 
 
@@ -160,7 +177,9 @@ def render_export(report: Report, target: ExportTarget) -> RenderedExport:
     match target:
         case "notion":
             page = render_notion(document.body, report.meta.notion_width)
-            return RenderedExport(document.title, {MARKDOWN_PAGE_NAME: page})
+            return RenderedExport(
+                document.title, {MARKDOWN_PAGE_NAME: page}, icon=document.icon, cover=document.cover
+            )
         case "markdown":
             return RenderedExport(document.title, {MARKDOWN_PAGE_NAME: render_markdown_document(document)})
         case "adf":
@@ -172,7 +191,8 @@ def render_export(report: Report, target: ExportTarget) -> RenderedExport:
 
 
 def _write_rendered(out_dir: Path, rendered: RenderedExport) -> ExportResult:
-    return _export_pages(out_dir, rendered.title, rendered.pages, rendered.oversized_sections)
+    chrome = PageChrome(rendered.icon, rendered.cover)
+    return _export_pages(out_dir, rendered.title, rendered.pages, rendered.oversized_sections, chrome)
 
 
 def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
@@ -180,7 +200,10 @@ def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) ->
         return _write_rendered(out_dir, render_export(report, "notion"))
     document = _checked_document(report, "notion")
     split = chunk_notion(document.body, character_budget(chunk), report.meta.notion_width)
-    return _export_pages(out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections)
+    chrome = PageChrome(document.icon, document.cover)
+    return _export_pages(
+        out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections, chrome
+    )
 
 
 def export_markdown(report: Report, out_dir: Path) -> ExportResult:

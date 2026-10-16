@@ -44,6 +44,13 @@ WRITERS: Mapping[str, Write] = {
 }
 
 
+WRITTEN_NATIVELY_BY: Mapping[str, frozenset[str]] = {
+    writer: frozenset({"fact strip", "key-value list", "definition list", "cards"})
+    for writer in WRITERS
+    if writer.startswith("notion")
+}
+
+
 def _outcome(write: Write, nodes: Sequence[Node]) -> str:
     try:
         return write(nodes)
@@ -82,8 +89,11 @@ WRITTEN_AS_THE_FOLD: Final = [
     for writer in WRITERS
     for case in FOLD_CASES
     for context in FOLD_CONTEXTS
-    if writer != "adf"
-    or context in ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN.get(case, frozenset(FOLD_CONTEXTS))
+    if case not in WRITTEN_NATIVELY_BY.get(writer, frozenset())
+    and (
+        writer != "adf"
+        or context in ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN.get(case, frozenset(FOLD_CONTEXTS))
+    )
 ]
 
 

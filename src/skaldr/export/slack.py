@@ -73,6 +73,8 @@ COLUMN_OPEN: Final = "::: {.column}"
 MATH_LANGUAGE: Final = "latex"
 BULLET_MARKER: Final = "*"
 BULLET_INDENT: Final = len(BULLET_MARKER) + 1
+TEXT_BULLET_MARKER: Final = "• "
+TEXT_CHECK_MARKERS: Final = {False: "☐ ", True: "☑ "}
 LIST_SEPARATOR: Final = "&nbsp;"
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
@@ -298,6 +300,29 @@ def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
             assert_never(kind)
 
 
+def _text_marker(kind: ListKind, number: int, checked: bool) -> str:
+    match kind:
+        case "bullet":
+            return TEXT_BULLET_MARKER
+        case "number":
+            return f"{number}. "
+        case "check":
+            return TEXT_CHECK_MARKERS[checked]
+        case _:
+            assert_never(kind)
+
+
+def _kind_a_canvas_takes_under(parent_kind: ListKind | None, canvas_list: _List) -> ListKind:
+    if parent_kind is None or parent_kind == canvas_list.kind:
+        return canvas_list.kind
+    if parent_kind == "check":
+        raise ExportInvariantError(
+            f"a Slack canvas nests only check items under a check item, not a {canvas_list.kind} list; "
+            "a check list's nested items are check items, so the lowering should not have made one"
+        )
+    return parent_kind
+
+
 def _canvas_over_the_size_limit(size: int) -> ExportRejectedError:
     return ExportRejectedError(
         SLACK_TARGET,
@@ -338,13 +363,17 @@ class _CanvasWriter:
         text = self.paragraph_runs.write(paragraph.text)
         return [self.block_line(line) for line in text.split("\n")] if text else []
 
-    def list_lines(self, canvas_list: _List) -> list[str]:
+    def list_lines(self, canvas_list: _List, parent_kind: ListKind | None = None) -> list[str]:
+        kind = _kind_a_canvas_takes_under(parent_kind, canvas_list)
         lines: list[str] = []
         for number, item in enumerate(canvas_list.items, start=FIRST_LIST_NUMBER):
-            marker, indent = _list_marker(canvas_list.kind, number, item.checked)
-            lines.append(f"{marker} {self.block_text(item.text)}".rstrip())
+            marker, indent = _list_marker(kind, number, item.checked)
+            text = item.text
+            if kind != canvas_list.kind:
+                text = (Plain(_text_marker(canvas_list.kind, number, item.checked)), *text)
+            lines.append(f"{marker} {self.block_text(text)}".rstrip())
             if item.nested is not None:
-                lines += indent_lines(self.list_lines(item.nested), " " * indent)
+                lines += indent_lines(self.list_lines(item.nested, kind), " " * indent)
         return lines
 
     def table_lines(self, table: TableNode) -> list[str]:

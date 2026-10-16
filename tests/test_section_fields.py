@@ -289,7 +289,12 @@ def test_the_notion_markdown_lists_the_facts_under_the_section_heading() -> None
     blocks = fielded_report({"status": "In Progress", "estimate": 2.5})["blocks"]
 
     assert notion_of(blocks) == (
-        "## Widen the bin code\n- **Status**: In Progress\n- **Estimate**: 2.5\nx\n## Relabel the aisles\nx\n"
+        "## Widen the bin code\n"
+        "<columns>\n"
+        '\t<column ratio="50">\n\t\tStatus {color="gray"}\n\t\tIn Progress\n\t</column>\n'
+        '\t<column ratio="50">\n\t\tEstimate {color="gray"}\n\t\t2.5\n\t</column>\n'
+        "</columns>\n"
+        "x\n## Relabel the aisles\nx\n"
     )
 
 
@@ -430,10 +435,21 @@ def test_both_markdown_flavours_show_numbers_without_thousands_separators() -> N
     expected_facts = (
         "- **Estimate**: 1000\n- **year**: 2026\n- **points**: 1234.5\n- **whole**: 3\n- **tags**: 1500, x\n"
     )
+    expected_columns = (
+        "<columns>\n"
+        '\t<column ratio="34">\n\t\tEstimate {color="gray"}\n\t\t1000\n\t</column>\n'
+        '\t<column ratio="33">\n\t\tyear {color="gray"}\n\t\t2026\n\t</column>\n'
+        '\t<column ratio="33">\n\t\tpoints {color="gray"}\n\t\t1234.5\n\t</column>\n'
+        "</columns>\n"
+        "<columns>\n"
+        '\t<column ratio="50">\n\t\twhole {color="gray"}\n\t\t3\n\t</column>\n'
+        '\t<column ratio="50">\n\t\ttags {color="gray"}\n\t\t1500, x\n\t</column>\n'
+        "</columns>\n"
+    )
 
     assert (markdown_of(numbered_blocks()), notion_of(numbered_blocks())) == (
         f"## T\n\n{expected_facts}\nx\n",
-        f"## T\n{expected_facts}x\n",
+        f"## T\n{expected_columns}x\n",
     )
 
 
@@ -469,12 +485,16 @@ def test_hostile_field_values_are_escaped_in_notion_markdown() -> None:
 
     assert notion_of(blocks) == (
         "## T\n"
-        "- **Status**: \\{color\\=red\\}\n"
-        "- **Priority**: \\_\\_x\\_\\_\n"
-        "- **Assignee**: \\<script\\>\n"
-        "- **Labels**: \\[l\\](u), a\\|b\n"
-        "- **team**: \\*bold\\* \\`c\\`\n"
-        "- **tags**: x\\_y, 7\n"
+        "<columns>\n"
+        '\t<column ratio="34">\n\t\tStatus {color="gray"}\n\t\t\\{color\\=red\\}\n\t</column>\n'
+        '\t<column ratio="33">\n\t\tPriority {color="gray"}\n\t\t\\_\\_x\\_\\_\n\t</column>\n'
+        '\t<column ratio="33">\n\t\tAssignee {color="gray"}\n\t\t\\<script\\>\n\t</column>\n'
+        "</columns>\n"
+        "<columns>\n"
+        '\t<column ratio="34">\n\t\tLabels {color="gray"}\n\t\t\\[l\\](u), a\\|b\n\t</column>\n'
+        '\t<column ratio="33">\n\t\tteam {color="gray"}\n\t\t\\*bold\\* \\`c\\`\n\t</column>\n'
+        '\t<column ratio="33">\n\t\ttags {color="gray"}\n\t\tx\\_y, 7\n\t</column>\n'
+        "</columns>\n"
         "x\n"
     )
 

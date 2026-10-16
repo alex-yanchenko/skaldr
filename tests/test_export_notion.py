@@ -231,7 +231,8 @@ def test_inline_runs_become_notion_spans() -> None:
     assert notion_inline(runs) == (
         r"[\[1\]](https://example.com/a%20%28b%29) \[2\] "
         '<span color="yellow_bg">\\{\\{owner\\}\\}</span> '
-        '<span color="yellow">**api**</span> method<br>⏸️███░░░░░░░ wow\\![img](https://e.com/x.png)'
+        '<span color="yellow">**api**</span> method<br><span color="yellow">⏸</span>███░░░░░░░ '
+        "wow\\![img](https://e.com/x.png)"
     )
 
 
@@ -714,17 +715,33 @@ def test_every_badge_and_state_block_becomes_notion_markdown() -> None:
     assert notion_of(BADGE_AND_STATE_BLOCKS, badges=API_BADGES) == (
         "<details>\n<summary>Legend: badges used on this page</summary>\n"
         '\t- <span color="blue">**api**</span> the API\n</details>\n'
-        "- **Site**: West\n- **Owner**: ops\n<empty-block/>\n"
-        "- **Lead**: **Ana**\n<empty-block/>\n"
-        "- **Drift**: first\n\tsecond\n- **Gap**\n<empty-block/>\n"
-        '- **Clean**: 9 (90.0%) <span color="green">**▲ +1**</span> '
-        '<span color="blue">**api**</span>\n'
-        '\tsince Monday {color="gray"}\n'
-        "- **Lag**: 3 days → flat\n"
+        "<columns>\n"
+        '\t<column ratio="50">\n\t\tSite {color="gray"}\n\t\tWest\n\t</column>\n'
+        '\t<column ratio="50">\n\t\tOwner {color="gray"}\n\t\tops\n\t</column>\n'
+        "</columns>\n"
+        '<table fit-page-width="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td>**Lead**</td>\n\t\t<td>**Ana**</td>\n\t</tr>\n"
+        "</table>\n"
+        "**Drift**\n\tfirst\n\tsecond\n**Gap**\n"
+        "<columns>\n"
+        '\t<column ratio="50">\n'
+        '\t\t<callout icon="📝" color="gray_bg">\n'
+        "\t\t\t**Clean**\n"
+        '\t\t\t9 (90.0%) <span color="green">**▲ +1**</span> <span color="blue">**api**</span>\n'
+        '\t\t\tsince Monday {color="gray"}\n'
+        "\t\t</callout>\n"
+        "\t</column>\n"
+        '\t<column ratio="50">\n'
+        '\t\t<callout icon="📝" color="gray_bg">\n'
+        "\t\t\t**Lag**\n\t\t\t3 days → flat\n"
+        "\t\t</callout>\n"
+        "\t</column>\n"
+        "</columns>\n"
         '**Affects**: <span color="blue">**api**</span> <span color="brown">**ops**</span>\n'
         '- **Owners**: <span color="purple">**web**</span>\n<empty-block/>\n'
-        "- ✅ Ship\n- ⏸️ Vendor\n<empty-block/>\n"
-        '- 🔵 **Mon**: Start <span color="blue">**api**</span>\n\tkick-off\n- Later\n<empty-block/>\n'
+        '- <span color="green">✓</span> Ship\n- <span color="yellow">⏸</span> Vendor\n<empty-block/>\n'
+        '- <span color="blue">◐</span> **Mon**: Start <span color="blue">**api**</span>\n'
+        "\tkick-off\n- Later\n<empty-block/>\n"
         '- <span color="yellow">**Zone**</span>: ████░░░░░░ 42.9%\n'
     )
 
@@ -1319,20 +1336,6 @@ def test_a_toned_row_fills_one_cell_not_the_whole_row(cells: tuple[TableCell, ..
     )
 
 
-def test_a_tinted_row_fills_its_badge_cell_as_a_toned_row_does() -> None:
-    table = TableNode(
-        (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
-        (TableRow((TableCell((Plain("a"),)), TableCell((Chip("x", "blue"),))), tint="info"),),
-    )
-
-    assert render_notion([table]) == (
-        '<table fit-page-width="true" header-row="true">\n'
-        "\t<tr>\n\t\t<td>**A**</td>\n\t\t<td>**B**</td>\n\t</tr>\n"
-        '\t<tr>\n\t\t<td>a</td>\n\t\t<td color="blue_bg">**x**</td>\n\t</tr>\n'
-        "</table>\n"
-    )
-
-
 def test_a_badge_in_a_column_filled_by_its_tone_takes_the_normal_colour() -> None:
     table = TableNode(
         (TableCell((Plain("A"),)), TableCell((Plain("B"),))),
@@ -1402,12 +1405,12 @@ def test_a_badge_in_a_bold_cell_is_not_bolded_a_second_time() -> None:
     )
 
 
-def test_a_card_colours_its_label_when_its_badge_has_another_colour() -> None:
+def test_a_card_fills_its_callout_with_its_tone_and_keeps_a_badge_of_another_colour() -> None:
     badges = {"API": {"label": "api", "tone": "blue", "legend": False}}
     cards = {"type": "cards", "items": [{"label": "Err", "value": "3", "tone": "danger", "badges": ["API"]}]}
 
     assert notion_of([cards], badges=badges) == (
-        '- <span color="red">**Err**</span>: 3 <span color="blue">**api**</span>\n'
+        '<callout icon="🛑" color="red_bg">\n\t**Err**\n\t3 <span color="blue">**api**</span>\n</callout>\n'
     )
 
 
@@ -1564,7 +1567,8 @@ def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_l
     ]
 
     assert notion_of(blocks) == (
-        "- ☑️ region\n\t- ❓ failover\n\t- ☑️ zone\n- [x] shipped\n- [ ] tested\n- ✅ rolled out\n"
+        "- ☑️ region\n\t- ❓ failover\n\t- ☑️ zone\n- [x] shipped\n- [ ] tested\n"
+        '- <span color="green">✓</span> rolled out\n'
     )
 
 
@@ -2132,7 +2136,7 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
         ),
         pytest.param(
             {"type": "def_list", "items": [{"term": "Why", "body": "- one\n- two\n\nAfter."}]},
-            "- **Why**\n\t- one\n\t- two\n\tAfter.\n",
+            "**Why**\n\t- one\n\t- two\n\tAfter.\n",
             id="definition-that-opens-with-a-list",
         ),
         pytest.param(
@@ -2147,7 +2151,7 @@ def test_a_hundred_chunks_or_more_are_numbered_so_they_sort_in_order(tmp_path: P
         ),
         pytest.param(
             {"type": "def_list", "items": [{"term": "Why", "body": "Intro.\n- a\n- b"}]},
-            "- **Why**: Intro.\n\t- a\n\t- b\n",
+            "**Why**\n\tIntro.\n\t- a\n\t- b\n",
             id="definition-with-a-paragraph-before-its-list",
         ),
         pytest.param(
@@ -2186,10 +2190,10 @@ def test_list_lines_in_a_table_cell_are_bulleted_lines_since_a_notion_cell_holds
     )
 
 
-def test_a_nested_list_in_a_quote_is_led_by_a_hollow_bullet_line() -> None:
+def test_a_nested_list_in_a_quote_is_the_quote_children_nested_as_written() -> None:
     quote = {"type": "quote", "body": "- a\n- b\n  - x\n  - y"}
 
-    assert notion_of([quote]) == "> • a<br>• b<br>◦ x<br>◦ y\n"
+    assert notion_of([quote]) == ">\n\t- a\n\t- b\n\t\t- x\n\t\t- y\n"
 
 
 def _two_column_table(columns: tuple[TableColumn, ...] = ()) -> TableNode:

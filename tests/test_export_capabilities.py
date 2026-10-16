@@ -391,7 +391,7 @@ def test_every_other_target_exports_what_one_target_refuses_without_a_refusal(
             id="same-page-link-on-github",
         ),
         pytest.param(
-            LIST_IN_A_QUOTE, "notion", "> Count:<br>• aisles<br>• bins\n", id="list-in-a-quote-on-notion"
+            LIST_IN_A_QUOTE, "notion", "> Count:\n\t- aisles\n\t- bins\n", id="list-in-a-quote-on-notion"
         ),
     ],
 )
