@@ -772,7 +772,7 @@ def test_an_open_toggle_is_its_bold_title_over_its_content_rather_than_a_details
     assert notion_of([toggle]) == "**Raw counts**\nx\n"
 
 
-def test_authored_tabs_are_one_toggle_per_tab_led_by_the_icon_of_the_tab_tone() -> None:
+def test_authored_tabs_are_native_tabs_with_the_tone_icon() -> None:
     block = {
         "type": "tabs",
         "tabs": [
@@ -783,9 +783,11 @@ def test_authored_tabs_are_one_toggle_per_tab_led_by_the_icon_of_the_tab_tone() 
     }
 
     assert notion_of([block]) == (
-        "<details>\n<summary>⚠️ Floor</summary>\n\ta\n</details>\n"
-        "<details>\n<summary>System</summary>\n\tb\n</details>\n"
-        "<details>\n<summary>Vendor</summary>\n\t---\n</details>\n"
+        "<tabs>\n"
+        '\t<tab icon="⚠️">\n\t\tFloor\n\t\ta\n\t</tab>\n'
+        "\t<tab>\n\t\tSystem\n\t\tb\n\t</tab>\n"
+        "\t<tab>\n\t\tVendor\n\t\t---\n\t</tab>\n"
+        "</tabs>\n"
     )
 
 
@@ -921,7 +923,7 @@ def test_block_nodes_become_notion_blocks() -> None:
         "> said\n"
         "<details>\n<summary>Legend</summary>\n\tx\n</details>\n"
         '## Shut {toggle="true"}\n\ty\n'
-        "<details>\n<summary>plain</summary>\n\tz\n</details>\n"
+        "<tabs>\n\t<tab>\n\t\tplain\n\t\tz\n\t</tab>\n</tabs>\n"
         '```mermaid\nflowchart LR\n    s1["A"]\n```\ndetail\n'
     )
 
@@ -972,7 +974,7 @@ def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
     )
 
 
-def test_a_request_with_several_cases_is_one_toggle_per_case_led_by_its_status_icon() -> None:
+def test_a_request_with_several_cases_is_native_tabs_with_the_status_icon() -> None:
     cases = [
         {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
         {"label": "control", "tone": "info", "response": {"body": "none"}},
@@ -981,18 +983,20 @@ def test_a_request_with_several_cases_is_one_toggle_per_case_led_by_its_status_i
 
     assert notion_of([request]) == (
         "**Tier mappings on the partner API**\n"
-        "<details>\n"
-        "<summary>⚠️ finding</summary>\n"
-        "\t```bash\n\tlist-tiers\n\t```\n"
-        "\t**Recorded output**\n"
-        "\t```json\n\t[]\n\t```\n"
-        "</details>\n"
-        "<details>\n"
-        "<summary>💡 control</summary>\n"
-        "\t```bash\n\tlist-tiers\n\t```\n"
-        "\t**Recorded output**\n"
-        "\t```plain text\n\tnone\n\t```\n"
-        "</details>\n"
+        "<tabs>\n"
+        '\t<tab icon="⚠️">\n'
+        "\t\tfinding\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Recorded output**\n"
+        "\t\t```json\n\t\t[]\n\t\t```\n"
+        "\t</tab>\n"
+        '\t<tab icon="💡">\n'
+        "\t\tcontrol\n"
+        "\t\t```bash\n\t\tlist-tiers\n\t\t```\n"
+        "\t\t**Recorded output**\n"
+        "\t\t```plain text\n\t\tnone\n\t\t```\n"
+        "\t</tab>\n"
+        "</tabs>\n"
     )
 
 
@@ -1010,35 +1014,99 @@ def test_a_query_request_becomes_a_notion_code_block_in_its_language_labelled_wi
 
 
 @pytest.mark.parametrize(
-    ("tone", "summary"),
+    ("tone", "opening"),
     [
-        pytest.param("success", "✅ t", id="success"),
-        pytest.param("info", "💡 t", id="info"),
-        pytest.param("warning", "⚠️ t", id="warning"),
-        pytest.param("danger", "🛑 t", id="danger"),
-        pytest.param("neutral", "t", id="neutral-has-no-icon"),
-        pytest.param(None, "t", id="no-tone"),
+        pytest.param("success", '<tab icon="✅">', id="success"),
+        pytest.param("info", '<tab icon="💡">', id="info"),
+        pytest.param("warning", '<tab icon="⚠️">', id="warning"),
+        pytest.param("danger", '<tab icon="🛑">', id="danger"),
+        pytest.param("neutral", "<tab>", id="neutral-has-no-icon"),
+        pytest.param(None, "<tab>", id="no-tone"),
     ],
 )
-def test_a_tab_toggle_title_is_led_by_the_icon_of_its_tone(tone: ToneName | None, summary: str) -> None:
+def test_a_tab_icon_is_the_icon_of_its_tone(tone: ToneName | None, opening: str) -> None:
     tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),), tone),))
 
-    assert render_notion([tabs]) == f"<details>\n<summary>{summary}</summary>\n\tz\n</details>\n"
+    assert render_notion([tabs]) == f"<tabs>\n\t{opening}\n\t\tt\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+def test_a_tab_title_keeps_its_inline_styling_and_escapes_markup_characters() -> None:
+    tabs = Tabs((Tab((Styled("bold", (Plain("a < b"),)),), (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([tabs]) == "<tabs>\n\t<tab>\n\t\t**a \\< b**\n\t\tz\n\t</tab>\n</tabs>\n"
 
 
 @pytest.mark.parametrize(
-    ("tone", "summary"),
+    ("title", "written"),
     [
-        pytest.param("warning", "⚠️", id="icon-alone"),
-        pytest.param(None, "", id="nothing"),
+        pytest.param("- a", "\\- a", id="bullet"),
+        pytest.param("# a", "\\# a", id="heading"),
+        pytest.param("1. a", "1\\. a", id="number"),
+        pytest.param("> a", "\\> a", id="quote"),
     ],
 )
-def test_a_tab_toggle_without_a_title_is_titled_by_its_icon_alone_or_nothing(
-    tone: ToneName | None, summary: str
-) -> None:
-    tabs = Tabs((Tab((), (Paragraph((Plain("z"),)),), tone),))
+def test_a_tab_title_that_looks_like_a_block_start_is_escaped(title: str, written: str) -> None:
+    tabs = Tabs((Tab((Plain(title),), (Paragraph((Plain("z"),)),)),))
 
-    assert render_notion([tabs]) == f"<details>\n<summary>{summary}</summary>\n\tz\n</details>\n"
+    assert render_notion([tabs]) == f"<tabs>\n\t<tab>\n\t\t{written}\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+def test_a_tab_without_a_title_is_an_export_invariant_error() -> None:
+    tabs = Tabs((Tab((), (Paragraph((Plain("z"),)),)),))
+
+    with pytest.raises(ExportInvariantError) as raised:
+        render_notion([tabs])
+
+    assert str(raised.value) == (
+        "a Notion tab needs a title, since Notion reads the first line of a tab as its title; "
+        "the export check should have refused it"
+    )
+
+
+def test_a_tab_title_styled_beyond_bold_keeps_its_styling() -> None:
+    title = (Styled("italic", (Plain("a"),)), Plain(" "), Styled("underline", (Plain("b"),)))
+    tabs = Tabs((Tab(title, (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([tabs]) == f"<tabs>\n\t<tab>\n\t\t{notion_inline(title)}\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+def test_a_tab_nested_in_a_tab_nests_one_tab_stop_deeper() -> None:
+    inner = Tabs((Tab((Plain("in"),), (Paragraph((Plain("z"),)),)),))
+    outer = Tabs((Tab((Plain("out"),), (inner,)),))
+
+    assert render_notion([outer]) == (
+        "<tabs>\n\t<tab>\n\t\tout\n\t\t<tabs>\n\t\t\t<tab>\n\t\t\t\tin\n\t\t\t\tz\n\t\t\t</tab>\n\t\t</tabs>\n"
+        "\t</tab>\n</tabs>\n"
+    )
+
+
+def test_tabs_inside_a_callout_nest_inside_the_callout() -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([Callout("info", (tabs,))]) == (
+        '<callout icon="💡" color="blue_bg">\n\t<tabs>\n\t\t<tab>\n\t\t\tt\n\t\t\tz\n\t\t</tab>\n\t</tabs>\n'
+        "</callout>\n"
+    )
+
+
+def test_tabs_inside_a_column_nest_inside_the_column() -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),)),))
+    columns = Columns((GridColumn(1, (tabs,)),))
+
+    assert render_notion([columns]) == (
+        '<columns>\n\t<column ratio="1">\n'
+        "\t\t<tabs>\n\t\t\t<tab>\n\t\t\t\tt\n\t\t\t\tz\n\t\t\t</tab>\n\t\t</tabs>\n"
+        "\t</column>\n</columns>\n"
+    )
+
+
+def test_tabs_inside_a_toggle_nest_one_tab_stop_deeper_than_the_toggle_content() -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),)),))
+    toggle = Toggle((Plain("More"),), None, (tabs,))
+
+    assert render_notion([toggle]) == (
+        "<details>\n<summary>More</summary>\n\t<tabs>\n\t\t<tab>\n\t\t\tt\n\t\t\tz\n\t\t</tab>\n\t</tabs>\n</details>\n"
+    )
 
 
 def test_a_diagram_with_nothing_beside_it_is_its_fence_alone() -> None:

@@ -24,6 +24,7 @@ INDENTED_CODE = "- Steps\n\t```bash\n\trake --all\n\n\t# done\n\t```\n"
 MATH = "$$\nx^2\n- y\n$$\n"
 CALLOUT = '<callout icon="💡" color="blue_bg">\n\tWater daily.\n\t- Morning\n</callout>\n'
 TOGGLE = "<details>\n<summary>More</summary>\n\tHidden.\n</details>\n"
+TABS = '<tabs>\n\t<tab icon="💡">\n\t\tTools\n\t\tWater daily.\n\t</tab>\n</tabs>\n'
 COLUMNS = (
     '<columns>\n\t<column ratio="1">\n\t\tLeft.\n\t</column>\n'
     '\t<column ratio="1">\n\t\tRight.\n\t</column>\n</columns>\n'
@@ -45,6 +46,7 @@ COLUMNS = (
         pytest.param(MATH, 1, id="display-math"),
         pytest.param(CALLOUT, 3, id="callout-and-its-children"),
         pytest.param(TOGGLE, 2, id="toggle-without-its-summary"),
+        pytest.param(TABS, 3, id="tabs-and-a-tab-without-its-title"),
         pytest.param(COLUMNS, 5, id="column-list-columns-and-their-children"),
         pytest.param("<table_of_contents/>\n---\n", 2, id="self-closing-and-divider"),
     ],

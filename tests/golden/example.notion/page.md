@@ -567,21 +567,23 @@ pie
 		<td></td>
 	</tr>
 </table>
-<details>
-<summary>⚠️ Floor</summary>
-	- Re-label the Zone B bins the scanner misread.
-	- Recount Zone C by hand before sign-off.
-</details>
-<details>
-<summary>💡 System</summary>
-	Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.
-</details>
-<details>
-<summary>🛑 Vendor</summary>
-	<callout icon="🛑" color="red_bg">
-		Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
-	</callout>
-</details>
+<tabs>
+	<tab icon="⚠️">
+		Floor
+		- Re-label the Zone B bins the scanner misread.
+		- Recount Zone C by hand before sign-off.
+	</tab>
+	<tab icon="💡">
+		System
+		Widen the bin-code field to nine digits, then rescan the 500 truncated bins from the raw log.
+	</tab>
+	<tab icon="🛑">
+		Vendor
+		<callout icon="🛑" color="red_bg">
+			Overflow stays unreconciled until the vendor sends a corrected ASN for the short shipment.
+		</callout>
+	</tab>
+</tabs>
 ## Where the count comes from
 ```mermaid
 flowchart LR
@@ -619,116 +621,120 @@ The counts above come from the export, but a disputed bin is quicker to settle a
 - `{{warehouse}}` warehouse code: for example NW-04
 - `{{bin}}` bin: for example A-17-3
 - `{{token}}` API token: a secret, supply your own
-<details>
-<summary>✅ a bin that balances</summary>
-	```bash
-	curl -i -X GET \
-	  -H 'Authorization: Bearer {{token}}' \
-	  -H 'Accept: application/json' \
-	  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
-	```
-	**Recorded response**: 200 OK
-	```http
-	content-type: application/json
+<tabs>
+	<tab icon="✅">
+		a bin that balances
+		```bash
+		curl -i -X GET \
+		  -H 'Authorization: Bearer {{token}}' \
+		  -H 'Accept: application/json' \
+		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
+		```
+		**Recorded response**: 200 OK
+		```http
+		content-type: application/json
 
-	{
-	  "bin": "A-17-3",
-	  "expected": 48,
-	  "counted": 48,
-	  "lastCount": "2026-07-14T09:12:00Z"
-	}
-	```
-	<callout icon="✅" color="green_bg">
-		**Verdict**: Expected and counted agree, so the bin needs no recount.
-	</callout>
-</details>
-<details>
-<summary>✅ an overflow bin</summary>
-	```bash
-	curl -i -X GET \
-	  -H 'Authorization: Bearer {{token}}' \
-	  -H 'Accept: application/json' \
-	  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
-	```
-	**Recorded response**: 200 OK
-	```http
-	content-type: application/json
+		{
+		  "bin": "A-17-3",
+		  "expected": 48,
+		  "counted": 48,
+		  "lastCount": "2026-07-14T09:12:00Z"
+		}
+		```
+		<callout icon="✅" color="green_bg">
+			**Verdict**: Expected and counted agree, so the bin needs no recount.
+		</callout>
+	</tab>
+	<tab icon="✅">
+		an overflow bin
+		```bash
+		curl -i -X GET \
+		  -H 'Authorization: Bearer {{token}}' \
+		  -H 'Accept: application/json' \
+		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
+		```
+		**Recorded response**: 200 OK
+		```http
+		content-type: application/json
 
-	{
-	  "bin": "A-17-9",
-	  "expected": 120,
-	  "counted": 96,
-	  "overflow": true
-	}
-	```
-	<callout icon="✅" color="green_bg">
-		**Verdict**: A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.
-	</callout>
-</details>
-<details>
-<summary>⚠️ a bin the token cannot read</summary>
-	```bash
-	curl -i -X GET \
-	  -H 'Accept: application/json' \
-	  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
-	```
-	**Recorded response**: 401 Unauthorized
-	```http
-	content-type: application/json
+		{
+		  "bin": "A-17-9",
+		  "expected": 120,
+		  "counted": 96,
+		  "overflow": true
+		}
+		```
+		<callout icon="✅" color="green_bg">
+			**Verdict**: A 24-unit gap on a bin flagged `overflow: true`. These take the manual path rather than a rescan, because the fixed readers cannot see past bin 12.
+		</callout>
+	</tab>
+	<tab icon="⚠️">
+		a bin the token cannot read
+		```bash
+		curl -i -X GET \
+		  -H 'Accept: application/json' \
+		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins/{{bin}}'
+		```
+		**Recorded response**: 401 Unauthorized
+		```http
+		content-type: application/json
 
-	{
-	  "error": "missing_credentials",
-	  "message": "This endpoint requires a bearer token."
-	}
-	```
-	<callout icon="⚠️" color="yellow_bg">
-		**Verdict**: The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.
-	</callout>
-</details>
+		{
+		  "error": "missing_credentials",
+		  "message": "This endpoint requires a bearer token."
+		}
+		```
+		<callout icon="⚠️" color="yellow_bg">
+			**Verdict**: The same call with the authorization header removed, recorded so the shape of a refusal is recognisable when it turns up unexpectedly.
+		</callout>
+	</tab>
+</tabs>
 Overflow bins are the one place the export and the WMS disagree by design. The command below pulls every flagged bin with its gap already worked out. The team's secrets wrapper supplies the token, so there is nothing to fill in: copy it, run it, compare.
 **Every overflow bin in one warehouse**
-<details>
-<summary>⚠️ NW-04, the finding</summary>
-	```bash
-	vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
-	```
-	*The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.* {color="gray"}
-	**Recorded output**
-	```json
-	[
-	  {
-	    "bin": "A-17-9",
-	    "gap": 24
-	  },
-	  {
-	    "bin": "C-02-1",
-	    "gap": 2
-	  }
-	]
-	```
-	<callout icon="⚠️" color="yellow_bg">
-		**Verdict**: Two overflow bins short, 26 units between them, matching the manual-path queue.
-	</callout>
-</details>
-<details>
-<summary>✅ NW-02, the control</summary>
-	```bash
-	vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
-	```
-	*The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.* {color="gray"}
-	**Recorded output**
-	```json
-	[
-	  {
-	    "bin": "B-11-4",
-	    "gap": 0
-	  }
-	]
-	```
-	<callout icon="✅" color="green_bg">
-		**Verdict**: A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.
-	</callout>
-</details>
+<tabs>
+	<tab icon="⚠️">
+		NW-04, the finding
+		```bash
+		vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-04/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
+		```
+		*The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.* {color="gray"}
+		**Recorded output**
+		```json
+		[
+		  {
+		    "bin": "A-17-9",
+		    "gap": 24
+		  },
+		  {
+		    "bin": "C-02-1",
+		    "gap": 2
+		  }
+		]
+		```
+		<callout icon="⚠️" color="yellow_bg">
+			**Verdict**: Two overflow bins short, 26 units between them, matching the manual-path queue.
+		</callout>
+	</tab>
+	<tab icon="✅">
+		NW-02, the control
+		```bash
+		vault-run --env prod -- sh -c 'curl -s -H "Authorization: Bearer $WMS_TOKEN" "https://wms.example.com/v2/warehouses/NW-02/bins?overflow=true"' | jq -c 'map({bin, gap: (.expected - .counted)})'
+		```
+		*The `jq` computes the gap per bin, so a bin the export double-counted shows up as a negative number.* {color="gray"}
+		**Recorded output**
+		```json
+		[
+		  {
+		    "bin": "B-11-4",
+		    "gap": 0
+		  }
+		]
+		```
+		<callout icon="✅" color="green_bg">
+			**Verdict**: A warehouse with fixed readers past bin 12 balances, so the gap is the readers, not the export.
+		</callout>
+	</tab>
+</tabs>
 ## Reconciling a bin against the live system
 The bin lookup above assumes you already hold a token. Getting one is its own call, so the two together are the shape worth recording: exchange the key for a session token, then spend it.
 **Session token, then a bin lookup**
@@ -756,51 +762,53 @@ content-type: application/json
 	**Verdict**: Tokens last fifteen minutes, so a long recount needs this step again partway through.
 </callout>
 **Step 2 of 2: Read the bins that did not balance**
-<details>
-<summary>✅ with the token</summary>
-	```bash
-	curl -i -X GET \
-	  -H 'Authorization: Bearer {{session_token}}' \
-	  -H 'Accept: application/json' \
-	  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
-	```
-	**Recorded response**: 200 OK
-	```http
-	content-type: application/json
-	x-total-count: 3
+<tabs>
+	<tab icon="✅">
+		with the token
+		```bash
+		curl -i -X GET \
+		  -H 'Authorization: Bearer {{session_token}}' \
+		  -H 'Accept: application/json' \
+		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
+		```
+		**Recorded response**: 200 OK
+		```http
+		content-type: application/json
+		x-total-count: 3
 
-	{
-	  "bins": [
-	    { "bin": "A-17-9", "expected": 120, "counted": 96, "overflow": true },
-	    { "bin": "C-02-1", "expected": 30, "counted": 28 }
-	  ]
-	}
-	```
-	<callout icon="✅" color="green_bg">
-		**Verdict**: The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.
-	</callout>
-</details>
-<details>
-<summary>⚠️ once the token has expired</summary>
-	```bash
-	curl -i -X GET \
-	  -H 'Authorization: Bearer {{session_token}}' \
-	  -H 'Accept: application/json' \
-	  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
-	```
-	**Recorded response**: 401 Unauthorized
-	```http
-	content-type: application/json
+		{
+		  "bins": [
+		    { "bin": "A-17-9", "expected": 120, "counted": 96, "overflow": true },
+		    { "bin": "C-02-1", "expected": 30, "counted": 28 }
+		  ]
+		}
+		```
+		<callout icon="✅" color="green_bg">
+			**Verdict**: The same three bins the discrepancy table above accounts for, read straight from the system rather than from the export.
+		</callout>
+	</tab>
+	<tab icon="⚠️">
+		once the token has expired
+		```bash
+		curl -i -X GET \
+		  -H 'Authorization: Bearer {{session_token}}' \
+		  -H 'Accept: application/json' \
+		  'https://wms.example.com/v2/warehouses/{{warehouse}}/bins?status=variance'
+		```
+		**Recorded response**: 401 Unauthorized
+		```http
+		content-type: application/json
 
-	{
-	  "error": "token_expired",
-	  "message": "Start a new session."
-	}
-	```
-	<callout icon="⚠️" color="yellow_bg">
-		**Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
-	</callout>
-</details>
+		{
+		  "error": "token_expired",
+		  "message": "Start a new session."
+		}
+		```
+		<callout icon="⚠️" color="yellow_bg">
+			**Verdict**: Fifteen minutes after step 1. Worth recording beside the success, because a recount that runs long hits this rather than a data problem.
+		</callout>
+	</tab>
+</tabs>
 <callout icon="📝" color="gray_bg">
 	**Before the next count**
 	- [x] Confirm the `bin > 12` rule with the site lead
