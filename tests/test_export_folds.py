@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable, Mapping, Sequence
+from typing import Final
 
 import pytest
 
@@ -55,9 +56,38 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
     return list(feature_hits(report, LoweredDocument("Plan", (BlockRegion(0, tuple(nodes)),))))
 
 
-@pytest.mark.parametrize("context", FOLD_CONTEXTS)
-@pytest.mark.parametrize("case", FOLD_CASES)
-@pytest.mark.parametrize("writer", WRITERS)
+CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND: Final = frozenset(
+    {
+        "in a numbered list item",
+        "after a list item's nested list",
+        "in a callout",
+        "in a toggle in a toggle",
+    }
+)
+ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN: Final[Mapping[str, frozenset[str]]] = {
+    "fact strip": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "key-value list": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "definition list": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "cards": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "timeline": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "link card": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "link embed": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "open toggle": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "quote holding lists": frozenset(),
+    "table cell holding a list": frozenset(),
+    "long list cell beside a short cell": frozenset(),
+}
+WRITTEN_AS_THE_FOLD: Final = [
+    pytest.param(writer, case, context, id=f"{writer}-{case}-{context}")
+    for writer in WRITERS
+    for case in FOLD_CASES
+    for context in FOLD_CONTEXTS
+    if writer != "adf"
+    or context in ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN.get(case, frozenset(FOLD_CONTEXTS))
+]
+
+
+@pytest.mark.parametrize(("writer", "case", "context"), WRITTEN_AS_THE_FOLD)
 def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block_lowered_to_before(
     writer: str, case: str, context: str
 ) -> None:

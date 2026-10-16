@@ -755,14 +755,18 @@ def test_columns_are_written_one_after_another() -> None:
     assert _rendered(node) == _doc(_words("left"), _words("right"), {"type": "rule"})
 
 
-def test_a_table_in_a_column_is_an_ordinary_table_after_the_columns_before_it() -> None:
+def test_the_writer_refuses_a_table_in_a_column_as_an_invariant_since_a_cell_holds_no_table() -> None:
     table = TableNode((_cell("A"),), (TableRow((_cell("1"),)),))
     node = Columns((GridColumn(50, (_para("left"),)), GridColumn(50, (table,))))
 
-    assert _rendered(node) == _doc(
-        _words("left"),
-        _table(_row(_table_cell("tableHeader", "A")), _row(_table_cell("tableCell", "1"))),
-    )
+    with pytest.raises(
+        ExportInvariantError,
+        match=_exactly(
+            "ADF does not allow a table inside a cell, written from a TableNode; "
+            "the export check should have refused it"
+        ),
+    ):
+        render_adf((node,))
 
 
 def test_tabs_are_one_expand_per_tab_titled_with_the_icon_of_the_tab_tone() -> None:
@@ -891,31 +895,22 @@ API_LEGEND: Json = {
 
 
 @pytest.mark.parametrize(
-    ("tone", "label_marks"),
+    ("tone", "fill"),
     [
-        pytest.param("danger", [STRONG, {"type": "textColor", "attrs": {"color": "#DE350B"}}], id="other"),
-        pytest.param("info", [STRONG], id="same"),
+        pytest.param("danger", {"attrs": {"background": "#FFEBE6"}}, id="other"),
+        pytest.param("info", {}, id="same"),
     ],
 )
-def test_a_card_label_keeps_its_colour_unless_a_badge_of_the_same_tone_shows_it(
-    tone: str, label_marks: list[Json]
-) -> None:
+def test_a_card_column_keeps_its_fill_unless_a_badge_of_the_same_tone_shows_it(tone: str, fill: Json) -> None:
     card = {"label": "Err", "value": "3", "tone": tone, "badges": ["API"]}
+    lozenge = {"type": "status", "attrs": {"text": "api", "color": "blue"}}
 
     assert render_adf(lowered([{"type": "cards", "items": [card]}], badges=API_AND_RISK_BADGES)) == _doc(
         API_LEGEND,
-        {
-            "type": "bulletList",
-            "content": [
-                _item(
-                    _paragraph(
-                        _text("Err", *label_marks),
-                        _text(": 3 "),
-                        {"type": "status", "attrs": {"text": "api", "color": "blue"}},
-                    )
-                )
-            ],
-        },
+        _table(
+            _row({"type": "tableHeader", "content": [_words("Err")], **fill}),
+            _row({"type": "tableCell", "content": [_paragraph(_text("3 "), lozenge)], **fill}),
+        ),
     )
 
 
@@ -970,12 +965,12 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Columns: "paragraph",
     Tabs: "expand",
     Diagram: "table",
-    FactStrip: "bulletList",
-    KeyValueList: "bulletList",
-    DefinitionList: "bulletList",
-    Cards: "bulletList",
-    Timeline: "bulletList",
-    LinkCard: "blockquote",
+    FactStrip: "table",
+    KeyValueList: "table",
+    DefinitionList: "table",
+    Cards: "table",
+    Timeline: "table",
+    LinkCard: "blockCard",
 }
 NODES_WRITING_A_FIRST_BLOCK = {
     kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents

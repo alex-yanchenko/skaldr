@@ -286,6 +286,11 @@ _ADF_CANNOT_PLACE: Final = Rejection(
     "move the {held} out of the {holder_name}",
     names_the_heading=True,
 )
+_ADF_CANNOT_PLACE_IN_A_GRID_CELL: Final = Rejection(
+    "ADF cannot place a {held} inside a grid cell, since a table cell holds no table",
+    "move the {held} out of the grid",
+    names_the_heading=True,
+)
 _CANVAS_LIST_ITEM_WHY: Final = (
     "a Slack canvas list item holds only text and one nested list, so it cannot show {held}"
 )
@@ -529,7 +534,9 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
-    "table inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
+    "table inside a grid cell": _kept_except(
+        {"adf": _ADF_CANNOT_PLACE_IN_A_GRID_CELL, "slack": _CANVAS_COLUMN_CANNOT_HOLD}
+    ),
     "callout inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "divider inside a grid cell": _kept_except({"slack": _CANVAS_COLUMN_CANNOT_HOLD}),
     "toned grid cell": _kept_except(

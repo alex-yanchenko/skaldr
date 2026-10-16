@@ -92,7 +92,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "subscript or superscript with no Unicode form": {"slack": "reject"},
     "divider inside a callout": {"slack": "reject"},
     "grid with more than three cells": {"slack": "reject"},
-    "table inside a grid cell": {"slack": "reject"},
+    "table inside a grid cell": {"adf": "reject", "slack": "reject"},
     "callout inside a grid cell": {"slack": "reject"},
     "divider inside a grid cell": {"slack": "reject"},
     "toned grid cell": {"slack": "reject"},

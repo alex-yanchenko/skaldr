@@ -321,10 +321,32 @@ def test_a_generated_section_link_is_the_section_title_in_a_jira_description() -
 
     adf = json.loads(render_export(report, "adf").pages["page.adf.json"])
 
-    assert adf["content"][1]["content"][0]["content"][0]["content"] == [
-        {"type": "text", "text": "Blocks", "marks": [{"type": "strong"}]},
-        {"type": "text", "text": ": Relabel the aisles"},
-    ]
+    assert adf["content"][1] == {
+        "type": "table",
+        "attrs": {"isNumberColumnEnabled": False, "layout": "default"},
+        "content": [
+            {
+                "type": "tableRow",
+                "content": [
+                    {
+                        "type": "tableHeader",
+                        "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Blocks"}]}],
+                    }
+                ],
+            },
+            {
+                "type": "tableRow",
+                "content": [
+                    {
+                        "type": "tableCell",
+                        "content": [
+                            {"type": "paragraph", "content": [{"type": "text", "text": "Relabel the aisles"}]}
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
 
 
 def test_emit_json_carries_the_fields_with_the_date_as_text() -> None:
