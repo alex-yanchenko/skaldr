@@ -1,20 +1,24 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Final, Literal, NoReturn
+from typing import Final, Literal, NoReturn, TypeGuard
 
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import (
+    CANVAS_HEADING_LEVEL_LIMIT,
     CANVAS_LAYOUT_COLUMN_LIMIT,
     CANVAS_TABLE_CELL_LIMIT,
     FIRST_LIST_NUMBER,
     TARGET_SUBJECTS,
     in_unicode_script_form,
 )
-from skaldr.export.folds import folded, quote_lines
+from skaldr.export.folds import card_text, folded, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
+from skaldr.export.inline import bold, plain
+from skaldr.export.lower.context import spaced as spaced_runs
+from skaldr.export.lower.context import with_bold_label
 from skaldr.export.markup import (
     DIVIDER_LINE,
     ENTITY_LOOKALIKE,
@@ -33,15 +37,19 @@ from skaldr.export.markup import (
     styled,
     table_width,
 )
-from skaldr.export.runs import ExportRich
+from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
 from skaldr.export.tree import (
     Callout,
+    Card,
+    Cards,
     CodeBlock,
     Columns,
+    DefinitionList,
     Diagram,
     DisplayMath,
     Divider,
+    FactStrip,
     GenericNode,
     Heading,
     ListEntry,
@@ -52,19 +60,21 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    TableCell,
     TableNode,
     TableOfContents,
     Tabs,
     Toggle,
+    ToneName,
+    canvas_heading_shift,
 )
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import MEDIA_KIND_LABELS, Person
-from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
+from skaldr.richtext import Link, MarkerStyle, Plain, ScriptPosition
 from skaldr.typed_links import date_target_text
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
-DEEPEST_CANVAS_HEADING: Final = 3
 CANVAS_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~"})
 CANVAS_FENCE: Final = ":::"
 CALLOUT_OPEN: Final = "::: {.callout}"
@@ -78,7 +88,15 @@ TEXT_CHECK_MARKERS: Final = {False: "☐ ", True: "☑ "}
 LIST_SEPARATOR: Final = "&nbsp;"
 HARD_LINE_BREAK: Final = "\\\n"
 LINE_BREAK_ON_ONE_LINE: Final = " "
+CELL_BULLET_MARKER: Final = "- "
+CELL_TEXT_BULLET: Final = "• "
+CELL_TEXT_CHECK: Final = "☐ "
+CELL_LIST_INDENT: Final = "  "
+FACT_SEPARATOR: Final = " · "
+COVER_LINK_LABEL: Final = "Cover image"
 Place = Literal["top", "callout", "column"]
+OwnFormNode = FactStrip | DefinitionList | Cards
+CanvasNode = GenericNode | OwnFormNode
 
 
 class _SlackRuns(CommonMarkRuns):
@@ -258,7 +276,67 @@ def _canvas_tabs(node: Tabs, place: Place) -> list[_CanvasBlock]:
     ]
 
 
-def _canvas_block(node: GenericNode, place: Place) -> list[_CanvasBlock]:
+def _fact_strip_paragraph(strip: FactStrip) -> Paragraph:
+    facts = [with_bold_label(fact.label, fact.value) for fact in strip.facts]
+    return Paragraph(
+        spaced_runs([fact for fact in facts if fact], FACT_SEPARATOR), authored_at=strip.authored_at
+    )
+
+
+def _canvas_definitions(node: DefinitionList, place: Place) -> list[_CanvasBlock]:
+    return [
+        block
+        for definition in node.definitions
+        for block in (
+            Paragraph(bold(definition.term), authored_at=node.authored_at),
+            *_canvas_blocks(definition.body, place),
+        )
+    ]
+
+
+def _card_column(card: Card, path: str | None) -> tuple[_CanvasBlock, ...]:
+    note = (Paragraph(plain(card.note), "muted", authored_at=path),) if card.note else ()
+    return (Paragraph(card_text(card), authored_at=path), *note)
+
+
+def _canvas_cards(node: Cards) -> list[_CanvasBlock]:
+    blocks: list[_CanvasBlock] = []
+    for start in range(0, len(node.cards), CANVAS_LAYOUT_COLUMN_LIMIT):
+        row = node.cards[start : start + CANVAS_LAYOUT_COLUMN_LIMIT]
+        if len(row) == 1:
+            blocks.extend(_card_column(row[0], node.authored_at))
+        else:
+            blocks.append(_Layout(tuple(_card_column(card, node.authored_at) for card in row)))
+    return blocks
+
+
+def _written_in_its_own_form(node: Node, place: Place) -> TypeGuard[OwnFormNode]:
+    match node:
+        case FactStrip() | DefinitionList():
+            return True
+        case Cards():
+            return place == "top"
+        case _:
+            return False
+
+
+def _canvas_forms(node: Node, place: Place) -> tuple[CanvasNode, ...]:
+    return (node,) if _written_in_its_own_form(node, place) else folded([node])
+
+
+def _canvas_block(node: CanvasNode, place: Place) -> list[_CanvasBlock]:
+    match node:
+        case FactStrip():
+            return [_fact_strip_paragraph(node)]
+        case DefinitionList():
+            return _canvas_definitions(node, place)
+        case Cards():
+            return _canvas_cards(node)
+        case _:
+            return _canvas_generic_block(node, place)
+
+
+def _canvas_generic_block(node: GenericNode, place: Place) -> list[_CanvasBlock]:
     _require_the_place_can_hold(node, place)
     match node:
         case Heading() | Paragraph() | TableNode() | CodeBlock() | DisplayMath() | Media() | Quote():
@@ -284,7 +362,9 @@ def _canvas_block(node: GenericNode, place: Place) -> list[_CanvasBlock]:
 
 
 def _canvas_blocks(nodes: Sequence[Node], place: Place) -> list[_CanvasBlock]:
-    return [block for node in folded(nodes) for block in _canvas_block(node, place)]
+    return [
+        block for node in nodes for form in _canvas_forms(node, place) for block in _canvas_block(form, place)
+    ]
 
 
 def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
@@ -300,6 +380,28 @@ def _list_marker(kind: ListKind, number: int, checked: bool) -> tuple[str, int]:
             assert_never(kind)
 
 
+def _cell_marker(kind: ListKind, number: int) -> str:
+    match kind:
+        case "bullet" | "check":
+            return CELL_BULLET_MARKER
+        case "number":
+            return f"{number}. "
+        case _:
+            assert_never(kind)
+
+
+def _cell_text_marker(kind: ListKind, number: int) -> str:
+    match kind:
+        case "bullet":
+            return CELL_TEXT_BULLET
+        case "number":
+            return f"{number}\\. "
+        case "check":
+            return CELL_TEXT_CHECK
+        case _:
+            assert_never(kind)
+
+
 def _text_marker(kind: ListKind, number: int, checked: bool) -> str:
     match kind:
         case "bullet":
@@ -310,6 +412,27 @@ def _text_marker(kind: ListKind, number: int, checked: bool) -> str:
             return TEXT_CHECK_MARKERS[checked]
         case _:
             assert_never(kind)
+
+
+def _cell_lines(
+    nodes: Sequence[Node], depth: int, enclosing_kind: ListKind | None
+) -> Iterator[tuple[str, ExportRich]]:
+    for node in folded(nodes):
+        match node:
+            case Paragraph():
+                yield "", node.text
+            case ListNode():
+                kind = node.kind if enclosing_kind is None else enclosing_kind
+                for number, entry in enumerate(node.entries, start=node.start):
+                    marker = _cell_marker(kind, number)
+                    own = "" if kind == node.kind else _cell_text_marker(node.kind, number)
+                    yield f"{CELL_LIST_INDENT * depth}{marker}{own}", entry.text
+                    yield from _cell_lines(entry.children, depth + 1, kind)
+            case _:
+                raise ExportInvariantError(
+                    "a quote or a table cell holds only paragraphs and lists, "
+                    f"not a {type(node).__name__}; the lowering should not have put one there"
+                )
 
 
 def _kind_a_canvas_takes_under(parent_kind: ListKind | None, canvas_list: _List) -> ListKind:
@@ -344,7 +467,8 @@ def _with_lists_kept_apart(
 
 
 class _CanvasWriter:
-    def __init__(self) -> None:
+    def __init__(self, heading_shift: int) -> None:
+        self.heading_shift = heading_shift
         self.runs = _SlackRuns(LINE_BREAK_ON_ONE_LINE)
         self.paragraph_runs = _SlackRuns(HARD_LINE_BREAK)
         self.table_cell_runs = _SlackRuns(HTML_LINE_BREAK)
@@ -383,7 +507,26 @@ class _CanvasWriter:
                 f"a Slack canvas table holds at most {CANVAS_TABLE_CELL_LIMIT} cells, not {cells}; "
                 "the export check should have refused it"
             )
-        return pipe_table_lines(table, self.table_cell_runs)
+        return pipe_table_lines(table, self.table_cell_runs, self.list_cell)
+
+    def list_cell(self, cell: TableCell, tones: Sequence[ToneName]) -> str:
+        lines = [self.cell_line(prefix, text) for prefix, text in _cell_lines(cell.blocks, 0, None)]
+        text = HTML_LINE_BREAK.join(lines)
+        dots = self.table_cell_runs.write_toned(tones, ())
+        return f"{dots} {text}" if dots else text
+
+    def cell_line(self, prefix: str, text: ExportRich) -> str:
+        return prefix + self.table_cell_runs.write(text)
+
+    def heading_line(self, heading: Heading) -> str:
+        level = heading.level - self.heading_shift
+        if level > CANVAS_HEADING_LEVEL_LIMIT:
+            raise ExportInvariantError(
+                f"a Slack canvas holds headings down to level {CANVAS_HEADING_LEVEL_LIMIT}, "
+                f"so it has no form for '{export_visible_text(heading.text)}' at level {level}; "
+                "the export check should have refused it"
+            )
+        return heading_line(level, self.inline(heading.text))
 
     def title_lines(self, title: _Title) -> list[str]:
         text = self.inline(title.text)
@@ -423,7 +566,7 @@ class _CanvasWriter:
     def lines(self, block: _CanvasBlock) -> list[str]:
         match block:
             case Heading():
-                return [heading_line(min(block.level, DEEPEST_CANVAS_HEADING), self.inline(block.text))]
+                return [self.heading_line(block)]
             case Paragraph():
                 return self.paragraph_lines(block)
             case _Title():
@@ -467,7 +610,7 @@ def _with_a_list_separator_where_lists_meet(
 
 
 def render_slack_regions(document: LoweredDocument) -> tuple[str, ...]:
-    writer = _CanvasWriter()
+    writer = _CanvasWriter(canvas_heading_shift(document.body))
     texts: list[str] = []
     last_block: _CanvasBlock | None = None
     for region in document.regions:
@@ -478,9 +621,18 @@ def render_slack_regions(document: LoweredDocument) -> tuple[str, ...]:
     return tuple(texts)
 
 
+def canvas_title(document: LoweredDocument) -> str:
+    return f"{document.icon} {document.title}" if document.icon else document.title
+
+
+def render_slack_document(document: LoweredDocument) -> str:
+    cover = (Paragraph((Link(plain(COVER_LINK_LABEL), document.cover),)),) if document.cover else ()
+    return render_slack((*cover, *document.body))
+
+
 def render_slack(nodes: Sequence[Node]) -> str:
     blocks = _canvas_blocks(nodes, "top")
-    text = "\n".join(_CanvasWriter().blocks(blocks)) + "\n"
+    text = "\n".join(_CanvasWriter(canvas_heading_shift(nodes)).blocks(blocks)) + "\n"
     if len(text) > SLACK_CANVAS_CHARACTER_LIMIT:
         raise _canvas_over_the_size_limit(len(text))
     return text

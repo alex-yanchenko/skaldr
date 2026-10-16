@@ -47,6 +47,7 @@ GridCellFeature = Literal[
 GridCellsFeature = Literal["grid with more than three cells"]
 TonedCellFeature = Literal["toned grid cell"]
 GridInAGridCellFeature = Literal["grid inside a grid cell"]
+DeepHeadingFeature = Literal["heading deeper than a canvas holds"]
 DividerInAStepFeature = Literal["divider inside a walkthrough step"]
 PanesFeature = Literal["set of tabs", "request with several cases"]
 OccurrenceFeature = Literal[
@@ -79,6 +80,7 @@ Feature = Literal[
     GridCellsFeature,
     TonedCellFeature,
     GridInAGridCellFeature,
+    DeepHeadingFeature,
     DividerInAStepFeature,
     PanesFeature,
     OccurrenceFeature,
@@ -94,6 +96,7 @@ BACKTICK: Final = "`"
 CLOSING_TAG_OPENER: Final = "</"
 CANVAS_TABLE_CELL_LIMIT: Final = 300
 CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
+CANVAS_HEADING_LEVEL_LIMIT: Final = 3
 UNICODE_SCRIPT_FORMS: Final[Mapping[ScriptPosition, Mapping[int, int]]] = {
     "superscript": str.maketrans(
         "0123456789+-\N{MINUS SIGN}=()ABDEGHIJKLMNOPRTUVWabcdefghijklmnoprstuvwxyz",
@@ -229,6 +232,14 @@ class GridInAGridCell:
 
 
 @dataclass(frozen=True)
+class DeepHeading:
+    text: str
+    level: int
+    limit: int = CANVAS_HEADING_LEVEL_LIMIT
+    feature: DeepHeadingFeature = field(default="heading deeper than a canvas holds", init=False)
+
+
+@dataclass(frozen=True)
 class DividerInAStep:
     feature: DividerInAStepFeature = field(default="divider inside a walkthrough step", init=False)
 
@@ -261,6 +272,7 @@ Details = (
     | GridCells
     | TonedCell
     | GridInAGridCell
+    | DeepHeading
     | DividerInAStep
     | Panes
     | Occurrence
@@ -548,6 +560,15 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "a Slack canvas cannot show a grid's columns inside a grid cell",
                 "write the inner grid's cells as cells of the outer grid",
                 names_the_heading=True,
+            )
+        }
+    ),
+    "heading deeper than a canvas holds": _kept_except(
+        {
+            "slack": Rejection(
+                "a Slack canvas holds headings down to level {limit}, "
+                "so it cannot show the heading '{text}' at level {level}",
+                "write the heading as bold text, or export the document elsewhere",
             )
         }
     ),
