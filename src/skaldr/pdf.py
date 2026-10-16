@@ -16,6 +16,7 @@ import tempfile
 from pathlib import Path
 
 from skaldr.errors import ReportError
+from skaldr.replace_file import replace_bytes
 
 # A hang shouldn't wedge the CLI forever; a module constant so tests can shorten it.
 _TIMEOUT_SECONDS = 120
@@ -73,17 +74,17 @@ def html_to_pdf(html: str, pdf_path: Path, *, browser: str | None = None) -> Non
             "no Chrome/Chromium/Edge found to render a PDF. Install one, set SKALDR_BROWSER to its "
             "path, or drop --pdf and print the HTML from a browser."
         )
-    pdf_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="skaldr-pdf-") as tmp:
         work = Path(tmp)
         source = work / "page.html"
+        printed = work / "page.pdf"
         source.write_text(html, encoding="utf-8")
         command = [
             binary,
             "--headless",
             "--disable-gpu",
             "--no-pdf-header-footer",  # drop the browser's date/URL/page-number chrome
-            f"--print-to-pdf={pdf_path}",
+            f"--print-to-pdf={printed}",
             source.as_uri(),
         ]
         # start_new_session puts the browser in its own process group so a timeout can kill the
@@ -102,9 +103,10 @@ def html_to_pdf(html: str, pdf_path: Path, *, browser: str | None = None) -> Non
                 f"the browser timed out after {_TIMEOUT_SECONDS}s rendering the PDF ({binary})"
             ) from err
         returncode = process.returncode
-    if returncode != 0 or not pdf_path.exists():
-        detail = stderr.strip().splitlines()[-1] if stderr.strip() else "no output"
-        raise ReportError(f"the browser failed to produce a PDF (exit {returncode}): {detail}")
+        if returncode != 0 or not printed.exists():
+            detail = stderr.strip().splitlines()[-1] if stderr.strip() else "no output"
+            raise ReportError(f"the browser failed to produce a PDF (exit {returncode}): {detail}")
+        replace_bytes(pdf_path, printed.read_bytes())
 
 
 def _kill_process_group(process: "subprocess.Popen[str]") -> None:

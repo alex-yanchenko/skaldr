@@ -1,3 +1,4 @@
+import contextlib
 import errno
 import os
 import shutil
@@ -27,19 +28,51 @@ def _rewrite_in_place(path: Path) -> bool:
     return path.is_file() and path.stat().st_nlink > 1
 
 
-def replace_file(path: Path, text: str) -> None:
+def _write_in_place_restoring_on_failure(path: Path, encoded: bytes) -> None:
+    earlier = path.read_bytes() if path.is_file() else None
+    try:
+        path.write_bytes(encoded)
+    except OSError:
+        if earlier is not None:
+            with contextlib.suppress(OSError):
+                path.write_bytes(earlier)
+        raise
+
+
+def _write_and_flush(path: Path, encoded: bytes) -> None:
+    with path.open("wb") as staged_file:
+        staged_file.write(encoded)
+        staged_file.flush()
+        os.fsync(staged_file.fileno())
+
+
+def _flush_directory(directory: Path) -> None:
+    if os.name != "posix":
+        return
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def replace_bytes(path: Path, encoded: bytes) -> None:
     path = resolved_path(path)
     if path.is_dir():
         raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(path))
     _refuse_a_read_only_file(path)
-    encoded = text.encode("utf-8")
     path.parent.mkdir(parents=True, exist_ok=True)
     if _rewrite_in_place(path):
-        path.write_bytes(encoded)
+        _write_in_place_restoring_on_failure(path, encoded)
         return
     with tempfile.TemporaryDirectory(prefix=".skaldr-write-", dir=path.parent) as staging:
         staged = Path(staging) / path.name
-        staged.write_bytes(encoded)
+        _write_and_flush(staged, encoded)
         if path.is_file():
             shutil.copymode(path, staged)
         staged.replace(path)
+    _flush_directory(path.parent)
+
+
+def replace_file(path: Path, text: str) -> None:
+    replace_bytes(path, text.encode("utf-8"))

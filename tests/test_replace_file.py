@@ -207,3 +207,50 @@ def test_text_that_cannot_be_encoded_leaves_the_earlier_file_untouched(tmp_path:
         replace_file(path, "lone \ud800 surrogate")
 
     assert (path.read_text(encoding="utf-8"), sorted(tmp_path.iterdir())) == ("earlier page", [path])
+
+
+def test_a_hard_linked_file_keeps_its_earlier_bytes_when_the_disk_fills_partway(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = tmp_path / "first.html"
+    first.write_text("earlier page", encoding="utf-8")
+    second = tmp_path / "second.html"
+    os.link(first, second)
+    real_write_bytes = Path.write_bytes
+
+    def filling_disk(self: Path, data: bytes) -> int:
+        if data == b"new page":
+            real_write_bytes(self, b"new")
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC), str(self))
+        return real_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", filling_disk)
+
+    with pytest.raises(OSError) as raised:
+        replace_file(first, "new page")
+
+    assert (
+        raised.value.errno,
+        first.read_text(encoding="utf-8"),
+        second.read_text(encoding="utf-8"),
+    ) == (errno.ENOSPC, "earlier page", "earlier page")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="a folder is flushed only where POSIX opens one")
+def test_the_staged_file_and_its_folder_are_flushed_around_the_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "page.html"
+    events: list[str] = []
+    real_replace = Path.replace
+
+    def recording_replace(self: Path, target: Path) -> Path:
+        events.append("replace")
+        return real_replace(self, target)
+
+    monkeypatch.setattr("skaldr.replace_file.os.fsync", lambda _descriptor: events.append("fsync"))
+    monkeypatch.setattr(Path, "replace", recording_replace)
+
+    replace_file(path, "new page")
+
+    assert (events, path.read_text(encoding="utf-8")) == (["fsync", "replace", "fsync"], "new page")
