@@ -84,10 +84,12 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
 
 
 WRITTEN_IN_ITS_OWN_FORM: Mapping[str, frozenset[str]] = {
-    "slack": frozenset(
-        {"table cell holding a list", "long list cell beside a short cell", "link card", "link embed"}
-    ),
+    "slack": frozenset({"table cell holding a list", "long list cell beside a short cell"}),
 }
+CONTEXTS_WHERE_SLACK_WRITES_A_LINK_CARD_AS_A_BARE_URL: Final = frozenset(
+    {"alone", "after a bullet list", "before a bullet list", "in a toggle", "in a toggle in a toggle"}
+)
+CASES_SLACK_WRITES_AS_A_BARE_URL_AT_THE_TOP: Final = frozenset({"link card", "link embed"})
 CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND: Final = frozenset(
     {
         "in a numbered list item",
@@ -116,6 +118,11 @@ WRITTEN_AS_THE_FOLD: Final = [
     for context in FOLD_CONTEXTS
     if case not in WRITTEN_NATIVELY_BY.get(writer, frozenset())
     and case not in WRITTEN_IN_ITS_OWN_FORM.get(writer, frozenset())
+    and not (
+        writer == "slack"
+        and case in CASES_SLACK_WRITES_AS_A_BARE_URL_AT_THE_TOP
+        and context in CONTEXTS_WHERE_SLACK_WRITES_A_LINK_CARD_AS_A_BARE_URL
+    )
     and (
         writer != "adf"
         or context in ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN.get(case, frozenset(FOLD_CONTEXTS))

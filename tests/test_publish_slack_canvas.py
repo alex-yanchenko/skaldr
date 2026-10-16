@@ -102,7 +102,11 @@ def test_a_canvas_splits_into_the_blocks_slack_keeps_apart(markdown: str, blocks
         pytest.param(" ", "", id="list-separator-as-stored"),
         pytest.param("\xa0", "", id="no-break-space"),
         pytest.param("one\n \ntwo", "one\ntwo", id="space-line-inside-a-paragraph"),
-        pytest.param("plant :​seedling: now", "plant :​seedling: now", id="broken-shortcode-as-stored"),
+        pytest.param(
+            "plant :\N{ZERO WIDTH SPACE}seedling: now",
+            "plant :\N{ZERO WIDTH SPACE}seedling: now",
+            id="broken-shortcode-as-stored",
+        ),
         pytest.param("https://example.com/runbook", "https://example.com/runbook", id="bare-url-as-stored"),
         pytest.param(
             "```text\n- keep  \n![](@U0EXAMPLE1)\n```", "```text\n- keep  \n![](@U0EXAMPLE1)\n```", id="code"
