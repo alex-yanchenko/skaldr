@@ -12,6 +12,7 @@ from skaldr.compute import (
     Strip,
     StripLabel,
     anchor_slugs,
+    badge_legend_slot,
     command_for,
     first_table_index,
     fmt,
@@ -1091,6 +1092,19 @@ def test_first_table_index() -> None:
     report = parse_report(make_report(blocks=[{"type": "text", "body": "x"}, make_reconciled_table()]))
 
     assert first_table_index(report) == 1
+
+
+def test_the_badge_legend_slot_is_the_first_table_or_the_top_of_the_page() -> None:
+    table = make_reconciled_table()
+    text = {"type": "text", "body": "x"}
+    nested = {"type": "section", "title": "S", "blocks": [make_reconciled_table()]}
+
+    slots = [
+        badge_legend_slot(parse_report(make_report(blocks=blocks)))
+        for blocks in ([text, table], [table], [text, nested], [text])
+    ]
+
+    assert slots == [1, 0, 0, 0]
 
 
 def test_a_table_nested_in_a_section_leaves_the_legend_at_the_top() -> None:

@@ -74,6 +74,7 @@ __all__ = [
     "LinkCard",
     "Provenance",
     "anchor_slugs",
+    "badge_legend_slot",
     "col_sum",
     "favicon_href",
     "first_table_index",
@@ -216,6 +217,11 @@ def first_table_index(report: Report) -> int | None:
         if isinstance(block, Table):
             return index
     return None
+
+
+def badge_legend_slot(report: Report) -> int:
+    table_index = first_table_index(report)
+    return 0 if table_index is None else table_index
 
 
 BADGE_LEGEND_SUBJECT: Final = "badges used on this page"

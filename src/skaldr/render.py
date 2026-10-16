@@ -335,7 +335,7 @@ def _render(
         toc=compute.toc_entries(report, slugs),
         used_badges=compute.used_badges(report),
         footer=compute.provenance_footer(report),
-        first_table_index=compute.first_table_index(report),
+        badge_legend_slot=compute.badge_legend_slot(report),
         has_requests=any(iter_requests(report.blocks)),
         has_strips=bool(strips),
         source_block=source_block(embedded_source) if embedded_source else None,

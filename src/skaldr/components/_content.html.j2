@@ -7,9 +7,8 @@
 {{ m.cover_link(meta) }}
 {% endif %}
 {% if toc %}<nav class="toc">{% for slug, text in toc %}<a href="#{{ slug }}">{{ text }}</a>{% endfor %}</nav>{% endif %}
-{% if used_badges and first_table_index is none %}{{ m.legend(used_badges) }}{% endif %}
 {% for block in blocks %}
-{% if used_badges and loop.index0 == first_table_index %}{{ m.legend(used_badges) }}{% endif %}
+{% if used_badges and loop.index0 == badge_legend_slot %}{{ m.legend(used_badges) }}{% endif %}
 {{ m.page_block(block) }}
 {% endfor %}
 {% if footer %}<div class="footer">{% if footer.source %}{{ footer.source | richtext }}{% if footer.facts %} · {% endif %}{% endif %}{{ footer.facts | join(" · ") }}</div>{% endif %}
