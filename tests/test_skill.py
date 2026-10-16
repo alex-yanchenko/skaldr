@@ -379,14 +379,11 @@ def test_install_plan_rule_leaves_claude_md_intact_when_the_write_fails(
     (tmp_path / ".claude").mkdir()
     md_path = tmp_path / ".claude" / "CLAUDE.md"
     md_path.write_text("precious content\n", encoding="utf-8")
-    real_write_bytes = Path.write_bytes
 
-    def failing_staged_write(self: Path, data: bytes) -> int:
-        if self.parent.name.startswith(".skaldr-write-"):
-            raise OSError("No space left on device")
-        return real_write_bytes(self, data)
+    def failing_flush(_descriptor: int) -> None:
+        raise OSError("No space left on device")
 
-    monkeypatch.setattr(Path, "write_bytes", failing_staged_write)
+    monkeypatch.setattr("skaldr.replace_file.os.fsync", failing_flush)
 
     rc = install_plan_rule(home=tmp_path)
 
