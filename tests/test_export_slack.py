@@ -309,7 +309,7 @@ def test_a_line_break_outside_a_table_cell_is_a_hard_break_in_a_paragraph_and_a_
             ListNode(
                 "number", (make_list_entry("a", make_bullets(make_list_entry("b"))), make_list_entry("c"))
             ),
-            "1. a\n   * b\n2. c\n",
+            "1. a\n   1. • b\n2. c\n",
             id="number-with-nested-bullets",
         ),
     ],
@@ -395,18 +395,43 @@ def test_an_empty_paragraph_writes_nothing(nodes: list[Node], text: str) -> None
 @pytest.mark.parametrize(
     ("kind", "nested_kind", "text"),
     [
-        pytest.param("bullet", "number", "* a\n  1. b\n", id="number-under-bullet"),
-        pytest.param("number", "bullet", "1. a\n   * b\n", id="bullet-under-number"),
-        pytest.param("check", "bullet", "* [ ] a\n  * b\n", id="bullet-under-check"),
-        pytest.param("bullet", "check", "* a\n  * [ ] b\n", id="check-under-bullet"),
-        pytest.param("number", "check", "1. a\n   * [ ] b\n", id="check-under-number"),
-        pytest.param("number", "number", "1. a\n   1. b\n", id="same-kind"),
+        pytest.param("bullet", "number", "* a\n  * 1\\. b\n  * 2\\. c\n", id="number-under-bullet"),
+        pytest.param("number", "bullet", "1. a\n   1. • b\n   2. • c\n", id="bullet-under-number"),
+        pytest.param("bullet", "check", "* a\n  * ☐ b\n  * ☑ c\n", id="check-under-bullet"),
+        pytest.param("number", "check", "1. a\n   1. ☐ b\n   2. ☑ c\n", id="check-under-number"),
+        pytest.param("number", "number", "1. a\n   1. b\n   2. c\n", id="number-under-number"),
+        pytest.param("bullet", "bullet", "* a\n  * b\n  * c\n", id="bullet-under-bullet"),
+        pytest.param("check", "check", "* [ ] a\n  * [ ] b\n  * [x] c\n", id="check-under-check"),
     ],
 )
-def test_a_nested_list_keeps_its_own_kind(kind: ListKind, nested_kind: ListKind, text: str) -> None:
-    nested = ListNode(nested_kind, (make_list_entry("b"),))
+def test_a_nested_list_takes_its_parents_kind_and_leads_each_item_with_its_own_marker(
+    kind: ListKind, nested_kind: ListKind, text: str
+) -> None:
+    nested = ListNode(nested_kind, (make_list_entry("b"), make_list_entry("c", checked=True)))
 
     assert render_slack([ListNode(kind, (make_list_entry("a", nested),))]) == text
+
+
+def test_a_list_under_a_list_of_another_kind_under_a_bullet_stays_in_the_bullets_kind() -> None:
+    deepest = ListNode("bullet", (make_list_entry("c"),))
+    middle = ListNode("number", (make_list_entry("b", deepest),))
+
+    assert render_slack([ListNode("bullet", (make_list_entry("a", middle),))]) == "* a\n  * 1\\. b\n    * c\n"
+
+
+@pytest.mark.parametrize("nested_kind", ["bullet", "number"])
+def test_the_canvas_writer_alone_raises_an_internal_error_for_a_list_of_another_kind_under_a_check_item(
+    nested_kind: ListKind,
+) -> None:
+    nested = ListNode(nested_kind, (make_list_entry("b"),))
+
+    with pytest.raises(ExportInvariantError) as raised:
+        render_slack([ListNode("check", (make_list_entry("a", nested),))])
+
+    assert str(raised.value) == (
+        f"a Slack canvas nests only check items under a check item, not a {nested_kind} list; "
+        "a check list's nested items are check items, so the lowering should not have made one"
+    )
 
 
 def test_a_nested_list_three_deep_indents_to_each_content_column() -> None:
@@ -539,7 +564,7 @@ def test_a_block_a_list_item_cannot_hold_is_rejected_even_two_lists_deep(held: N
 def test_a_paragraph_before_a_nested_list_in_a_list_item_is_written_in_place() -> None:
     entry = make_list_entry("a", make_paragraph("lead"), make_bullets(make_list_entry("n")))
 
-    assert render_slack([ListNode("number", (entry, make_list_entry("b")))]) == "1. a lead\n   * n\n2. b\n"
+    assert render_slack([ListNode("number", (entry, make_list_entry("b")))]) == "1. a lead\n   1. • n\n2. b\n"
 
 
 @pytest.mark.parametrize(
@@ -1688,7 +1713,7 @@ def test_a_walkthrough_step_with_text_then_one_list_exports_as_one_list_item() -
     detail = [{"type": "text", "body": "Twice."}, {"type": "list", "items": ["a", "b"]}]
     walkthrough = {"type": "walkthrough", "steps": [{"label": "Scan", "detail": detail}]}
 
-    assert slack_of([walkthrough]) == "1. **Scan** Twice.\n   * a\n   * b\n"
+    assert slack_of([walkthrough]) == "1. **Scan** Twice.\n   1. • a\n   2. • b\n"
 
 
 def test_a_walkthrough_whose_steps_hold_no_grid_exports() -> None:

@@ -20,6 +20,11 @@ FENCE_OPENING: Final = re.compile(r"(`{3,}|~{3,})")
 CONTAINER_OPENING: Final = re.compile(rf"{CANVAS_FENCE}\s*\{{")
 BULLET: Final = re.compile(r"^(\s*)[-+] ")
 LIST_ITEM: Final = re.compile(r"\s*(?:[-+*]|\d+[.)]) ")
+ITEM_LINE: Final = re.compile(r"(\s*(?:[-+*]|\d+[.)]) (?:\[[ xX]\] )?)(.*)", re.DOTALL)
+NUMBER_MARKER_TEXT: Final = re.compile(r"(\d+)([.)] )")
+BULLET_MARKER_TEXT: Final = re.compile(r"[-+*] ")
+ESCAPED_MARKER_TEXT: Final = re.compile(r"^(\d+|)\\(?=[-+*.)] )")
+COMPARABLE_INDENT: Final = "  "
 HARD_BREAK: Final = re.compile(r"(?<!\\)\\$")
 MENTION: Final = re.compile(r"!\[\]\(([@#][A-Z0-9]+)\)")
 UNESCAPED_PIPE: Final = re.compile(r"(?<!\\)\|")
@@ -101,9 +106,35 @@ def _comparable_line(line: str) -> str:
     return MENTION.sub(r"<\1>", BULLET.sub(r"\1* ", stripped))
 
 
+def _item_text_as_shown(text: str) -> str:
+    return ESCAPED_MARKER_TEXT.sub(r"\1", text, count=1)
+
+
+def _comparable_list(block: str) -> str:
+    indents: list[int] = []
+    lines: list[str] = []
+    for line in block.split("\n"):
+        comparable = _comparable_line(line)
+        if not comparable.strip():
+            continue
+        item = ITEM_LINE.fullmatch(comparable)
+        if item is None:
+            lines.append(COMPARABLE_INDENT * len(indents) + comparable.strip())
+            continue
+        indent = len(comparable) - len(comparable.lstrip())
+        while indents and indents[-1] >= indent:
+            indents.pop()
+        marker, text = item.group(1).strip(), _item_text_as_shown(item.group(2))
+        lines.append(f"{COMPARABLE_INDENT * len(indents)}{marker} {text}")
+        indents.append(indent)
+    return "\n".join(lines)
+
+
 def comparable_block(block: str) -> str:
     if block.strip() in SEPARATOR_TEXTS:
         return ""
+    if is_a_list(block):
+        return _comparable_list(block)
     fences = _Fences()
     lines: list[str] = []
     for line in block.split("\n"):
@@ -261,9 +292,31 @@ def _blank_as_a_list_separator(raw: str) -> str:
     return LIST_SEPARATOR if comparable_block(raw) == "" else raw
 
 
+def _item_text_that_cannot_start_a_list(text: str) -> str:
+    if NUMBER_MARKER_TEXT.match(text):
+        return NUMBER_MARKER_TEXT.sub(r"\1\\\2", text, count=1)
+    if BULLET_MARKER_TEXT.match(text):
+        return "\\" + text
+    return text
+
+
+def _item_line_as_slack_takes_it_back(line: str) -> str:
+    item = ITEM_LINE.fullmatch(line)
+    if item is None:
+        return line
+    return item.group(1) + _item_text_that_cannot_start_a_list(item.group(2))
+
+
+def _as_slack_takes_it_back(raw: str) -> str:
+    raw = _blank_as_a_list_separator(raw)
+    if not is_a_list(raw):
+        return raw
+    return "\n".join(map(_item_line_as_slack_takes_it_back, raw.split("\n")))
+
+
 def canvas_body(raws: Sequence[str]) -> str:
     spaced: list[str] = []
-    for raw in map(_blank_as_a_list_separator, raws):
+    for raw in map(_as_slack_takes_it_back, raws):
         if spaced and is_a_list(spaced[-1]) and is_a_list(raw):
             spaced.append(LIST_SEPARATOR)
         spaced.append(raw)
