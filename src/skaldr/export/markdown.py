@@ -27,6 +27,7 @@ from skaldr.export.markup import (
     spaced,
     styled,
     styled_in_tags,
+    wrap_around_core,
 )
 from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.runs import ExportRich, export_visible_text
@@ -114,6 +115,9 @@ class _MarkdownRuns(CommonMarkRuns):
 
     def require_links_to_its_own_headings(self) -> None:
         return
+
+    def highlighted(self, inner: str, /) -> str | None:
+        return wrap_around_core(inner, "<mark>", "</mark>")
 
     def escape(self, text: str, /) -> str:
         return ENTITY_LOOKALIKE.sub(r"\\&", text.translate(MARKDOWN_ESCAPES))

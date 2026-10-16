@@ -165,7 +165,7 @@ REJECTION_CELLS: set[tuple[Feature, ExportTarget]] = {
 }
 TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "colour span": {"markdown": "reject", "slack": "reject"},
-    "highlight span": {"markdown": "reject", "adf": "reject", "slack": "reject"},
+    "highlight span": {"adf": "reject", "slack": "reject"},
     "colour and highlight span": {
         "markdown": "reject",
         "notion": "reject",

@@ -52,7 +52,7 @@ Percentages are of the 10,000-unit total. Counts were verified against the shelf
 
 Every bin label now ends in a <ins>check digit</ins>. The cold room logged H<sub>2</sub>O condensation on 3 of 10<sup>2</sup> shelves, so its scans run twice; C++ tooling and \~2 days of rescans are out of scope.
 
-Zone C is behind schedule, its recount is due Friday, and the vendor lots stay open until the supplier replies.
+Zone C is behind schedule, its recount is <mark>due Friday</mark>, and the vendor lots stay open until the supplier replies.
 
 The recount runs <span data-range="2026-07-10/2026-07-14">10 to 14 Jul</span>, is led by Ada Park, is tracked as [WH-214](https://example.atlassian.net/browse/WH-214) and follows [the cold room plan](cold-room-plan.md).
 

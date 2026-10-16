@@ -285,11 +285,19 @@ def test_a_bang_right_before_anything_written_as_a_link_is_escaped_so_it_is_not_
     assert render_markdown(nodes) == f"## M\n\nwow\\!{written}\n"
 
 
+def test_a_highlight_span_is_a_mark_tag_around_its_text_whatever_its_tone() -> None:
+    span = Tinted(None, "warning", (Plain("Friday"),))
+    other = Tinted(None, "sky", (Styled("bold", (Plain("soon"),)),))
+
+    assert render_markdown([Paragraph((Plain("due "), span, Plain(" or "), other))]) == (
+        "due <mark>Friday</mark> or <mark>**soon**</mark>\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("tone", "background"),
     [
         pytest.param("danger", None, id="colour"),
-        pytest.param(None, "warning", id="highlight"),
         pytest.param("danger", "sky", id="colour-and-highlight"),
     ],
 )

@@ -310,8 +310,18 @@ class CommonMarkRuns(MarkupRuns, ABC):
     @abstractmethod
     def require_links_to_its_own_headings(self) -> None: ...
 
+    def highlighted(self, _inner: str, /) -> str | None:
+        return None
+
     def heading_slug(self, _anchor: str, /) -> str | None:
         return None
+
+    def _tinted_piece(self, run: Tinted, enclosing: _Enclosing) -> str:
+        inner = self._written(run.runs, enclosing)
+        highlight = self.highlighted(inner) if run.tone is None else None
+        if highlight is None:
+            self.refuse_a_tint()
+        return highlight
 
     def write(self, runs: ExportRich) -> str:
         return self._written(runs, _Enclosing())
@@ -374,7 +384,7 @@ class CommonMarkRuns(MarkupRuns, ABC):
                 case Styled():
                     pieces += self._styled_pieces(run, enclosing)
                 case Tinted():
-                    self.refuse_a_tint()
+                    pieces.append(self._tinted_piece(run, enclosing))
                 case TonedLabel():
                     pieces += [self._tone_dot_prefix(run.tone), *self._pieces(run.runs, enclosing)]
                 case Link():

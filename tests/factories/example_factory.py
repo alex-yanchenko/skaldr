@@ -26,7 +26,6 @@ EXAMPLE_TEXT_IN_A_STEP: Final = '          - type: text\n            body: "A re
 EXAMPLE_EDITS_FOR: Final[Mapping[ExportTarget, tuple[tuple[str, str], ...]]] = {
     "markdown": (
         (COLOURED_SPAN, "behind schedule"),
-        (HIGHLIGHTED_SPAN, "due Friday"),
         (COLOURED_AND_HIGHLIGHTED_SPAN, "vendor lots"),
     ),
     "notion": (

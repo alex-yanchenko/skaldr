@@ -184,7 +184,6 @@ JIRA_HIGHLIGHT_WHY = (
     "a Jira description does not show a text highlight, so it cannot show the highlight on '{text}'"
 )
 GITHUB_COLOUR_WHY = "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'"
-GITHUB_HIGHLIGHT_WHY = "GitHub Markdown cannot highlight text, so it cannot show the highlight on '{text}'"
 CANVAS_COLOUR_WHY = "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'"
 OWN_HEADING_INSTEAD = "write the heading's name without the link, or export the document elsewhere"
 OWN_HEADING_WHY = (
@@ -217,14 +216,6 @@ INLINE_REFUSALS: dict[str, RefusedCase] = {
         "highlight span",
         HIGHLIGHTED_TEXT,
         "a Slack canvas cannot highlight text, so it cannot show the highlight on 'due Friday'",
-        WITHOUT_THE_HIGHLIGHT,
-        "at blocks.0.text",
-    ),
-    "markdown-highlight-span": RefusedCase(
-        "markdown",
-        "highlight span",
-        HIGHLIGHTED_TEXT,
-        GITHUB_HIGHLIGHT_WHY.format(text="due Friday"),
         WITHOUT_THE_HIGHLIGHT,
         "at blocks.0.text",
     ),
@@ -385,13 +376,18 @@ class NestedSpans:
         blocks = [{"type": "text", "body": self.body}]
         outer = self.coloured if self.outer_is_a_colour else self.highlighted
         canvas_why = CANVAS_COLOUR_WHY if self.outer_is_a_colour else CANVAS_HIGHLIGHT_WHY
-        github_why = GITHUB_COLOUR_WHY if self.outer_is_a_colour else GITHUB_HIGHLIGHT_WHY
+        github_text = outer if self.outer_is_a_colour else self.coloured
         outer_instead = WITHOUT_THE_COLOUR if self.outer_is_a_colour else WITHOUT_THE_HIGHLIGHT
         outer_feature: Feature = "colour span" if self.outer_is_a_colour else "highlight span"
         jira_why = JIRA_HIGHLIGHT_WHY.format(text=self.highlighted)
         return {
             f"markdown-{name}": RefusedCase(
-                "markdown", outer_feature, blocks, github_why.format(text=outer), outer_instead, AT_THE_TEXT
+                "markdown",
+                "colour span",
+                blocks,
+                GITHUB_COLOUR_WHY.format(text=github_text),
+                WITHOUT_THE_COLOUR,
+                AT_THE_TEXT,
             ),
             f"notion-{name}": RefusedCase(
                 "notion",
@@ -431,14 +427,6 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
         HIGHLIGHT_IN_A_STEP_TITLE,
         "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
         "so it cannot show the highlight on 'cold room'",
-        WITHOUT_THE_HIGHLIGHT,
-        STEP_PATH_OF_THE_TITLE,
-    ),
-    "markdown-highlight-inside-a-toned-step-title": RefusedCase(
-        "markdown",
-        "highlight span",
-        HIGHLIGHT_IN_A_STEP_TITLE,
-        GITHUB_HIGHLIGHT_WHY.format(text="cold room"),
         WITHOUT_THE_HIGHLIGHT,
         STEP_PATH_OF_THE_TITLE,
     ),
