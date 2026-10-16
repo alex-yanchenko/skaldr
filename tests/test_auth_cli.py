@@ -1,10 +1,8 @@
-import _thread
 import builtins
 import json
 import re
 import socket
 import sys
-import threading
 from types import ModuleType
 from typing import Any, NoReturn
 
@@ -42,6 +40,7 @@ from tests.factories.auth_factory import (
     fake_api,
     free_port,
     insecure_keyring_refusal,
+    interrupt_the_keychain_wait_once_the_keychain_is_stuck,
     jira_myself_answer,
     legacy_entry_json,
     make_jira_credentials,
@@ -767,12 +766,12 @@ def test_logout_notion_run_again_after_a_failed_removal_says_the_token_may_alrea
     ids=["after the revoke", "after a refused revoke"],
 )
 def test_logout_notion_interrupted_while_removing_the_entry_says_whether_the_token_was_revoked(
-    capsys: pytest.CaptureFixture[str], revoke_status: int, stderr: str
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], revoke_status: int, stderr: str
 ) -> None:
     slow = SlowDeleteKeyring()
     keyring.set_keyring(slow)
     seed_notion(make_notion_credentials())
-    threading.Timer(0.3, _thread.interrupt_main).start()
+    interrupt_the_keychain_wait_once_the_keychain_is_stuck(monkeypatch, slow.entered)
 
     try:
         exit_code = auth_cli.main(

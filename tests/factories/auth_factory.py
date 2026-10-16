@@ -4,7 +4,9 @@ import socket
 import threading
 import traceback
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
+from queue import Empty, SimpleQueue
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
@@ -15,6 +17,7 @@ from keyring.compat import properties
 from keyring.errors import KeyringError, PasswordDeleteError
 from typing_extensions import override
 
+from skaldr.auth import store
 from skaldr.auth.store import (
     CredentialsT,
     JiraCredentials,
@@ -413,9 +416,11 @@ class SlowSaveKeyring(InMemoryKeyring):
     def __init__(self) -> None:
         super().__init__()
         self.released = threading.Event()
+        self.entered = threading.Event()
 
     @override
     def set_password(self, service: str, username: str, password: str) -> None:
+        self.entered.set()
         self.released.wait(5)
         self.entries[(service, username)] = password
 
@@ -424,11 +429,31 @@ class SlowDeleteKeyring(InMemoryKeyring):
     def __init__(self) -> None:
         super().__init__()
         self.released = threading.Event()
+        self.entered = threading.Event()
 
     @override
     def delete_password(self, service: str, username: str) -> None:
+        self.entered.set()
         self.released.wait(5)
         super().delete_password(service, username)
+
+
+KEYCHAIN_REPLY_POLL_SECONDS = 0.01
+
+
+def interrupt_the_keychain_wait_once_the_keychain_is_stuck(
+    monkeypatch: pytest.MonkeyPatch, entered: threading.Event
+) -> None:
+    def wait_until_the_keychain_is_stuck(
+        replies: SimpleQueue[object], _still_waiting_for_the_lock: Callable[[], bool]
+    ) -> object:
+        while True:
+            with suppress(Empty):
+                return replies.get(timeout=KEYCHAIN_REPLY_POLL_SECONDS)
+            if entered.is_set():
+                raise KeyboardInterrupt
+
+    monkeypatch.setattr(store, "_wait_for_the_reply", wait_until_the_keychain_is_stuck)
 
 
 def make_jira_credentials(**overrides: str | None) -> JiraCredentials:
