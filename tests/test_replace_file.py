@@ -248,7 +248,10 @@ def test_the_staged_file_and_its_folder_are_flushed_around_the_rename(
         events.append("replace")
         return real_replace(self, target)
 
-    monkeypatch.setattr("skaldr.replace_file.os.fsync", lambda _descriptor: events.append("fsync"))
+    def recording_fsync(_descriptor: int) -> None:
+        events.append("fsync")
+
+    monkeypatch.setattr("skaldr.replace_file.os.fsync", recording_fsync)
     monkeypatch.setattr(Path, "replace", recording_replace)
 
     replace_file(path, "new page")
