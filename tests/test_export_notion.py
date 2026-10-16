@@ -772,7 +772,7 @@ def test_an_open_toggle_is_its_bold_title_over_its_content_rather_than_a_details
     assert notion_of([toggle]) == "**Raw counts**\nx\n"
 
 
-def test_authored_tabs_are_one_native_tab_per_tab_with_the_icon_of_the_tab_tone_as_its_icon() -> None:
+def test_authored_tabs_are_native_tabs_with_the_tone_icon() -> None:
     block = {
         "type": "tabs",
         "tabs": [
@@ -974,9 +974,7 @@ def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
     )
 
 
-def test_a_request_with_several_cases_is_one_native_tab_per_case_with_its_status_icon_as_the_tab_icon() -> (
-    None
-):
+def test_a_request_with_several_cases_is_native_tabs_with_the_status_icon() -> None:
     cases = [
         {"label": "finding", "tone": "warning", "response": {"body": "[]"}},
         {"label": "control", "tone": "info", "response": {"body": "none"}},
@@ -1036,6 +1034,70 @@ def test_a_tab_title_keeps_its_inline_styling_and_escapes_markup_characters() ->
     tabs = Tabs((Tab((Styled("bold", (Plain("a < b"),)),), (Paragraph((Plain("z"),)),)),))
 
     assert render_notion([tabs]) == "<tabs>\n\t<tab>\n\t\t**a \\< b**\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+@pytest.mark.parametrize(
+    ("title", "written"),
+    [
+        pytest.param("- a", "\\- a", id="bullet"),
+        pytest.param("# a", "\\# a", id="heading"),
+        pytest.param("1. a", "1\\. a", id="number"),
+        pytest.param("> a", "\\> a", id="quote"),
+    ],
+)
+def test_a_tab_title_that_looks_like_a_block_start_is_escaped(title: str, written: str) -> None:
+    tabs = Tabs((Tab((Plain(title),), (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([tabs]) == f"<tabs>\n\t<tab>\n\t\t{written}\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+def test_a_tab_without_a_title_is_an_export_invariant_error() -> None:
+    tabs = Tabs((Tab((), (Paragraph((Plain("z"),)),)),))
+
+    with pytest.raises(ExportInvariantError) as raised:
+        render_notion([tabs])
+
+    assert str(raised.value) == (
+        "a Notion tab needs a title, since Notion reads the first line of a tab as its title; "
+        "the export check should have refused it"
+    )
+
+
+def test_a_tab_title_styled_beyond_bold_keeps_its_styling() -> None:
+    title = (Styled("italic", (Plain("a"),)), Plain(" "), Styled("underline", (Plain("b"),)))
+    tabs = Tabs((Tab(title, (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([tabs]) == f"<tabs>\n\t<tab>\n\t\t{notion_inline(title)}\n\t\tz\n\t</tab>\n</tabs>\n"
+
+
+def test_a_tab_nested_in_a_tab_nests_one_tab_stop_deeper() -> None:
+    inner = Tabs((Tab((Plain("in"),), (Paragraph((Plain("z"),)),)),))
+    outer = Tabs((Tab((Plain("out"),), (inner,)),))
+
+    assert render_notion([outer]) == (
+        "<tabs>\n\t<tab>\n\t\tout\n\t\t<tabs>\n\t\t\t<tab>\n\t\t\t\tin\n\t\t\t\tz\n\t\t\t</tab>\n\t\t</tabs>\n"
+        "\t</tab>\n</tabs>\n"
+    )
+
+
+def test_tabs_inside_a_callout_nest_inside_the_callout() -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),)),))
+
+    assert render_notion([Callout("info", (tabs,))]) == (
+        '<callout icon="💡" color="blue_bg">\n\t<tabs>\n\t\t<tab>\n\t\t\tt\n\t\t\tz\n\t\t</tab>\n\t</tabs>\n'
+        "</callout>\n"
+    )
+
+
+def test_tabs_inside_a_column_nest_inside_the_column() -> None:
+    tabs = Tabs((Tab((Plain("t"),), (Paragraph((Plain("z"),)),)),))
+    columns = Columns((GridColumn(1, (tabs,)),))
+
+    assert render_notion([columns]) == (
+        '<columns>\n\t<column ratio="1">\n'
+        "\t\t<tabs>\n\t\t\t<tab>\n\t\t\t\tt\n\t\t\t\tz\n\t\t\t</tab>\n\t\t</tabs>\n"
+        "\t</column>\n</columns>\n"
+    )
 
 
 def test_tabs_inside_a_toggle_nest_one_tab_stop_deeper_than_the_toggle_content() -> None:

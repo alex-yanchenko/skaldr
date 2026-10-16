@@ -1516,7 +1516,7 @@ case, where the page is shared as a URL an agent later has to read back.
 | a `number` list's `numbering: letters\|roman` | a bullet list whose items start with their label as text (`iv.`, `v.`, `vi.`), since Markdown has no letter or roman markers | the same |
 | a `decision` list | a bullet list whose items start with ☑️ (decided) or ❓ (open) | the same |
 | a multi-case `request` | each case under a bold title | native tabs, one tab per case with the icon of the case's status as the tab's icon and the case label as its title |
-| `tabs` | each tab under a bold title, led by an icon when its tone is info, success, warning or danger | native tabs, one tab per tab with the same icon as the tab's icon and the label as its title |
+| `tabs` | each tab under a bold title, led by an icon when its tone is info, success, warning or danger | native tabs, each tab's tone icon as the tab's icon and its label as the tab's title |
 | a collapsed `section` | a heading with its content below | a toggle heading |
 | `toggle` | its bold title with its content below | a `<details>` toggle with its content tab-indented; an open one is its bold title with its content below |
 | `heading` | `##`, `###` or `####` for levels 2 to 4; inside a section every heading moves down one level, so a level 4 heading there is `#####` | `##`, `###` or `####`; a heading that would be deeper than `####`, such as a level 4 heading inside a section, is `####`, the deepest heading Notion has |

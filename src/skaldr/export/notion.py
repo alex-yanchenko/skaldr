@@ -110,6 +110,7 @@ CODE_FENCE_RUN: Final = re.compile(r"`{3,}")
 LINE_INSIDE_A_BLOCK: Final = re.compile(
     r"</[a-z_]+>|<colgroup>|<col\b[^>]*>|<td\b.*</td>|<summary>.*</summary>"
 )
+TAB_OPENING: Final = re.compile(r"<tab(?: icon=\"[^\"]*\")?>")
 NOTION_PLAIN_TEXT_LANGUAGE: Final = "plain text"
 NOTION_DEFAULT_PAGE_WIDTH_PX: Final = 708
 NOTION_FULL_PAGE_WIDTH_PX: Final = 1200
@@ -636,9 +637,14 @@ def _columns_lines(node: Columns, room: TableRoom) -> list[str]:
 
 
 def _tab_lines(tab: Tab, room: TableRoom) -> list[str]:
+    if not tab.title:
+        raise ExportInvariantError(
+            "a Notion tab needs a title, since Notion reads the first line of a tab as its title; "
+            "the export check should have refused it"
+        )
     icon = tab_icon(tab.tone)
     opening = "<tab>" if icon is None else f'<tab icon="{icon}">'
-    return [opening, *_indent([notion_inline(tab.title), *_notion_blocks(tab.children, room)]), "</tab>"]
+    return [opening, *_indent([_block_text(tab.title), *_notion_blocks(tab.children, room)]), "</tab>"]
 
 
 def _tabs_lines(node: Tabs, room: TableRoom) -> list[str]:
@@ -912,13 +918,18 @@ def starts_a_block(stripped_line: str) -> bool:
 def notion_block_count(text: str) -> int:
     count = 0
     closer: str | None = None
+    title_follows = False
     for line in text.split("\n"):
         stripped = line.strip()
         if closer is not None:
             closer = None if stripped == closer else closer
             continue
+        if title_follows and stripped:
+            title_follows = False
+            continue
         if not starts_a_block(stripped):
             continue
+        title_follows = TAB_OPENING.fullmatch(stripped) is not None
         closer = notion_fence_closer(stripped)
         count += 1
     return count
