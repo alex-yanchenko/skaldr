@@ -166,15 +166,15 @@ flowchart LR
 		<td></td>
 		<td></td>
 	</tr>
-	<tr color="yellow_bg">
-		<td>Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340</td>
+	<tr>
+		<td color="yellow_bg">Double-counted units **Floor**<br>Skipped, bin \> 12: 260<br>Same-window re-scan: 340</td>
 		<td>🟡</td>
 		<td>600 (6.0% of total)</td>
 		<td>The same pallet is scanned twice when a picker re-enters an aisle within the count window.</td>
 		<td>De-duplicate on the pallet ID (`pallet_id`) before totalling; keep the most recent scan.</td>
 	</tr>
-	<tr color="blue_bg">
-		<td>Mislabeled bin codes **System**</td>
+	<tr>
+		<td color="blue_bg">Mislabeled bin codes **System**</td>
 		<td>🟡</td>
 		<td>500 (5.0% of total)</td>
 		<td>Scanner assumed 5-digit bin codes; 9-digit codes were truncated and failed the lookup.</td>
@@ -187,8 +187,8 @@ flowchart LR
 		<td></td>
 		<td></td>
 	</tr>
-	<tr color="red_bg">
-		<td>Short shipment **Vendor**</td>
+	<tr>
+		<td color="red_bg">Short shipment **Vendor**</td>
 		<td>🔴</td>
 		<td>400 (4.0% of total)</td>
 		<td>The vendor's ASN listed 400 units that never arrived on the dock, so they can't be counted.</td>
@@ -241,8 +241,8 @@ Reconciles: 1,500 + 8,500 matched cleanly \= 10,000. {color="gray"}
 		<td>12</td>
 		<td>Two mislabeled bins, re-scanned.</td>
 	</tr>
-	<tr color="red_bg">
-		<td>Overflow</td>
+	<tr>
+		<td color="red_bg">Overflow</td>
 		<td>120</td>
 		<td>260</td>
 		<td>Skipped by the `bin > 12` rule.</td>
@@ -402,15 +402,15 @@ Zone C holds most of the mislabeled bins, so it is recounted first.
 		<td>**Zone C**</td>
 		<td>**Zone D**</td>
 	</tr>
-	<tr color="green_bg">
-		<td>Clean</td>
+	<tr>
+		<td color="green_bg">Clean</td>
 		<td>2,100</td>
 		<td>1,850</td>
 		<td>2,320</td>
 		<td>2,230</td>
 	</tr>
-	<tr color="red_bg">
-		<td>Discrepant</td>
+	<tr>
+		<td color="red_bg">Discrepant</td>
 		<td>180</td>
 		<td>340</td>
 		<td>90</td>
@@ -454,18 +454,18 @@ pie
 		<td>**Value**</td>
 		<td>**Share**</td>
 	</tr>
-	<tr color="green_bg">
-		<td>Fixed on floor</td>
+	<tr>
+		<td color="green_bg">Fixed on floor</td>
 		<td>900</td>
 		<td>44%</td>
 	</tr>
-	<tr color="yellow_bg">
-		<td>System defect</td>
+	<tr>
+		<td color="yellow_bg">System defect</td>
 		<td>760</td>
 		<td>37%</td>
 	</tr>
-	<tr color="red_bg">
-		<td>Vendor</td>
+	<tr>
+		<td color="red_bg">Vendor</td>
 		<td>400</td>
 		<td>19%</td>
 	</tr>

@@ -52,6 +52,7 @@ from skaldr.export.swaps import (
 )
 from skaldr.export.tree import (
     COLUMN_RATIO_TOTAL,
+    MOST_COLUMNS_PER_STRIP,
     Callout,
     Card,
     Cards,
@@ -62,12 +63,12 @@ from skaldr.export.tree import (
     DisplayMath,
     Divider,
     FactStrip,
+    GenericNode,
     GridColumn,
     Heading,
     HeadingLevel,
     KeyValueList,
     LabelledValue,
-    LinkCard,
     ListKind,
     ListNode,
     LoweredDocument,
@@ -80,7 +81,6 @@ from skaldr.export.tree import (
     TableOfContents,
     TableRow,
     Tabs,
-    Timeline,
     Toggle,
     ToneName,
     heading_of,
@@ -138,7 +138,7 @@ STATUS_TONE: Final[Mapping[StatusState, ToneName]] = {
     "failed": "danger",
     "blocked": "warning",
 }
-WIDEST_COLUMN_STRIP: Final = 4
+NotionNode = GenericNode | FactStrip | KeyValueList | DefinitionList | Cards
 PLACEHOLDER_HIGHLIGHT: Final = BLOCK_COLOR["warning"] + BACKGROUND_SUFFIX
 CHIP_COLOR: Final[Mapping[BadgeColorLiteral, str]] = {
     color: BLOCK_COLOR[tone] for color, tone in BADGE_COLOR_TONE.items()
@@ -419,22 +419,23 @@ def _cell_fill(cell: TableCell) -> ToneName | None:
     return None if _is_a_dot_alone(cell) else cell.tone
 
 
-def _row_lines(cells: Sequence[TableCell], texts: Sequence[str], tone: ToneName | None) -> list[str]:
+def _row_lines(texts: Sequence[str], tone: ToneName | None, fills: Sequence[ToneName | None]) -> list[str]:
     tagged = [
-        f"<td{_background_attribute(_cell_fill(cell))}>{text}</td>"
-        for cell, text in zip(cells, texts, strict=True)
+        f"<td{_background_attribute(fill)}>{text}</td>" for fill, text in zip(fills, texts, strict=True)
     ]
     return [f"<tr{_background_attribute(tone)}>", *_indent(tagged), "</tr>"]
 
 
-def _row_tone_in_one_cell(cells: Sequence[TableCell], tone: ToneName) -> tuple[TableCell, ...]:
+def _own_fills(cells: Sequence[TableCell]) -> list[ToneName | None]:
+    return [_cell_fill(cell) for cell in cells]
+
+
+def _fills_with_the_row_tone_in_one_cell(cells: Sequence[TableCell], tone: ToneName) -> list[ToneName | None]:
+    fills = _own_fills(cells)
     fillable = [index for index, cell in enumerate(cells) if not _is_a_dot_alone(cell)]
-    filled = next((index for index in fillable if holds_a_chip(cell_text(cells[index]))), None)
-    if filled is None:
-        filled = next(iter(fillable), None)
-    return tuple(
-        replace(cell, tone=cell.tone or tone) if index == filled else cell for index, cell in enumerate(cells)
-    )
+    chip_cell = next((index for index in fillable if holds_a_chip(cell_text(cells[index]))), None)
+    filled = chip_cell if chip_cell is not None else next(iter(fillable), 0)
+    return [fill or tone if index == filled else fill for index, fill in enumerate(fills)]
 
 
 @dataclass(frozen=True)
@@ -447,15 +448,9 @@ class _RowFill:
 def _row_fill(row: TableRow) -> _RowFill:
     if row.emphasis == "group":
         return _RowFill(whole_row=row.fill or "neutral")
-    match row.tone:
-        case "muted":
-            return _RowFill(struck_title=True)
-        case "danger":
-            return _RowFill(whole_row="danger")
-        case None:
-            return _RowFill(whole_row=row.tint)
-        case _:
-            return _RowFill(one_cell=row.tone)
+    if row.tone == "muted":
+        return _RowFill(struck_title=True)
+    return _RowFill(one_cell=row.fill)
 
 
 def _column_count(table: TableNode) -> int:
@@ -476,7 +471,8 @@ def _struck_when(struck: bool, text: str) -> str:
 
 def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
     fill = _row_fill(row)
-    cells = _row_tone_in_one_cell(row.cells, fill.one_cell) if fill.one_cell else row.cells
+    cells = row.cells
+    fills = _fills_with_the_row_tone_in_one_cell(cells, fill.one_cell) if fill.one_cell else _own_fills(cells)
     column_tones = _column_tones(table)
     texts = body_cell_texts(
         table,
@@ -488,14 +484,14 @@ def _body_row_lines(table: TableNode, row: TableRow) -> list[str]:
                     cell,
                     inside_bold=is_emphasised_body_cell(table, row, index),
                     on_fill=fill.whole_row is not None
-                    or _cell_fill(cell) is not None
+                    or fills[index] is not None
                     or _in_a_toned_column(column_tones, index),
                 ),
             )
             for index, cell in enumerate(cells)
         ],
     )
-    return _row_lines(cells, texts, fill.whole_row)
+    return _row_lines(texts, fill.whole_row, fills)
 
 
 def _longest_text(table: TableNode, index: int) -> int:
@@ -569,7 +565,8 @@ def _table_lines(table: TableNode, room: TableRoom) -> list[str]:
     if table.header_column:
         attributes.append('header-column="true"')
     header_texts = [styled("bold", _table_cell_text(cell, inside_bold=True)) for cell in table.header]
-    header_lines = _row_lines(table.header, header_texts, None) if table.header else []
+    header_fills = _own_fills(table.header)
+    header_lines = _row_lines(header_texts, None, header_fills) if table.header else []
     lines = _colgroup_lines(table, room) + header_lines
     lines += [line for row in table.rows for line in _body_row_lines(table, row)]
     return [f"<table {' '.join(attributes)}>", *_indent(lines), "</table>"]
@@ -657,7 +654,7 @@ def _quote_holds_lists_notion_can_nest(node: Quote) -> bool:
     )
 
 
-def _quote_lines(node: Quote, room: TableRoom) -> list[str]:
+def _quote_with_its_lists_lines(node: Quote, room: TableRoom) -> list[str]:
     if not _quote_holds_lists_notion_can_nest(node):
         return [_quote_line(node)]
     first, *rest = node.body
@@ -698,7 +695,7 @@ def _card_columns(node: Cards) -> list[tuple[Node, ...]]:
 
 
 def _row_sizes(count: int) -> list[int]:
-    rows = -(-count // WIDEST_COLUMN_STRIP)
+    rows = -(-count // MOST_COLUMNS_PER_STRIP)
     base, extra = divmod(count, rows)
     return [base + 1 if index < extra else base for index in range(rows)]
 
@@ -733,23 +730,23 @@ def _definition_lines(node: DefinitionList, room: TableRoom) -> list[str]:
     return lines
 
 
-def _written_natively(node: Node, room: TableRoom) -> bool:
+def _natively_or_folded(node: Node, room: TableRoom) -> tuple[NotionNode, ...]:
     match node:
-        case FactStrip():
-            return len(_fact_columns(node)) > 1 and not room.in_a_column
-        case KeyValueList():
-            return not any(
-                next(_codes_holding_a_closing_tag(pair.value), None) is not None for pair in node.pairs
-            )
-        case Cards():
-            return bool(_card_columns(node))
+        case FactStrip() if len(_fact_columns(node)) > 1 and not room.in_a_column:
+            return (node,)
+        case KeyValueList() if not any(
+            next(_codes_holding_a_closing_tag(pair.value), None) is not None for pair in node.pairs
+        ):
+            return (node,)
+        case Cards() if _card_columns(node):
+            return (node,)
         case DefinitionList():
-            return True
+            return (node,)
         case _:
-            return False
+            return folded((node,))
 
 
-def _notion_lines(node: Node, room: TableRoom) -> list[str]:
+def _notion_lines(node: NotionNode, room: TableRoom) -> list[str]:
     match node:
         case FactStrip():
             return _column_strip_lines(_fact_columns(node), room)
@@ -759,11 +756,6 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             return _definition_lines(node, room)
         case Cards():
             return _column_strip_lines(_card_columns(node), room)
-        case Timeline() | LinkCard():
-            raise ExportInvariantError(
-                f"a Notion page writes a {type(node).__name__} as the nodes it folds to; "
-                "the writer should have folded it first"
-            )
         case Heading():
             return [f"{_heading_marks(node.level)} {notion_inline(node.text)}"]
         case Paragraph():
@@ -784,7 +776,7 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
             return [opening, *_indent(_notion_blocks(node.children, room)), "</callout>"]
         case Quote():
-            return _quote_lines(node, room)
+            return _quote_with_its_lists_lines(node, room)
         case Divider():
             return [DIVIDER_LINE]
         case Toggle():
@@ -806,12 +798,8 @@ def _notion_lines(node: Node, room: TableRoom) -> list[str]:
             assert_never(node)
 
 
-def _as_notion_writes(nodes: Iterable[Node], room: TableRoom) -> tuple[Node, ...]:
-    return tuple(
-        written
-        for node in nodes
-        for written in ((node,) if _written_natively(node, room) else folded((node,)))
-    )
+def _written_natively_or_folded(nodes: Iterable[Node], room: TableRoom) -> tuple[NotionNode, ...]:
+    return tuple(written for node in nodes for written in _natively_or_folded(node, room))
 
 
 def _list_kind(node: Node) -> ListKind | None:
@@ -860,7 +848,7 @@ class _CostedBlock:
 
 def _sections(nodes: Sequence[Node], room: TableRoom) -> list[list[Node]]:
     sections: list[list[Node]] = [[]]
-    for node in _as_notion_writes(nodes, room):
+    for node in _written_natively_or_folded(nodes, room):
         if _chunk_heading(node) is not None and sections[-1]:
             sections.append([])
         sections[-1].append(node)
@@ -891,7 +879,7 @@ def _rendered_blocks_by_position(
     nodes: Sequence[Node], room: TableRoom
 ) -> Iterator[tuple[int, RenderedBlock]]:
     previous_kind: ListKind | None = None
-    for position, node in enumerate(_as_notion_writes(nodes, room)):
+    for position, node in enumerate(_written_natively_or_folded(nodes, room)):
         node_lines = _notion_lines(node, room)
         if not node_lines:
             continue
@@ -936,7 +924,7 @@ def render_notion_regions(document: LoweredDocument, page_width: NotionWidth = "
     region_of_node = [
         position
         for position, region in enumerate(document.regions)
-        for _ in _as_notion_writes(region.nodes, room)
+        for _ in _written_natively_or_folded(region.nodes, room)
     ]
     lines_by_region: list[list[str]] = [[] for _ in document.regions]
     for node_position, block in _rendered_blocks_by_position(document.body, room):

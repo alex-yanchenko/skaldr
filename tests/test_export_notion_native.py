@@ -10,9 +10,12 @@ from skaldr.export.notion import NotionChunks, chunk_notion, render_notion, rend
 from skaldr.export.runs import Chip, IndicatorMark, StatusMark
 from skaldr.export.tree import (
     BlockRegion,
+    Callout,
     Card,
     Cards,
     Columns,
+    Definition,
+    DefinitionList,
     FactStrip,
     GridColumn,
     Heading,
@@ -27,6 +30,7 @@ from skaldr.export.tree import (
     TableCell,
     TableNode,
     TableRow,
+    Toggle,
 )
 from skaldr.export_targets import ExportTarget
 from skaldr.models import parse_report
@@ -316,6 +320,69 @@ def test_a_quote_that_opens_with_a_list_is_an_empty_quote_over_the_list() -> Non
     assert render_notion(nodes) == ">\n\t- one\n"
 
 
+def test_a_quote_holding_a_numbered_list_that_starts_past_one_keeps_its_numbered_text_lines() -> None:
+    block = {"type": "quote", "body": "Said:\n\n3. b\n4. c"}
+
+    assert notion_of([block]) == "> Said:<br>3\\. b<br>4\\. c\n"
+
+
+def test_a_quote_whose_nested_list_starts_past_one_keeps_its_text_lines() -> None:
+    nested = ListNode("number", (ListEntry((Plain("x"),)),), start=3)
+    quote = Quote((ListNode("bullet", (ListEntry((Plain("a"),), children=(nested,)),)),))
+
+    assert render_notion([quote]) == "> • a<br>3\\. x\n"
+
+
+def test_a_key_value_pair_with_no_label_or_no_value_has_an_empty_cell() -> None:
+    nodes = [KeyValueList((LabelledValue(None, (Plain("Ana"),)), LabelledValue("Lead", ())))]
+
+    assert render_notion(nodes) == (
+        '<table fit-page-width="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td></td>\n\t\t<td>Ana</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Lead**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_definition_with_no_term_writes_its_body_unindented_and_with_no_body_nothing() -> None:
+    nodes = [DefinitionList((Definition("", (Paragraph((Plain("x"),)),)), Definition("", ())))]
+
+    assert render_notion(nodes) == "x\n"
+
+
+def test_a_key_value_table_and_a_definition_list_sit_inside_grid_columns() -> None:
+    table = KeyValueList((LabelledValue("Lead", (Plain("Ana"),)),))
+    definitions = DefinitionList((Definition("Why", (Paragraph((Plain("x"),)),)),))
+    grid = Columns((GridColumn(50, (table,)), GridColumn(50, (definitions,))))
+
+    assert render_notion([grid]) == (
+        "<columns>\n"
+        '\t<column ratio="50">\n'
+        '\t\t<table fit-page-width="true" header-column="true">\n'
+        "\t\t\t<tr>\n\t\t\t\t<td>**Lead**</td>\n\t\t\t\t<td>Ana</td>\n\t\t\t</tr>\n"
+        "\t\t</table>\n"
+        "\t</column>\n"
+        '\t<column ratio="50">\n\t\t**Why**\n\t\t\tx\n\t</column>\n'
+        "</columns>\n"
+    )
+
+
+def test_a_fact_strip_inside_a_toggle_or_a_callout_is_still_a_column_strip() -> None:
+    strip = FactStrip((LabelledValue("A", (Plain("1"),)), LabelledValue("B", (Plain("2"),))))
+    inside = (
+        "<columns>\n"
+        '\t<column ratio="50">\n\t\tA {color="gray"}\n\t\t1\n\t</column>\n'
+        '\t<column ratio="50">\n\t\tB {color="gray"}\n\t\t2\n\t</column>\n'
+        "</columns>\n"
+    )
+    indented = "".join(f"\t{line}\n" for line in inside.splitlines())
+
+    assert render_notion([Toggle((Plain("T"),), None, (strip,)), Callout("info", (strip,))]) == (
+        f"<details>\n<summary>T</summary>\n{indented}</details>\n"
+        f'<callout icon="💡" color="blue_bg">\n{indented}</callout>\n'
+    )
+
+
 def _table_with_row(row: TableRow) -> TableNode:
     return TableNode(
         (TableCell((Plain("Name"),)), TableCell((Plain("Status"),))),
@@ -333,10 +400,10 @@ def test_a_muted_row_strikes_its_title_and_has_no_fill() -> None:
     assert _rendered_row(row) == "\t<tr>\n\t\t<td>~~old~~</td>\n\t\t<td>x</td>\n\t</tr>\n"
 
 
-def test_a_danger_row_is_filled_end_to_end_and_its_badge_takes_the_normal_colour() -> None:
+def test_a_danger_row_fills_one_cell_the_one_holding_a_badge() -> None:
     row = TableRow((TableCell((Plain("bad"),)), TableCell((Chip("x", "red"),))), "danger")
 
-    assert _rendered_row(row) == ('\t<tr color="red_bg">\n\t\t<td>bad</td>\n\t\t<td>**x**</td>\n\t</tr>\n')
+    assert _rendered_row(row) == ('\t<tr>\n\t\t<td>bad</td>\n\t\t<td color="red_bg">**x**</td>\n\t</tr>\n')
 
 
 def test_a_row_tone_other_than_muted_or_danger_still_fills_one_cell() -> None:
@@ -345,10 +412,25 @@ def test_a_row_tone_other_than_muted_or_danger_still_fills_one_cell() -> None:
     assert _rendered_row(row) == ('\t<tr>\n\t\t<td>ok</td>\n\t\t<td color="green_bg">**x**</td>\n\t</tr>\n')
 
 
-def test_a_tinted_row_is_filled_end_to_end() -> None:
+def test_a_tinted_row_fills_its_badge_cell_as_a_toned_row_does() -> None:
     row = TableRow((TableCell((Plain("a"),)), TableCell((Chip("x", "blue"),))), tint="info")
 
-    assert _rendered_row(row) == ('\t<tr color="blue_bg">\n\t\t<td>a</td>\n\t\t<td>**x**</td>\n\t</tr>\n')
+    assert _rendered_row(row) == ('\t<tr>\n\t\t<td>a</td>\n\t\t<td color="blue_bg">**x**</td>\n\t</tr>\n')
+
+
+def test_a_row_of_indicator_dots_alone_fills_its_first_cell_with_the_row_tone() -> None:
+    row = TableRow(
+        (TableCell((IndicatorMark("danger"),), "danger"), TableCell((IndicatorMark("success"),), "success")),
+        "info",
+    )
+
+    assert _rendered_row(row) == '\t<tr>\n\t\t<td color="blue_bg">🔴</td>\n\t\t<td>🟢</td>\n\t</tr>\n'
+
+
+def test_a_row_of_one_indicator_dot_in_the_row_tone_still_fills_it() -> None:
+    row = TableRow((TableCell((IndicatorMark("info"),), "info"),), "info")
+
+    assert _rendered_row(row) == '\t<tr>\n\t\t<td color="blue_bg">🔵</td>\n\t</tr>\n'
 
 
 def test_a_row_tone_wins_over_a_tint() -> None:
