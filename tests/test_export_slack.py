@@ -412,15 +412,24 @@ def test_a_nested_list_takes_its_parents_kind_and_leads_each_item_with_its_own_m
     assert render_slack([ListNode(kind, (make_list_entry("a", nested),))]) == text
 
 
-def test_a_list_under_a_list_of_another_kind_under_a_bullet_stays_in_the_bullets_kind() -> None:
-    deepest = ListNode("bullet", (make_list_entry("c"),))
-    middle = ListNode("number", (make_list_entry("b", deepest),))
+@pytest.mark.parametrize(
+    ("outer", "middle", "text"),
+    [
+        pytest.param("bullet", "number", "* a\n  * 1\\. b\n    * c\n", id="bullet-number-bullet"),
+        pytest.param("number", "bullet", "1. a\n   1. • b\n      1. c\n", id="number-bullet-number"),
+    ],
+)
+def test_every_level_under_a_list_of_another_kind_takes_the_outer_lists_kind(
+    outer: ListKind, middle: ListKind, text: str
+) -> None:
+    deepest = ListNode(outer, (make_list_entry("c"),))
+    between = ListNode(middle, (make_list_entry("b", deepest),))
 
-    assert render_slack([ListNode("bullet", (make_list_entry("a", middle),))]) == "* a\n  * 1\\. b\n    * c\n"
+    assert render_slack([ListNode(outer, (make_list_entry("a", between),))]) == text
 
 
 @pytest.mark.parametrize("nested_kind", ["bullet", "number"])
-def test_the_canvas_writer_alone_raises_an_internal_error_for_a_list_of_another_kind_under_a_check_item(
+def test_a_list_of_another_kind_under_a_check_item_is_an_internal_error(
     nested_kind: ListKind,
 ) -> None:
     nested = ListNode(nested_kind, (make_list_entry("b"),))

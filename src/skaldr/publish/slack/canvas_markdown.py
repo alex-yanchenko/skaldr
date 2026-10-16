@@ -23,7 +23,8 @@ LIST_ITEM: Final = re.compile(r"\s*(?:[-+*]|\d+[.)]) ")
 ITEM_LINE: Final = re.compile(r"(\s*(?:[-+*]|\d+[.)]) (?:\[[ xX]\] )?)(.*)", re.DOTALL)
 NUMBER_MARKER_TEXT: Final = re.compile(r"(\d+)([.)] )")
 BULLET_MARKER_TEXT: Final = re.compile(r"[-+*] ")
-ESCAPED_MARKER_TEXT: Final = re.compile(r"^(\d+|)\\(?=[-+*.)] )")
+ESCAPED_NUMBER_MARKER_TEXT: Final = re.compile(r"(\d+)\\([.)] )")
+ESCAPED_BULLET_MARKER_TEXT: Final = re.compile(r"\\([-+*] )")
 COMPARABLE_INDENT: Final = "  "
 HARD_BREAK: Final = re.compile(r"(?<!\\)\\$")
 MENTION: Final = re.compile(r"!\[\]\(([@#][A-Z0-9]+)\)")
@@ -106,8 +107,16 @@ def _comparable_line(line: str) -> str:
     return MENTION.sub(r"<\1>", BULLET.sub(r"\1* ", stripped))
 
 
-def _item_text_as_shown(text: str) -> str:
-    return ESCAPED_MARKER_TEXT.sub(r"\1", text, count=1)
+def _item_text_with_its_marker_unescaped(text: str) -> str:
+    if ESCAPED_NUMBER_MARKER_TEXT.match(text):
+        return ESCAPED_NUMBER_MARKER_TEXT.sub(r"\1\2", text, count=1)
+    if ESCAPED_BULLET_MARKER_TEXT.match(text):
+        return text.removeprefix("\\")
+    return text
+
+
+def _holds_a_fence(block: str) -> bool:
+    return any(FENCE_OPENING.match(line.strip()) for line in block.split("\n"))
 
 
 def _comparable_list(block: str) -> str:
@@ -124,7 +133,7 @@ def _comparable_list(block: str) -> str:
         indent = len(comparable) - len(comparable.lstrip())
         while indents and indents[-1] >= indent:
             indents.pop()
-        marker, text = item.group(1).strip(), _item_text_as_shown(item.group(2))
+        marker, text = item.group(1).strip(), _item_text_with_its_marker_unescaped(item.group(2))
         lines.append(f"{COMPARABLE_INDENT * len(indents)}{marker} {text}")
         indents.append(indent)
     return "\n".join(lines)
@@ -133,7 +142,7 @@ def _comparable_list(block: str) -> str:
 def comparable_block(block: str) -> str:
     if block.strip() in SEPARATOR_TEXTS:
         return ""
-    if is_a_list(block):
+    if is_a_list(block) and not _holds_a_fence(block):
         return _comparable_list(block)
     fences = _Fences()
     lines: list[str] = []

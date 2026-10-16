@@ -312,7 +312,7 @@ def _text_marker(kind: ListKind, number: int, checked: bool) -> str:
             assert_never(kind)
 
 
-def _written_kind(canvas_list: _List, parent_kind: ListKind | None) -> ListKind:
+def _kind_a_canvas_takes_under(parent_kind: ListKind | None, canvas_list: _List) -> ListKind:
     if parent_kind is None or parent_kind == canvas_list.kind:
         return canvas_list.kind
     if parent_kind == "check":
@@ -364,7 +364,7 @@ class _CanvasWriter:
         return [self.block_line(line) for line in text.split("\n")] if text else []
 
     def list_lines(self, canvas_list: _List, parent_kind: ListKind | None = None) -> list[str]:
-        kind = _written_kind(canvas_list, parent_kind)
+        kind = _kind_a_canvas_takes_under(parent_kind, canvas_list)
         lines: list[str] = []
         for number, item in enumerate(canvas_list.items, start=FIRST_LIST_NUMBER):
             marker, indent = _list_marker(kind, number, item.checked)
