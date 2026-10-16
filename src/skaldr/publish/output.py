@@ -9,13 +9,14 @@ from skaldr.publish.drafts import item_label, section_label
 from skaldr.publish.engine import ItemStatus, PublishDiff, RemoteEdit, YamlChange
 from skaldr.publish.plan import ItemRef
 
+SECTION_PATH_PREFIX = "blocks["
 NO_VISIBLE_CHANGE = "(the service reports an edit here, and its text is unchanged)"
 
 
 def _part_label(item: ItemRef, part: Part, path: str | None) -> str:
     if part.kind == "section":
         named = section_label(part.key, path)
-    elif part == FIELDS and path is not None:
+    elif part == FIELDS and path is not None and path.startswith(SECTION_PATH_PREFIX):
         named = f"{part.label} ({path})"
     else:
         named = part.label

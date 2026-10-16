@@ -23,7 +23,6 @@ from skaldr.publish.connector import (
 )
 from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, Part, section_part
 from skaldr.publish_block import Publish, TargetBase
-from skaldr.publish_block.target import JsonFields
 from skaldr.services import SERVICE_NAMES
 
 DOCUMENT_ITEM_LABEL = "document"
@@ -106,8 +105,6 @@ class ItemDraft:
     section_id: str | None
     content: ItemContent
     paths: Mapping[Part, str]
-    warnings: tuple[str, ...] = ()
-    left_alone: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -147,30 +144,19 @@ class _TargetContext:
     connector: Connector
     position: int
 
-    def fields_path(
-        self, section_id: str | None, section_defaults: SectionDefaults, fields: JsonFields
-    ) -> str:
+    def fields_path(self, section_id: str | None, section_defaults: SectionDefaults) -> str:
         target_path = f"publish.targets[{self.position}]"
         override = None if section_id is None else self.target.overrides.get(section_id)
         override_fields = {} if override is None else override.fields
-        target_fields = self.target.where_fields()
-        if not section_defaults.sources:
-            return (
-                f"{target_path}.overrides.{section_id}.fields"
-                if override_fields
-                else f"{target_path}.where.fields"
-            )
-        sources = {
-            name: (
-                f"{target_path}.overrides.{section_id}.fields.{name}"
-                if name in override_fields
-                else f"{target_path}.where.fields.{name}"
-                if name in target_fields
-                else section_defaults.sources[name]
-            )
-            for name in fields
-        }
-        return ", ".join(dict.fromkeys(sources.values()))
+        taken_from_the_target = override_fields.keys() | self.target.where_fields().keys()
+        section_supplies_a_value = any(name not in taken_from_the_target for name in section_defaults.values)
+        if section_defaults.authored_path is not None and section_supplies_a_value:
+            return section_defaults.authored_path
+        return (
+            f"{target_path}.overrides.{section_id}.fields"
+            if override_fields
+            else f"{target_path}.where.fields"
+        )
 
     def section_defaults_of(self, region: BlockRegion) -> SectionDefaults:
         section = _section_of(self.report, region)
@@ -210,17 +196,12 @@ def _item_draft(
         ),
         {
             TITLE: title_path,
-            FIELDS: context.fields_path(section_id, section_defaults, fields),
+            FIELDS: context.fields_path(section_id, section_defaults),
             **(_look_paths(section_id) if carries_look else {}),
             **{
                 section_part(key): region_path(region) for key, region in zip(keys, page.regions, strict=True)
             },
         },
-        warnings=tuple(
-            f"warning: {context.target.location_label()}, {item_label(section_id)}: {warning}"
-            for warning in section_defaults.warnings
-        ),
-        left_alone=section_defaults.left_alone,
     )
 
 

@@ -5,7 +5,6 @@ from pydantic import JsonValue
 
 from skaldr.errors import PublishError
 from skaldr.publish import ConnectorRegistry
-from skaldr.publish import cli as publish_cli
 from skaldr.publish.content import FIELDS
 from skaldr.publish.drafts import ItemDraft, draft_targets
 from skaldr.publish.engine import Applied, ApplyOutcome, apply_publish, diff_publish, prepare_publish
@@ -101,7 +100,7 @@ def test_without_the_opt_in_a_sections_fields_reach_no_jira_field() -> None:
         people=ADA_HAS_A_JIRA_ID,
     )
 
-    assert (draft.content.fields, draft.warnings, draft.paths[FIELDS]) == ({}, (), WHERE_FIELDS_PATH)
+    assert (draft.content.fields, draft.paths[FIELDS]) == ({}, WHERE_FIELDS_PATH)
 
 
 def test_the_target_refuses_a_non_boolean_opt_in() -> None:
@@ -166,28 +165,29 @@ def test_a_null_priority_in_an_override_keeps_the_sections_priority_off_the_issu
     assert _tools_draft({"priority": "High"}, publish=publish).content.fields == {"priority": None}
 
 
-def test_an_assignee_without_a_jira_id_is_left_out_with_a_warning() -> None:
-    draft = _tools_draft({"assignee": "ada", "priority": "Low"}, people={"ada": {}})
-
-    assert (draft.content.fields, draft.warnings) == (
-        {"priority": {"name": "Low"}},
-        (
-            f"warning: {TARGET_LABEL}, section tools: assignee 'ada' has no jira id in meta.people; "
-            "the issue's assignee is left as it is",
-        ),
+@pytest.mark.parametrize(
+    "people",
+    [pytest.param({"ada": {}}, id="a-person-without-a-jira-id"), pytest.param(None, id="no-such-person")],
+)
+def test_an_assignee_without_a_jira_account_id_is_refused(people: JsonObject | None) -> None:
+    expected = (
+        f"{TARGET_LABEL}, section tools: blocks[1].fields.assignee is 'ada', but that person has no jira "
+        "account id in meta.people; add one under meta.people.ada.jira, or remove the assignee"
+    )
+    report = authored_garden(
+        publish=_jira_publish(), blocks=_blocks_with_fields("tools", {"assignee": "ada"}), meta=_meta(people)
     )
 
+    with pytest.raises(PublishError) as raised:
+        draft_targets(report, ConnectorRegistry([JiraConnector()]))
 
-def test_an_assignee_who_is_not_in_the_people_list_is_left_out_with_a_warning() -> None:
-    draft = _tools_draft({"assignee": "ada"})
+    assert str(raised.value) == expected
 
-    assert (draft.content.fields, draft.warnings) == (
-        {},
-        (
-            f"warning: {TARGET_LABEL}, section tools: assignee 'ada' is not in meta.people; "
-            "the issue's assignee is left as it is",
-        ),
-    )
+
+def test_an_assignee_without_a_jira_account_id_passes_when_the_opt_in_is_off() -> None:
+    draft = _tools_draft({"assignee": "ada"}, publish=_jira_publish(from_sections=False))
+
+    assert draft.content.fields == {}
 
 
 def test_a_label_holding_whitespace_is_refused_naming_where_it_was_written() -> None:
@@ -228,30 +228,30 @@ def test_the_document_issue_gets_no_fields_from_a_section_written_into_it() -> N
         pytest.param(
             {"priority": "High", "due": "2026-10-15"},
             _jira_publish(),
-            f"{TOOLS_FIELDS_PATH}.priority, {TOOLS_FIELDS_PATH}.due",
+            TOOLS_FIELDS_PATH,
             id="the-section",
         ),
         pytest.param(
             {"priority": "High", "due": "2026-10-15"},
             _jira_publish(where_fields={"priority": {"name": "Medium"}}),
-            f"{WHERE_FIELDS_PATH}.priority, {TOOLS_FIELDS_PATH}.due",
-            id="the-target-wins-one-key",
+            TOOLS_FIELDS_PATH,
+            id="the-target-wins-one-key-and-the-section-supplies-another",
         ),
         pytest.param(
             {"priority": "High"},
             _jira_publish(overrides={"tools": {"fields": {"priority": {"name": "Lowest"}}}}),
-            "publish.targets[0].overrides.tools.fields.priority",
-            id="an-override-wins",
+            "publish.targets[0].overrides.tools.fields",
+            id="an-override-wins-every-key",
         ),
         pytest.param(
             {"priority": "High"},
             _jira_publish(where_fields={"priority": None}),
-            f"{WHERE_FIELDS_PATH}.priority",
-            id="a-null-in-the-target-fields-names-its-key",
+            WHERE_FIELDS_PATH,
+            id="a-null-in-the-target-fields-wins-every-key",
         ),
     ],
 )
-def test_the_fields_path_names_where_each_value_was_written(
+def test_the_fields_path_is_the_sections_when_it_supplies_any_value_and_the_targets_otherwise(
     section_fields: JsonObject, publish: JsonObject, expected: str
 ) -> None:
     assert _tools_draft(section_fields, publish=publish).paths[FIELDS] == expected
@@ -353,8 +353,8 @@ def test_the_diff_shows_a_changed_section_field_under_the_path_of_the_section(tm
     lines = diff_lines(diff_publish(prepare_publish(path, ConnectorRegistry([_connector(jira)]))))
 
     assert [line for line in lines if "fields" in line] == [
-        f"--- {TARGET_LABEL}, section tools: fields ({TOOLS_FIELDS_PATH}.priority), as published",
-        f"+++ {TARGET_LABEL}, section tools: fields ({TOOLS_FIELDS_PATH}.priority), in the YAML",
+        f"--- {TARGET_LABEL}, section tools: fields ({TOOLS_FIELDS_PATH}), as published",
+        f"+++ {TARGET_LABEL}, section tools: fields ({TOOLS_FIELDS_PATH}), in the YAML",
     ]
 
 
@@ -368,36 +368,11 @@ def test_a_priority_changed_in_jira_shows_as_a_remote_edit_of_the_fields_with_th
     diff = diff_publish(prepare_publish(path, ConnectorRegistry([_connector(jira)])))
 
     assert [(edit.item.section_id, edit.part, edit.path, edit.edited_by) for edit in diff.remote_edits] == [
-        ("tools", FIELDS, f"{TOOLS_FIELDS_PATH}.priority", "Robin Editor")
+        ("tools", FIELDS, TOOLS_FIELDS_PATH, "Robin Editor")
     ]
 
 
-def test_an_assignee_that_can_no_longer_be_mapped_is_not_cleared_from_the_issue(tmp_path: Path) -> None:
-    jira = FakeJira()
-    blocks = _blocks_with_fields("tools", {"assignee": "ada"})
-    path = write_garden_report(
-        tmp_path, publish=_jira_publish(), blocks=blocks, meta=_meta(ADA_HAS_A_JIRA_ID)
-    )
-    _publish(path, jira)
-    write_garden_report(tmp_path, publish=_jira_publish(), blocks=blocks, meta=_meta({"ada": {}}))
-    jira.forget_requests()
-
-    outcome = _publish(path, jira)
-
-    assert (
-        outcome,
-        jira.issues["DEMO-2"].fields["assignee"],
-        [call for call in jira.calls() if call[0] != "GET"],
-    ) == (
-        Applied(()),
-        {"accountId": ADA_ACCOUNT},
-        [],
-    )
-
-
-def test_publishing_prints_a_warning_for_an_assignee_it_cannot_map(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_publishing_an_assignee_without_a_jira_id_sends_nothing(tmp_path: Path) -> None:
     jira = FakeJira()
     path = write_garden_report(
         tmp_path,
@@ -406,9 +381,31 @@ def test_publishing_prints_a_warning_for_an_assignee_it_cannot_map(
         meta=_meta({"ada": {}}),
     )
 
-    publish_cli.main(["publish", str(path)], registry=ConnectorRegistry([_connector(jira)]))
+    with pytest.raises(PublishError, match="blocks\\[1\\]\\.fields\\.assignee is 'ada'"):
+        _publish(path, jira)
 
-    assert capsys.readouterr().err == (
-        f"warning: {TARGET_LABEL}, section tools: assignee 'ada' has no jira id in meta.people; "
-        "the issue's assignee is left as it is\n"
+    assert jira.requests == []
+
+
+def test_the_diff_text_of_a_target_without_the_opt_in_names_the_fields_part_plainly(tmp_path: Path) -> None:
+    jira = FakeJira()
+    path = write_garden_report(
+        tmp_path,
+        publish=_jira_publish(from_sections=False, where_fields={"priority": {"name": "High"}}),
+        blocks=_blocks_with_fields("tools", {"priority": "Low"}),
     )
+    _publish(path, jira)
+    write_garden_report(
+        tmp_path,
+        publish=_jira_publish(from_sections=False, where_fields={"priority": {"name": "Low"}}),
+        blocks=_blocks_with_fields("tools", {"priority": "Low"}),
+    )
+
+    lines = diff_lines(diff_publish(prepare_publish(path, ConnectorRegistry([_connector(jira)]))))
+
+    assert [line for line in lines if "fields" in line] == [
+        f"--- {TARGET_LABEL}, document: fields, as published",
+        f"+++ {TARGET_LABEL}, document: fields, in the YAML",
+        f"--- {TARGET_LABEL}, section tools: fields, as published",
+        f"+++ {TARGET_LABEL}, section tools: fields, in the YAML",
+    ]

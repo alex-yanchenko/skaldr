@@ -8,7 +8,7 @@ from typing_extensions import Self
 from skaldr.errors import PublishError
 from skaldr.publish.connector import ConnectorRegistry
 from skaldr.publish.drafts import ItemDraft, TargetDraft, draft_targets, load_authored, published_targets
-from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish, published_item
+from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish
 from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState, load_state, state_path_for
 from skaldr.publish.transport import Transport
 from skaldr.publish_block import TargetBase
@@ -40,46 +40,12 @@ class Prepared:
         return replace(self, state=state, plan=plan_publish(self.drafts, state, self.registry))
 
 
-def _keeping_what_was_left_alone(draft: ItemDraft, published: PublishedItem | None) -> ItemDraft:
-    if published is None:
-        return draft
-    kept = {
-        name: published.rendered.fields[name]
-        for name in draft.left_alone
-        if name in published.rendered.fields and name not in draft.content.fields
-    }
-    if not kept:
-        return draft
-    fields = {**draft.content.fields, **kept}
-    return replace(draft, content=draft.content.model_copy(update={"fields": fields}))
-
-
-def _keeping_what_the_drafts_leave_alone(
-    drafts: tuple[TargetDraft, ...], state: PublishState
-) -> tuple[TargetDraft, ...]:
-    return tuple(
-        replace(
-            target,
-            document=_keeping_what_was_left_alone(
-                target.document, published_item(state.targets.get(target.label), None)
-            ),
-            sections=tuple(
-                _keeping_what_was_left_alone(
-                    section, published_item(state.targets.get(target.label), section.section_id)
-                )
-                for section in target.sections
-            ),
-        )
-        for target in drafts
-    )
-
-
 def prepare_publish(document_path: Path, registry: ConnectorRegistry) -> Prepared:
     authored = load_authored(document_path)
     doc_id = published_targets(authored.report).doc_id
     state_path = state_path_for(document_path)
     state = load_state(state_path, doc_id)
-    drafts = _keeping_what_the_drafts_leave_alone(draft_targets(authored, registry), state)
+    drafts = draft_targets(authored, registry)
     plan = plan_publish(drafts, state, registry)
     return Prepared(document_path, state_path, doc_id, state, drafts, plan, registry)
 

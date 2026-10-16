@@ -28,10 +28,8 @@ class ContentLimit:
 @dataclass(frozen=True)
 class SectionDefaults:
     values: JsonFields = field(default_factory=JsonFields)
-    sources: Mapping[str, str] = field(default_factory=dict[str, str])
-    warnings: tuple[str, ...] = ()
+    authored_path: str | None = None
     refusals: tuple[str, ...] = ()
-    left_alone: tuple[str, ...] = ()
 
 
 NO_SECTION_DEFAULTS = SectionDefaults()

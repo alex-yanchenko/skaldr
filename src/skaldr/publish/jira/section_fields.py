@@ -6,33 +6,40 @@ from skaldr.publish_block import JiraTarget, TargetBase
 from skaldr.publish_block.target import JsonFields
 
 
-def _unmapped_assignee_warning(report: Report, person_key: str) -> str:
-    reason = "has no jira id" if person_key in report.meta.people else "is not"
-    return f"assignee '{person_key}' {reason} in meta.people; the issue's assignee is left as it is"
+def _assignee_refusals(report: Report, authored: SectionFields, authored_path: str) -> tuple[str, ...]:
+    person_key = authored.assignee
+    if person_key is None:
+        return ()
+    person = report.meta.people.get(person_key)
+    if person is not None and person.jira is not None:
+        return ()
+    return (
+        f"{authored_path}.assignee is '{person_key}', but that person has no jira account id in "
+        f"meta.people; add one under meta.people.{person_key}.jira, or remove the assignee",
+    )
 
 
-def _label_refusals(labels: list[str], authored_path: str) -> tuple[str, ...]:
+def _label_refusals(authored: SectionFields, authored_path: str) -> tuple[str, ...]:
     return tuple(
         f"{authored_path}.labels.{position} is '{label}', but Jira labels cannot hold spaces; "
         f"write it with hyphens, such as '{'-'.join(label.split())}'"
-        for position, label in enumerate(labels)
+        for position, label in enumerate(authored.labels or [])
         if any(character.isspace() for character in label)
     )
 
 
-def _mapped_fields(authored: SectionFields, authored_path: str) -> tuple[JsonFields, dict[str, str]]:
+def _mapped_fields(report: Report, authored: SectionFields) -> JsonFields:
     values: dict[str, JsonValue] = {}
-    sources: dict[str, str] = {}
     if authored.priority is not None:
         values["priority"] = {"name": authored.priority}
-        sources["priority"] = f"{authored_path}.priority"
     if authored.due is not None:
         values["duedate"] = authored.due.isoformat()
-        sources["duedate"] = f"{authored_path}.due"
     if authored.labels is not None:
         values["labels"] = list(authored.labels)
-        sources["labels"] = f"{authored_path}.labels"
-    return values, sources
+    person = None if authored.assignee is None else report.meta.people.get(authored.assignee)
+    if person is not None and person.jira is not None:
+        values["assignee"] = {"accountId": person.jira}
+    return values
 
 
 def jira_section_defaults(
@@ -42,21 +49,8 @@ def jira_section_defaults(
     if authored is None or not isinstance(target, JiraTarget) or not target.where.fields_from_sections:
         return NO_SECTION_DEFAULTS
     authored_path = f"blocks[{source_index}].fields"
-    values, sources = _mapped_fields(authored, authored_path)
-    refusals = () if authored.labels is None else _label_refusals(authored.labels, authored_path)
-    if authored.assignee is None:
-        return SectionDefaults(values, sources, refusals=refusals)
-    person = report.meta.people.get(authored.assignee)
-    if person is None or person.jira is None:
-        return SectionDefaults(
-            values,
-            sources,
-            warnings=(_unmapped_assignee_warning(report, authored.assignee),),
-            refusals=refusals,
-            left_alone=("assignee",),
-        )
     return SectionDefaults(
-        {**values, "assignee": {"accountId": person.jira}},
-        {**sources, "assignee": f"{authored_path}.assignee"},
-        refusals=refusals,
+        _mapped_fields(report, authored),
+        authored_path,
+        (*_label_refusals(authored, authored_path), *_assignee_refusals(report, authored, authored_path)),
     )
