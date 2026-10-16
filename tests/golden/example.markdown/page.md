@@ -57,7 +57,7 @@ The recount runs <span data-range="2026-07-10/2026-07-14">10 to 14 Jul</span>, i
 flowchart LR
     s1["1: Scan"]:::info
     s2["2: Reconcile"]:::accent
-    s3["3: Flag"]:::warning
+    s3["3: Flag<br>🔵 System"]:::warning
     s4["4: Fix"]:::success
     s5["5: Recount"]
     s1 --> s2
@@ -70,8 +70,6 @@ flowchart LR
     classDef success fill:#e6f4ea,stroke:#1e8e3e,color:#1f2328
     classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
 ```
-
-- **Flag** 🔵 **System**
 
 ### Discrepancy resolution across teams
 

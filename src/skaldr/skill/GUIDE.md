@@ -1496,7 +1496,7 @@ case, where the page is shared as a URL an agent later has to read back.
 
 | Block | GitHub-flavored | Notion |
 | --- | --- | --- |
-| `flow`, `fan` | a Mermaid diagram, plus a list of the steps whose points or badges it cannot show | the same |
+| `flow`, `fan` | a Mermaid diagram whose node labels carry each step's note, its points (each led by `• `) and its badges (each its dot and label), one to a line; when a point holds a link, citation, inline math, struck-through text or a subscript or superscript with no Unicode form, a label cannot show it, so the points and badges of every step stay in a list of steps below the diagram instead | a Mermaid diagram, plus a list of the steps whose points or badges it cannot show |
 | `chart` | a donut is a Mermaid pie over a table of each slice's value and share and the total; a bar or line chart with one series, stacked or not, is a Mermaid xy chart over its data table; a chart with several series is its data table alone, with a `Total` row of each category's stack for stacked bars | the same |
 | `callout`, `note`, a toned `grid` cell | a GitHub alert, `> [!NOTE]` for `info`, `sky` and `neutral` (a `note` is neutral), `> [!TIP]` for `success` and `teal`, `> [!IMPORTANT]` for `accent`, `> [!WARNING]` for `warning` and `> [!CAUTION]` for `danger`; a callout inside a list item, a `grid` cell or another callout, and a toned `grid` cell itself, stays a quote led by its icon, since an alert cannot nest | a native callout |
 | `panel` | a quote led by its bold title and no icon, as on the page | a native callout |

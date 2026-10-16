@@ -191,6 +191,8 @@ class GraphNode:
     label: str
     note: ExportRich = ()
     tone: ToneName | None = None
+    points: tuple[ExportRich, ...] = ()
+    badges: ExportRich = ()
 
 
 @dataclass(frozen=True)

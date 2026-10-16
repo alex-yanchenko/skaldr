@@ -168,7 +168,16 @@ def test_a_flow_lists_the_points_and_badges_its_diagram_cannot_show() -> None:
         Diagram(
             Graph(
                 "LR",
-                (GraphNode("s1", "Scan", (Plain("first"),)), GraphNode("s2", "Fix")),
+                (
+                    GraphNode(
+                        "s1",
+                        "Scan",
+                        (Plain("first"),),
+                        points=((Plain("by aisle"),),),
+                        badges=(Chip("api", "blue"),),
+                    ),
+                    GraphNode("s2", "Fix"),
+                ),
                 (GraphEdge("s1", "s2"),),
                 "flow",
             ),
@@ -240,7 +249,16 @@ def test_a_fan_lists_the_points_and_badges_of_its_hub_before_its_spokes() -> Non
         Diagram(
             Graph(
                 "LR",
-                (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")),
+                (
+                    GraphNode(
+                        "hub",
+                        "Hub",
+                        points=((Plain("owns the queue"),),),
+                        badges=(Chip("api", "blue"),),
+                    ),
+                    GraphNode("s1", "A", points=((Plain("one"),),)),
+                    GraphNode("s2", "B"),
+                ),
                 (GraphEdge("hub", "s1"), GraphEdge("hub", "s2")),
                 "fan",
             ),
@@ -277,7 +295,16 @@ def test_a_fan_points_its_edges_the_way_it_says(direction: str, edges: tuple[Gra
 
     assert lowered([fan]) == (
         Diagram(
-            Graph("LR", (GraphNode("hub", "Hub"), GraphNode("s1", "A"), GraphNode("s2", "B")), edges, "fan"),
+            Graph(
+                "LR",
+                (
+                    GraphNode("hub", "Hub"),
+                    GraphNode("s1", "A", points=((Plain("one"),),)),
+                    GraphNode("s2", "B"),
+                ),
+                edges,
+                "fan",
+            ),
             (
                 ListNode(
                     "bullet",

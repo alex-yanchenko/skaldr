@@ -190,15 +190,78 @@ def test_a_flow_keeps_its_mermaid_and_the_detail_mermaid_cannot_show() -> None:
     }
 
     assert markdown_of([flow]) == (
+        '```mermaid\nflowchart LR\n    s1["Scan<br>• by aisle"]\n    s2["Fix"]\n    s1 --> s2\n```\n'
+    )
+
+
+def test_a_flow_step_shows_its_note_points_and_badges_in_its_node_label() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [
+            {
+                "label": "Scan",
+                "note": "first",
+                "points": ["by aisle", "by **bin**"],
+                "badges": ["API", "RISK"],
+            },
+            {"label": "Fix"},
+        ],
+    }
+
+    assert markdown_of([flow], badges=API_AND_RISK_BADGES) == (
+        f"{API_LEGEND}"
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    s1["Scan<br>first<br>• by aisle<br>• by bin<br>🔵 api 🔴 risk"]\n'
+        '    s2["Fix"]\n'
+        "    s1 --> s2\n"
+        "```\n"
+    )
+
+
+def test_a_fan_hub_and_spoke_show_their_points_and_badges_in_their_node_labels() -> None:
+    fan = {
+        "type": "fan",
+        "direction": "out",
+        "hub": {"label": "Hub", "points": ["owns the queue"], "badges": ["API"]},
+        "spokes": [{"label": "A", "points": ["one"]}, {"label": "B"}],
+    }
+
+    assert markdown_of([fan], badges=API_BADGES) == (
+        f"{API_LEGEND}"
+        "```mermaid\n"
+        "flowchart LR\n"
+        '    hub["Hub<br>• owns the queue<br>🔵 api"]\n'
+        '    s1["A<br>• one"]\n'
+        '    s2["B"]\n'
+        "    hub --> s1\n"
+        "    hub --> s2\n"
+        "```\n"
+    )
+
+
+def test_a_flow_with_a_point_a_label_cannot_hold_keeps_the_step_list_beside_the_plain_labels() -> None:
+    flow = {
+        "type": "flow",
+        "numbered": False,
+        "steps": [
+            {"label": "Scan", "points": ["see [doc](https://example.com/d)"]},
+            {"label": "Fix", "points": ["twice"]},
+        ],
+    }
+
+    assert markdown_of([flow]) == (
         "```mermaid\n"
         "flowchart LR\n"
         '    s1["Scan"]\n'
         '    s2["Fix"]\n'
         "    s1 --> s2\n"
-        "```\n"
-        "\n"
+        "```\n\n"
         "- **Scan**\n"
-        "  - by aisle\n"
+        "  - see [doc](https://example.com/d)\n"
+        "- **Fix**\n"
+        "  - twice\n"
     )
 
 

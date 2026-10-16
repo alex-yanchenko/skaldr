@@ -34,7 +34,7 @@ from skaldr.export.markup import (
     styled_in_tags,
     wrap_around_core,
 )
-from skaldr.export.mermaid import mermaid_fence_lines
+from skaldr.export.mermaid import mermaid_fence_lines, step_details_fit_their_labels, step_has_details
 from skaldr.export.runs import Chip, ExportRich, export_visible_text
 from skaldr.export.swaps import data_table_swapped_in, figure_mermaid_draws, swaps_the_figure, web_address_of
 from skaldr.export.tree import (
@@ -48,6 +48,8 @@ from skaldr.export.tree import (
     DisplayMath,
     Divider,
     FactStrip,
+    Figure,
+    Graph,
     GridColumn,
     Heading,
     HeadingLevel,
@@ -267,6 +269,14 @@ def _is_written_natively(node: Node) -> bool:
             return True
         case _:
             return False
+
+
+def _shows_its_step_details_in_its_labels(figure: Figure) -> bool:
+    return (
+        isinstance(figure, Graph)
+        and any(map(step_has_details, figure.nodes))
+        and step_details_fit_their_labels(figure)
+    )
 
 
 def _holds_a_table_or_a_tone(column: GridColumn) -> bool:
@@ -552,9 +562,11 @@ class _MarkdownWriter:
                 table = self.blocks_after(data_table_swapped_in(node, "markdown"), after)
                 return _Written.of(table.lines, table.tail)
             case Diagram():
-                supplement = self.blocks_after(node.supplement, None)
+                figure = figure_mermaid_draws(node, "markdown")
+                in_labels = _shows_its_step_details_in_its_labels(figure)
+                supplement = self.blocks_after((() if in_labels else node.supplement), None)
                 return _Written.of(
-                    [*mermaid_fence_lines(figure_mermaid_draws(node, "markdown")), *spaced(supplement.lines)],
+                    [*mermaid_fence_lines(figure, with_step_details=in_labels), *spaced(supplement.lines)],
                     supplement.tail,
                 )
             case TableOfContents():
