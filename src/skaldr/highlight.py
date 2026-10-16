@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Literal
 
 from markupsafe import Markup, escape
@@ -11,6 +11,7 @@ from skaldr.lexers import find_lexer
 from skaldr.models import VARIABLE_TOKEN, Code
 
 MAX_HIGHLIGHTED_CHARACTERS: Final = 20_000
+MAX_HIGHLIGHTED_DOCUMENT_CHARACTERS: Final = 200_000
 
 TOKEN_CLASSES: Final[tuple[tuple[_TokenType, str], ...]] = (
     (Token.Comment, "t-com"),
@@ -38,10 +39,24 @@ def token_class(kind: _TokenType) -> str:
     return next((name for family, name in TOKEN_CLASSES if kind in family), "")
 
 
-def lexer_for(language: str, size: int) -> Lexer | None:
+@dataclass
+class HighlightBudget:
+    remaining: int = field(default_factory=lambda: MAX_HIGHLIGHTED_DOCUMENT_CHARACTERS)
+
+    def take(self, size: int) -> bool:
+        if size > self.remaining:
+            return False
+        self.remaining -= size
+        return True
+
+
+def lexer_for(language: str, size: int, budget: HighlightBudget | None = None) -> Lexer | None:
     if not language or size > MAX_HIGHLIGHTED_CHARACTERS:
         return None
-    return find_lexer(language)
+    lexer = find_lexer(language)
+    if lexer is None or budget is None or budget.take(size):
+        return lexer
+    return None
 
 
 def with_line_feeds(text: str) -> str:
@@ -86,9 +101,9 @@ def plain_lines(text: str) -> list[Markup]:
     return [escape(line) for line in text.split("\n")]
 
 
-def highlighted_code(block: Code) -> Markup:
+def highlighted_code(block: Code, budget: HighlightBudget | None = None) -> Markup:
     text = with_line_feeds(block.content)
-    lexer = lexer_for(block_code_language(block), len(text))
+    lexer = lexer_for(block_code_language(block), len(text), budget)
     lines = lexed_lines(text, lexer) if lexer else None
     return Markup("\n").join(plain_lines(text) if lines is None else lines)
 
@@ -127,9 +142,11 @@ def highlighted_with_stand_ins(
     return markup
 
 
-def highlighted_query_keeping_slots_whole(text: str, language: str) -> Markup | None:
+def highlighted_query_keeping_slots_whole(
+    text: str, language: str, budget: HighlightBudget | None = None
+) -> Markup | None:
     plain = with_line_feeds(text)
-    lexer = lexer_for(language, len(plain))
+    lexer = lexer_for(language, len(plain), budget)
     if lexer is None:
         return None
     names = [match.group(1) for match in VARIABLE_TOKEN.finditer(plain)]
@@ -157,10 +174,12 @@ def side_lines(rows: list[DiffRow], skipped: DiffKind, lexer: Lexer) -> list[Mar
     return lexed_lines("\n".join(row.body for row in rows if row.kind != skipped), lexer)
 
 
-def highlighted_diff_lines(block: Code) -> list[tuple[DiffKind, Markup]]:
+def highlighted_diff_lines(
+    block: Code, budget: HighlightBudget | None = None
+) -> list[tuple[DiffKind, Markup]]:
     rows = [diff_row(line) for line in with_line_feeds(block.content).split("\n")]
     size = sum(len(row.marker) + len(row.body) + 1 for row in rows) - 1
-    lexer = lexer_for(block_code_language(block), size)
+    lexer = lexer_for(block_code_language(block), size, budget)
     old_lines = side_lines(rows, "add", lexer) if lexer else None
     new_lines = side_lines(rows, "del", lexer) if lexer else None
     if old_lines is None or new_lines is None:

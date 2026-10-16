@@ -10,6 +10,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from functools import partial
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Final, NoReturn, cast
@@ -22,7 +23,12 @@ from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
 from skaldr.errors import ReportError
 from skaldr.frozen_model import FrozenModel
-from skaldr.highlight import highlighted_code, highlighted_diff_lines, highlighted_query_keeping_slots_whole
+from skaldr.highlight import (
+    HighlightBudget,
+    highlighted_code,
+    highlighted_diff_lines,
+    highlighted_query_keeping_slots_whole,
+)
 from skaldr.mathml import mathml
 from skaldr.models import (
     MEDIA_KIND_LABELS,
@@ -321,6 +327,10 @@ def _render(
     globals_["badges"] = report.badges
     globals_["anchor_id"] = anchor_id
     globals_["strip_of"] = strip_of
+    highlight_budget = HighlightBudget()
+    globals_["highlighted_code"] = partial(highlighted_code, budget=highlight_budget)
+    globals_["highlighted_diff_lines"] = partial(highlighted_diff_lines, budget=highlight_budget)
+    globals_["highlighted_query"] = partial(highlighted_query_keeping_slots_whole, budget=highlight_budget)
     section_titles = compute.section_titles_by_id(report)
 
     def section_facts_of(fields: SectionFields) -> tuple[compute.SectionFact, ...]:

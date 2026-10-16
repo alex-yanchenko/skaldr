@@ -461,7 +461,7 @@ compute a diff. `mode: plain` (the default) renders the content verbatim with no
        return total
 ```
 
-Code language: `lang` names the language the Markdown exports put on the code fence (`lang: shell`, `lang: python`, `lang: plain text`). Without it, a file name in `label` decides (`deploy.sh` is bash, `query.sql` is sql); with neither, the GitHub fence has no language and the Notion fence says `plain text`, since Notion shows a fence without a language as JavaScript. `mode: diff` always exports as `diff`. The HTML page highlights the code in that same language, in `mode: diff` too, with colours that follow the light and dark themes; code with no known language, or a `lang` Pygments has no lexer for, renders plain. Copy and print keep the code as written.
+Code language: `lang` names the language the Markdown exports put on the code fence (`lang: shell`, `lang: python`, `lang: plain text`). Without it, a file name in `label` decides (`deploy.sh` is bash, `query.sql` is sql); with neither, the GitHub fence has no language and the Notion fence says `plain text`, since Notion shows a fence without a language as JavaScript. `mode: diff` always exports as `diff`. The HTML page highlights the code in that same language, in `mode: diff` too, with colours that follow the light and dark themes; code with no known language, or a `lang` Pygments has no lexer for, renders plain. A block longer than 20,000 characters renders plain too, and so does every block that would take a page past 200,000 highlighted characters in total, counting blocks in page order (a `request` query counts as one). Copy and print keep the code as written.
 
 ## The `grid`
 
