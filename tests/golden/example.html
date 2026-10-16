@@ -13,7 +13,7 @@
      script changes, that test fails until the hash below is updated. One of the hashes is the --live
      reloader's, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-6Vg03W5p8JSXbOZKvWWGNjpzZetLaDZSwIjc/9qsWD0=' 'sha256-rrstR5Fsu2TwJXuyS4PhRXkSAuTJhgZ8NiWIR5KQjvI=' 'sha256-pLCNFalBcrSqlu3OhDlols4zl9dr22y6v8wGfvYxsxM=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-B82Dt0lsU8FD/Ltaa6nvKO4EMPSmUjh4FwqC21NdwcU='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-P4/AtrtqQD+C1Z7lzKJJm+P9FDHTR1hoiN5trfKlpuk=' 'sha256-rrstR5Fsu2TwJXuyS4PhRXkSAuTJhgZ8NiWIR5KQjvI=' 'sha256-0s89MInV5JOlHCktUHl9/9snp/xmOZJGJJyByUgboTs=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-B82Dt0lsU8FD/Ltaa6nvKO4EMPSmUjh4FwqC21NdwcU='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20y%3D%22.9em%22%20font-size%3D%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
@@ -1103,11 +1103,14 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 @container (width < 426px){.rq3{grid-template-columns:minmax(9rem,max-content) 1fr; display:grid; gap:0 var(--s3)}.rq3 > .rq-tabs{flex-direction:column; flex-wrap:nowrap; border-bottom:0; border-inline-end:1px solid var(--line); margin-inline-end:0; max-height:18rem; overflow-y:auto; grid-row:1; grid-column:1}.rq3 > .rq-tabs > *{border-radius:var(--r-sm); border:0; text-align:start; white-space:normal; overflow:visible; text-overflow:clip}.rq3 > .rq-case{grid-row:1; grid-column:2}}</style>
 <script>
 (function () {
+	function restore(key, attribute, known) {
+		var value = localStorage.getItem(key);
+		if (known.indexOf(value) !== -1) document.documentElement.setAttribute(attribute, value);
+		else if (value !== null) localStorage.removeItem(key);
+	}
 	try {
-		var theme = localStorage.getItem("skaldr-theme");
-		if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
-		var width = localStorage.getItem("skaldr-width");
-		if (width === "wide" || width === "full") document.documentElement.setAttribute("data-width", width);
+		restore("skaldr-theme", "data-theme", ["light", "dark"]);
+		restore("skaldr-width", "data-width", ["wide", "full"]);
 	} catch (err) {}
 })();
 </script></head>
@@ -1760,7 +1763,10 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 	}
 
 	function prettyBody(body) {
-		try { return JSON.stringify(JSON.parse(body), null, 2); } catch (err) { return body; }
+		var parsed;
+		try { parsed = JSON.parse(body); } catch (err) { return body; }
+		if (body.trim().indexOf("\n") !== -1 || parsed === null || typeof parsed !== "object") return body;
+		return JSON.stringify(parsed, null, 2);
 	}
 
 	function element(tag, className, text) {

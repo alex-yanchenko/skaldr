@@ -85,8 +85,10 @@ for a page that leads by selling an idea (a proposal, an explainer) rather than 
 `icon` is one emoji. The page shows it beside the title and uses it as the favicon, and the GitHub-flavored export leads the title with it. `cover` is an `http://` or `https://` address. The page allows no remote images, so it shows a "Cover image" link under the title instead of the image, and the GitHub-flavored export writes the same link under the title. Neither reaches the Notion export's Markdown, which holds only the body. A Notion publish sets them on the page itself, as the page icon and cover (see Publishing to Notion).
 
 Page **width is not an authoring choice**: every page renders at the default cap, and the reader
-alone widens it (default / wide / full) from the corner menu on the rendered page. The browser remembers the reader's width across reloads and pages, as it does the theme. There is no
+alone widens it (default / wide / full) from the corner menu on the rendered page. There is no
 `meta.width`; don't set one (it fails the build). `notion_width` touches only the Notion export: see Exporting as Markdown.
+
+The browser remembers the reader's width and theme across reloads and pages. A stored value the page does not know, such as one left by another version, is ignored and removed.
 
 ## `badges`: your vocabulary
 

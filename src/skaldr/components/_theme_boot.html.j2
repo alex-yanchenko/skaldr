@@ -1,10 +1,13 @@
 <script>
 (function () {
+	function restore(key, attribute, known) {
+		var value = localStorage.getItem(key);
+		if (known.indexOf(value) !== -1) document.documentElement.setAttribute(attribute, value);
+		else if (value !== null) localStorage.removeItem(key);
+	}
 	try {
-		var theme = localStorage.getItem("skaldr-theme");
-		if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
-		var width = localStorage.getItem("skaldr-width");
-		if (width === "wide" || width === "full") document.documentElement.setAttribute("data-width", width);
+		restore("skaldr-theme", "data-theme", ["light", "dark"]);
+		restore("skaldr-width", "data-width", ["wide", "full"]);
 	} catch (err) {}
 })();
 </script>
