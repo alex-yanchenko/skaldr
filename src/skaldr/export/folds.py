@@ -130,11 +130,13 @@ def _event_entry(event: TimelineEvent, path: str | None) -> ListEntry:
     return ListEntry(text, children=body)
 
 
+def reference_runs(entry: ReferenceEntry) -> ExportRich:
+    source: ExportRich = (Link((Plain("source"),), entry.url),) if entry.url else ()
+    return spaced([entry.text, source]) if source else entry.text
+
+
 def _reference_entry(entry: ReferenceEntry) -> ListEntry:
-    parts: list[ExportRich] = [plain(f"[{entry.number}]"), entry.text]
-    if entry.url:
-        parts.append((Link((Plain("source"),), entry.url),))
-    return ListEntry(spaced(parts))
+    return ListEntry(spaced([plain(f"[{entry.number}]"), reference_runs(entry)]))
 
 
 def _link_card_quote(card: LinkCard) -> Quote:

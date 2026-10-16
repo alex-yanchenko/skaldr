@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -9,9 +9,11 @@ from markdown_it import MarkdownIt
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
 from skaldr.export import ExportResult, export_markdown, render_export
 from skaldr.export import markdown as markdown_module
+from skaldr.export.adf import render_adf
 from skaldr.export.flanking import markers_flank
-from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown
+from skaldr.export.markdown import github_heading_slugs, github_slug, render_markdown, uncited_remainder
 from skaldr.export.markup import code_block_lines, code_span, styled
+from skaldr.export.notion import render_notion
 from skaldr.export.runs import (
     Break,
     CheckMark,
@@ -27,10 +29,13 @@ from skaldr.export.runs import (
     TonedLabel,
     export_visible_text,
 )
+from skaldr.export.slack import render_slack
 from skaldr.export.tree import (
     Callout,
     CodeBlock,
     Columns,
+    Definition,
+    DefinitionList,
     Diagram,
     Graph,
     GraphNode,
@@ -2396,3 +2401,115 @@ def test_a_list_right_after_the_table_of_contents_stays_its_own_list() -> None:
 
 def test_a_page_with_no_toc_entries_drops_the_table_of_contents() -> None:
     assert markdown_of([{"type": "text", "body": "only"}], meta={"title": "T", "toc": True}) == "only\n"
+
+
+CITED_ONCE = Paragraph((Plain("see "), Citation("a", 1)))
+ONE_REFERENCE = References((ReferenceEntry(1, (Plain("SOP"),)),))
+BULLET_REFERENCE = "- \\[1\\] SOP"
+
+
+@pytest.mark.parametrize(
+    ("holder", "written"),
+    [
+        pytest.param(
+            Toggle((Plain("S"),), None, (ONE_REFERENCE,)),
+            f"<details>\n<summary>S</summary>\n\n{BULLET_REFERENCE}\n\n</details>\n",
+            id="details",
+        ),
+        pytest.param(
+            ListNode("bullet", (ListEntry((Plain("item"),), children=(ONE_REFERENCE,)),)),
+            f"- item\n  {BULLET_REFERENCE}\n",
+            id="list-item",
+        ),
+        pytest.param(
+            Columns((GridColumn(50, (ONE_REFERENCE,)), GridColumn(50, ()))),
+            '<table>\n<tr>\n<td width="50%">\n\n'
+            f'{BULLET_REFERENCE}\n\n</td>\n<td width="50%"></td>\n</tr>\n</table>\n',
+            id="grid-cell",
+        ),
+        pytest.param(
+            DefinitionList((Definition("T", (ONE_REFERENCE,)),)),
+            f"<dl>\n<dt>T</dt>\n<dd>\n\n{BULLET_REFERENCE}\n\n</dd>\n</dl>\n",
+            id="definition",
+        ),
+        pytest.param(
+            ListNode("number", (ListEntry((Plain("i"),), children=(ONE_REFERENCE,)),), numbering="roman"),
+            f'<ol type="i">\n<li>\n\ni\n\n{BULLET_REFERENCE}\n\n</li>\n</ol>\n',
+            id="ol-item",
+        ),
+        pytest.param(
+            Quote((Paragraph((Plain("q"),)),)),
+            "> q\n",
+            id="quote-holds-no-references",
+        ),
+    ],
+)
+def test_references_below_the_top_level_stay_bullets_and_their_citation_stays_a_linked_number(
+    holder: Node, written: str
+) -> None:
+    assert render_markdown([CITED_ONCE, holder]) == f"see \\[1\\]\n\n{written}"
+
+
+def test_a_callout_inside_a_details_block_is_still_an_alert() -> None:
+    toggle = Toggle((Plain("S"),), None, (Callout("warning", (Paragraph((Plain("careful"),)),)),))
+
+    assert render_markdown([toggle]) == (
+        "<details>\n<summary>S</summary>\n\n> [!WARNING]\n> careful\n\n</details>\n"
+    )
+
+
+def test_a_table_cell_whose_first_block_is_empty_starts_with_its_list_and_no_line_break() -> None:
+    cell = TableCell((), blocks=(Paragraph(()), ListNode("bullet", (ListEntry((Plain("a"),)),))))
+    table = TableNode((TableCell((Plain("H"),)),), (TableRow((cell,)),))
+
+    assert render_markdown([table]) == "| H |\n| --- |\n| <ul><li>a</li></ul> |\n"
+
+
+def test_a_check_list_in_a_table_cell_leads_each_item_with_its_box_as_text() -> None:
+    checks = ListNode("check", (ListEntry((Plain("done"),), checked=True), ListEntry((Plain("open"),))))
+    table = TableNode((TableCell((Plain("H"),)),), (TableRow((TableCell((), blocks=(checks,)),)),))
+
+    assert render_markdown([table]) == ("| H |\n| --- |\n| <ul><li>☑ done</li><li>☐ open</li></ul> |\n")
+
+
+@pytest.mark.parametrize(
+    ("write", "outcome"),
+    [
+        pytest.param(render_notion, '<span color="yellow_bg">x</span>\n', id="notion-writes-it"),
+        pytest.param(
+            render_adf,
+            "a Jira description does not show a text highlight; the export check should have refused it",
+            id="adf-refuses-it",
+        ),
+        pytest.param(
+            render_slack,
+            "a Slack canvas cannot colour or highlight text; the export check should have refused it",
+            id="slack-refuses-it",
+        ),
+    ],
+)
+def test_the_other_writers_keep_their_own_answer_to_a_highlight_span(
+    write: Callable[[Sequence[Node]], object], outcome: str
+) -> None:
+    nodes = [Paragraph((Tinted(None, "warning", (Plain("x"),)),))]
+
+    try:
+        result: object = write(nodes)
+    except ExportInvariantError as refusal:
+        result = str(refusal)
+
+    assert result == outcome
+
+
+def test_the_uncited_remainder_of_a_references_node_keeps_the_path_it_was_authored_at() -> None:
+    node = References(
+        (ReferenceEntry(1, (Plain("a"),)), ReferenceEntry(2, (Plain("b"),))),
+        authored_at="blocks.3.references",
+    )
+
+    remainder = uncited_remainder(node, frozenset({1}))
+
+    assert (remainder.entries, remainder.authored_at) == (
+        (ReferenceEntry(2, (Plain("b"),)),),
+        "blocks.3.references",
+    )

@@ -14,6 +14,24 @@ from skaldr.typed_links import date_target_text
 HTML_STYLE_TAG: Final[Mapping[StyleName, str]] = {**STYLE_TAG, "underline": "ins"}
 
 
+CANNOT_TINT: Final = (
+    "GitHub Markdown cannot colour or highlight text; the export check should have refused it"
+)
+
+
+def underlined(inner: str) -> str:
+    return wrap_around_core(inner, "<ins>", "</ins>")
+
+
+def scripted(position: ScriptPosition, escaped_text: str) -> str:
+    tag = SCRIPT_HTML_TAG[position]
+    return f"<{tag}>{escaped_text}</{tag}>"
+
+
+def start_attribute(number: int) -> str:
+    return f' start="{number}"' if number != 1 else ""
+
+
 def date_tag(label: str, start: date, end: date | None) -> str:
     if end is None:
         return f'<time datetime="{start.isoformat()}">{label}</time>'
@@ -47,11 +65,10 @@ class HtmlRuns(MarkupRuns):
         return self.code(expression)
 
     def underline(self, inner: str, /) -> str:
-        return self.styled("underline", inner)
+        return underlined(inner)
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
-        tag = SCRIPT_HTML_TAG[position]
-        return f"<{tag}>{self.escape(text)}</{tag}>"
+        return scripted(position, self.escape(text))
 
     def styled(self, style: StyleName, inner: str, /) -> str:
         tag = HTML_STYLE_TAG[style]
@@ -59,9 +76,7 @@ class HtmlRuns(MarkupRuns):
 
     def tinted(self, tone: ToneLiteral | None, _background: ToneLiteral | None, inner: str, /) -> str:
         if tone is not None:
-            raise ExportInvariantError(
-                "GitHub Markdown cannot colour or highlight text; the export check should have refused it"
-            )
+            raise ExportInvariantError(CANNOT_TINT)
         return wrap_around_core(inner, "<mark>", "</mark>")
 
     def link(self, label: str, url: str, /) -> str:

@@ -3,15 +3,23 @@ import unicodedata
 from collections import Counter
 from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Final, Literal, NoReturn
 
 from typing_extensions import assert_never
 
 from skaldr.errors import ExportInvariantError
-from skaldr.export.folds import folded, folded_except
-from skaldr.export.github_html import HtmlRuns, date_tag, details_lines
+from skaldr.export.folds import folded, folded_except, reference_runs
+from skaldr.export.github_html import (
+    CANNOT_TINT,
+    HtmlRuns,
+    date_tag,
+    details_lines,
+    scripted,
+    start_attribute,
+    underlined,
+)
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
 from skaldr.export.inline import one_line, plain
 from skaldr.export.lower.context import joined_by_breaks, toned
@@ -49,6 +57,7 @@ from skaldr.export.tree import (
     Divider,
     FactStrip,
     Figure,
+    GenericNode,
     Graph,
     GridColumn,
     Heading,
@@ -63,7 +72,6 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
-    ReferenceEntry,
     References,
     TableCell,
     TableNode,
@@ -78,7 +86,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import SCRIPT_HTML_TAG, Citation, MarkerStyle, ScriptPosition
+from skaldr.richtext import Citation, MarkerStyle, ScriptPosition
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x24D0, 0x24EA),
@@ -100,6 +108,8 @@ GITHUB_ALERT_TYPE: Final[Mapping[ToneName, str]] = {
 }
 ORDERED_LIST_TYPE: Final[Mapping[TextNumbering, str]] = {"letters": "a", "roman": "i"}
 MOST_COLUMNS_THAT_KEEP_THEIR_WIDTH: Final = 3
+CHECKED_BOX: Final = "☑ "
+UNCHECKED_BOX: Final = "☐ "
 MarkerFamily = Literal["dash", "ordinal"]
 MARKER_FAMILY: Final[Mapping[ListKind, MarkerFamily]] = {
     "bullet": "dash",
@@ -156,9 +166,7 @@ class _MarkdownRuns(CommonMarkRuns):
         return styled_in_tags(style, inner)
 
     def refuse_a_tint(self) -> NoReturn:
-        raise ExportInvariantError(
-            "GitHub Markdown cannot colour or highlight text; the export check should have refused it"
-        )
+        raise ExportInvariantError(CANNOT_TINT)
 
     def require_links_to_its_own_headings(self) -> None:
         return
@@ -195,12 +203,13 @@ class _MarkdownRuns(CommonMarkRuns):
 
     def _html_list(self, node: ListNode, tones: Sequence[ToneName]) -> str:
         tag = "ol" if node.kind == "number" else "ul"
-        start = f' start="{node.start}"' if node.kind == "number" and node.start != 1 else ""
-        items = "".join(f"<li>{self._html_item(entry, tones)}</li>" for entry in node.entries)
+        start = start_attribute(node.start) if node.kind == "number" else ""
+        items = "".join(f"<li>{self._html_item(node, entry, tones)}</li>" for entry in node.entries)
         return f"<{tag}{start}>{items}</{tag}>"
 
-    def _html_item(self, entry: ListEntry, tones: Sequence[ToneName]) -> str:
-        content = self.write_struck_if_muted(tones, entry.text)
+    def _html_item(self, node: ListNode, entry: ListEntry, tones: Sequence[ToneName]) -> str:
+        box = (CHECKED_BOX if entry.checked else UNCHECKED_BOX) if node.kind == "check" else ""
+        content = box + self.write_struck_if_muted(tones, entry.text)
         for child in folded(entry.children):
             match child:
                 case ListNode():
@@ -212,11 +221,10 @@ class _MarkdownRuns(CommonMarkRuns):
         return content
 
     def underline(self, inner: str, /) -> str:
-        return f"<ins>{inner}</ins>"
+        return underlined(inner)
 
     def script(self, position: ScriptPosition, text: str, /) -> str:
-        tag = SCRIPT_HTML_TAG[position]
-        return f"<{tag}>{self.escape(text)}</{tag}>"
+        return scripted(position, self.escape(text))
 
 
 def _headings(nodes: Sequence[Node]) -> Iterator[tuple[str | None, ExportRich]]:
@@ -269,6 +277,15 @@ def _is_written_natively(node: Node) -> bool:
             return True
         case _:
             return False
+
+
+def uncited_remainder(node: References, footnoted: frozenset[int]) -> References:
+    entries = tuple(entry for entry in node.entries if entry.number not in footnoted)
+    return replace(node, entries=entries)
+
+
+def _as_bullets(node: References) -> GenericNode:
+    return folded((node,))[0]
 
 
 def _shows_its_step_details_in_its_labels(figure: Figure) -> bool:
@@ -466,8 +483,7 @@ class _MarkdownWriter:
         return [*lines, "</dl>"]
 
     def ordered_html_lines(self, node: ListNode, numbering: TextNumbering) -> list[str]:
-        start = f' start="{node.start}"' if node.start != 1 else ""
-        lines = [f'<ol type="{ORDERED_LIST_TYPE[numbering]}"{start}>']
+        lines = [f'<ol type="{ORDERED_LIST_TYPE[numbering]}"{start_attribute(node.start)}>']
         for entry in node.entries:
             text = self.block_text(entry.text)
             with self.inside_a_container(), self.inside_an_html_block():
@@ -488,19 +504,15 @@ class _MarkdownWriter:
 
     def references_written(self, node: References, after: _ListTail | None) -> _Written:
         if not self.is_at_the_top_level():
-            return self.written(folded((node,))[0], after)
+            return self.written(_as_bullets(node), after)
         self.defined_footnotes.update(entry.number for entry in node.entries)
         cited = [entry for entry in node.entries if entry.number in self.runs.footnotes]
-        uncited = References(tuple(entry for entry in node.entries if entry not in cited))
-        definitions = [f"[^{entry.number}]: {self.reference_text(entry)}" for entry in cited]
+        uncited = uncited_remainder(node, self.runs.footnotes)
+        definitions = [f"[^{entry.number}]: {self.inline(reference_runs(entry))}" for entry in cited]
         if not uncited.entries:
             return _Written.of(definitions)
-        bullets = self.written(folded((uncited,))[0], after)
+        bullets = self.written(_as_bullets(uncited), after)
         return _Written.of(joined([definitions, bullets.lines]), bullets.tail)
-
-    def reference_text(self, entry: ReferenceEntry) -> str:
-        source = [self.runs.link("source", entry.url)] if entry.url else []
-        return " ".join([self.inline(entry.text), *source])
 
     def tabs_written(self, node: Tabs, after: _ListTail | None) -> _Written:
         sections: list[Sequence[str]] = []
