@@ -41,7 +41,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Mixed audience: ops reads the impact, the floor team reads the fix.",
+          "text": "Ops can read the impact of each category; the floor team can read the fix.",
           "marks": [
             {
               "type": "textColor",

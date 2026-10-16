@@ -1,5 +1,5 @@
 Reconciled review of the 10,000-unit cycle count: what didn't match, why, and the fix for each category. {color="gray"}
-Mixed audience: ops reads the impact, the floor team reads the fix. {color="gray"}
+Ops can read the impact of each category; the floor team can read the fix. {color="gray"}
 <table_of_contents/>
 <columns>
 	<column ratio="25">

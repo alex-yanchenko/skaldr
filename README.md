@@ -140,7 +140,7 @@ blocks:
 ```
 
 Top level is `version` · `meta` · `blocks` · optional `badges` · optional `index` · optional `publish`, nothing
-else. Every block carries a `type` discriminator; the model is a pydantic discriminated union, so
+else. Only an index document may leave out `blocks`. Every block carries a `type` discriminator; the model is a pydantic discriminated union, so
 an unknown type, a field from the wrong block, or an unknown key each fails with a precise
 `blocks.3.items.2.value`-style error before anything renders.
 

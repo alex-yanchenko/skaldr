@@ -14,7 +14,7 @@ from skaldr.export.notion import render_notion
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import BlockRegion, ListEntry, ListNode, LoweredDocument, Node, Paragraph, TableCell
 from skaldr.export_targets import ExportTarget
-from skaldr.models import AnyBlock, AuthoredBlock, Report, parse_report
+from skaldr.models import BUILT_BY_AN_INDEX, AnyBlock, AuthoredBlock, Part, Report, Text, parse_report
 from skaldr.richtext import Plain, Rich
 from tests.factories.example_factory import EXAMPLE, example_for
 from tests.factories.report_factory import make_index_report, make_report
@@ -107,6 +107,20 @@ def parsed_block(kind: type[BlockT], block: dict[str, Any], **overrides: Any) ->
     if not isinstance(parsed, kind):
         raise TypeError(f"expected a {kind.__name__} block, got {type(parsed).__name__}")
     return parsed
+
+
+def dumped_text(body: str) -> dict[str, Any]:
+    return Text(type="text", body=body).model_dump(mode="json")
+
+
+def dumped_part(title: str, *bodies: str, collapsed: bool = False) -> dict[str, Any]:
+    authored = {
+        "type": "part",
+        "title": title,
+        "collapsed": collapsed,
+        "blocks": [{"type": "text", "body": body} for body in bodies],
+    }
+    return Part.model_validate(authored, context={BUILT_BY_AN_INDEX: True}).model_dump(mode="json")
 
 
 def lowered(blocks: list[dict[str, Any]], **overrides: Any) -> tuple[Node, ...]:

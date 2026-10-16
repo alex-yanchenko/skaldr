@@ -91,12 +91,13 @@ _SKELETONS = {
 
 
 def _yaml_examples(guide: str) -> list[GuideExample]:
-    fences = [token for token in MarkdownIt("commonmark").parse(guide) if token.type == "fence"]
-    return [
-        GuideExample(token.map[0] + 1 if token.map else 0, token.content)
-        for token in fences
-        if (first := token.info.split(maxsplit=1)[:1]) and first[0] in _YAML_INFO
+    yaml_fences = [
+        token
+        for token in MarkdownIt("commonmark").parse(guide)
+        if token.type == "fence" and (token.info.split(maxsplit=1) or [""])[0] in _YAML_INFO
     ]
+    assert all(token.map is not None for token in yaml_fences)
+    return [GuideExample(token.map[0] + 1, token.content) for token in yaml_fences if token.map]
 
 
 _EXAMPLES = _yaml_examples(GUIDE)

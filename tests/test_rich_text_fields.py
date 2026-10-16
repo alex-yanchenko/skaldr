@@ -177,6 +177,11 @@ MULTI_PARAGRAPH_BLOCKS: list[dict[str, Any]] = [
     {"type": "list", "items": ["one\n\ntwo **three**", {"text": "a\n\nb", "items": [" c \n\n d "]}]},
     {"type": "callout", "tone": "info", "body": " first *x* \n\n second \n\n"},
     {"type": "key_value", "pairs": [{"label": "K", "value": "v\n\nw"}]},
+    {
+        "type": "table",
+        "columns": [{"key": "note", "label": "Note", "kind": "text"}],
+        "rows": [{"note": "p\n\nq", "subrows": [{"label": "s\n\nt", "value": "x"}]}],
+    },
 ]
 
 
@@ -259,4 +264,7 @@ def test_the_validated_strings_follow_each_fields_paragraph_policy() -> None:
         (("blocks", "1", "body"), "first *x*"),
         (("blocks", "1", "body"), "second"),
         (("blocks", "2", "pairs", "0", "value"), "v\n\nw"),
+        (("blocks", "3", "rows", "0", "note"), "p"),
+        (("blocks", "3", "rows", "0", "note"), "q"),
+        (("blocks", "3", "rows", "0", "subrows", "0", "label"), "s\n\nt"),
     ]

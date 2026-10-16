@@ -948,10 +948,10 @@ class DerivedCardTally(NamedTuple):
 
 def derived_card_tally(
     card: Card,
-    badge: str,
     matrix_tallies: Mapping[str, DerivedTally],
     table_tallies: Mapping[str, DerivedTally],
 ) -> DerivedCardTally:
+    badge = card.counted_badge
     if card.of_matrix:
         tally = matrix_tallies[card.of_matrix]
         return DerivedCardTally(tally["counts"].get(badge, 0), tally["total"])
@@ -1034,10 +1034,6 @@ def read_recorded_body(body: str) -> RecordedBody:
     if "\n" in body.strip() or not isinstance(parsed, dict | list):
         return RecordedBody(body, is_json=True)
     return RecordedBody(json.dumps(parsed, indent=2, ensure_ascii=False), is_json=True)
-
-
-def recorded_body(body: str) -> str:
-    return read_recorded_body(body).text
 
 
 def resolve_case(text: str, block: RequestLike, case: RequestCase) -> str:
