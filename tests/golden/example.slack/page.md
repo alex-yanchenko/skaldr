@@ -329,8 +329,8 @@ Widen the bin-code field to nine digits, then rescan the 500 truncated bins from
 # How to run the recount
 
 1. 🔵 **Freeze the aisle and pull the expected list** *before any scanning* Lock the aisle in the WMS so no picks land mid-count, then export the expected units.
-   * One row per bin, with the expected quantity.
-   * Flag overflow bins (`bin > 12`): they take the manual path.
+   1. • One row per bin, with the expected quantity.
+   2. • Flag overflow bins (`bin > 12`): they take the manual path.
 2. 🟣 **Scan every bin twice, reconcile on the pallet ID** Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 3. 🟡 **Escalate anything that still won't balance** A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
 

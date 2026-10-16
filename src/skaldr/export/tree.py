@@ -34,6 +34,7 @@ XYChartMark = Literal["bar", "line"]
 GraphKind = Literal["flow", "fan"]
 HEADING_LEVELS: Final[tuple[HeadingLevel, ...]] = get_args(HeadingLevel)
 COLUMN_RATIO_TOTAL: Final = 100
+MOST_COLUMNS_PER_STRIP: Final = 4
 
 
 @dataclass(frozen=True)

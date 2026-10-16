@@ -226,6 +226,8 @@ def _held(node: GenericNode) -> Held | None:
             return "table"
         case Callout():
             return "callout"
+        case Quote(authored_as="link card"):
+            return "link card"
         case Quote() if any(quote_lines(node)) or node.cite:
             return "quote"
         case Toggle():

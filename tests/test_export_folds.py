@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable, Mapping, Sequence
+from typing import Final
 
 import pytest
 
@@ -63,6 +64,13 @@ WRITERS: Mapping[str, Write] = {
 }
 
 
+WRITTEN_NATIVELY_BY: Mapping[str, frozenset[str]] = {
+    writer: frozenset({"fact strip", "key-value list", "definition list", "cards"})
+    for writer in WRITERS
+    if writer.startswith("notion")
+}
+
+
 def _outcome(write: Write, nodes: Sequence[Node]) -> str:
     try:
         return write(nodes)
@@ -78,16 +86,42 @@ def _hits(nodes: Sequence[Node]) -> list[FeatureHit]:
 WRITTEN_IN_ITS_OWN_FORM: Mapping[str, frozenset[str]] = {
     "slack": frozenset({"table cell holding a list", "long list cell beside a short cell"}),
 }
-FOLDED_CASES_OF_EACH_WRITER = [
-    pytest.param(writer, case, id=f"{writer}-{case}")
+CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND: Final = frozenset(
+    {
+        "in a numbered list item",
+        "after a list item's nested list",
+        "in a callout",
+        "in a toggle in a toggle",
+    }
+)
+ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN: Final[Mapping[str, frozenset[str]]] = {
+    "fact strip": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "key-value list": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "definition list": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "cards": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "timeline": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "link card": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND - {"in a callout"},
+    "link embed": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "open toggle": CONTEXTS_WHERE_ADF_HOLDS_NO_TABLE_CARD_OR_EXPAND,
+    "quote holding lists": frozenset(),
+    "table cell holding a list": frozenset(),
+    "long list cell beside a short cell": frozenset(),
+}
+WRITTEN_AS_THE_FOLD: Final = [
+    pytest.param(writer, case, context, id=f"{writer}-{case}-{context}")
     for writer in WRITERS
     for case in FOLD_CASES
-    if case not in WRITTEN_IN_ITS_OWN_FORM.get(writer, frozenset())
+    for context in FOLD_CONTEXTS
+    if case not in WRITTEN_NATIVELY_BY.get(writer, frozenset())
+    and case not in WRITTEN_IN_ITS_OWN_FORM.get(writer, frozenset())
+    and (
+        writer != "adf"
+        or context in ADF_WRITES_THESE_CASES_NATIVELY_EXCEPT_IN.get(case, frozenset(FOLD_CONTEXTS))
+    )
 ]
 
 
-@pytest.mark.parametrize("context", FOLD_CONTEXTS)
-@pytest.mark.parametrize(("writer", "case"), FOLDED_CASES_OF_EACH_WRITER)
+@pytest.mark.parametrize(("writer", "case", "context"), WRITTEN_AS_THE_FOLD)
 def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block_lowered_to_before(
     writer: str, case: str, context: str
 ) -> None:

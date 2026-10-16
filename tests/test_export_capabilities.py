@@ -81,6 +81,7 @@ SEEDED_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "table inside a callout": {"adf": "reject", "slack": "reject"},
     "callout inside a callout": {"adf": "reject", "slack": "reject"},
     "quote inside a callout": {"adf": "reject"},
+    "link card inside a callout": {},
     "toggle inside a callout": {"adf": "reject", "slack": "reject"},
     "table inside a toggle inside a toggle": {"adf": "reject"},
     "toggle inside a toggle inside a toggle": {"adf": "reject"},
@@ -391,7 +392,7 @@ def test_every_other_target_exports_what_one_target_refuses_without_a_refusal(
             id="same-page-link-on-github",
         ),
         pytest.param(
-            LIST_IN_A_QUOTE, "notion", "> Count:<br>• aisles<br>• bins\n", id="list-in-a-quote-on-notion"
+            LIST_IN_A_QUOTE, "notion", "> Count:\n\t- aisles\n\t- bins\n", id="list-in-a-quote-on-notion"
         ),
     ],
 )
