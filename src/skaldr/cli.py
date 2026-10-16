@@ -189,8 +189,8 @@ def _run_outline(arguments: list[str]) -> int:
         prog="skaldr outline",
         description="List every heading and section of a content file with its anchor, its line range in "
         "the file and an approximate token count (characters / 4, rounded up), so one region can be read "
-        "alone with "
-        "`skaldr show FILE#ANCHOR`. Content an `!include` brings in has no lines in FILE and shows `-`.",
+        "alone with `skaldr show FILE#ANCHOR`. Content an `!include` brings in has no lines in FILE and "
+        "shows `-`.",
     )
     parser.add_argument("file", metavar="FILE", help="the content YAML to outline (not an index document)")
     parser.add_argument("--json", action="store_true", help="print {file, lines, tokens, regions} as JSON")
@@ -198,7 +198,7 @@ def _run_outline(arguments: list[str]) -> int:
     try:
         outline = outline_file(Path(args.file))
     except ReportError as err:
-        return _fail_to_outline(err)
+        return _region_read_failure(err)
     print(
         json.dumps(outline_json(outline, args.file), indent=2)
         if args.json
@@ -221,14 +221,14 @@ def _run_show(arguments: list[str]) -> int:
     try:
         source = region_source(outline_file(Path(file)), file, anchor)
     except (ReportError, UnknownAnchorError, RegionOutsideFileError) as err:
-        return _fail_to_outline(err)
+        return _region_read_failure(err)
     sys.stdout.flush()
     sys.stdout.buffer.write(source.encode("utf-8"))
     sys.stdout.buffer.flush()
     return 0
 
 
-def _fail_to_outline(err: ReportError | UnknownAnchorError | RegionOutsideFileError) -> int:
+def _region_read_failure(err: ReportError | UnknownAnchorError | RegionOutsideFileError) -> int:
     print(f"error: {err}", file=sys.stderr)
     return 2 if isinstance(err, IndexDocumentOutlineError) else 1
 
