@@ -40,9 +40,8 @@ def _write_in_place_restoring_on_failure(path: Path, encoded: bytes) -> None:
 
 
 def _write_and_flush(path: Path, encoded: bytes) -> None:
-    with path.open("wb") as staged_file:
-        staged_file.write(encoded)
-        staged_file.flush()
+    path.write_bytes(encoded)
+    with path.open("r+b") as staged_file:
         os.fsync(staged_file.fileno())
 
 
