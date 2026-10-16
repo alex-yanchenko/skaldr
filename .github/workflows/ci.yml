@@ -37,6 +37,9 @@ jobs:
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       # See the lint job: --locked everywhere except the transient release-please version-bump commit.
       - env:
           HEAD_REF: ${{ github.head_ref }}
