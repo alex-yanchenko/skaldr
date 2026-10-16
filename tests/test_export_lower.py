@@ -50,6 +50,8 @@ from skaldr.export.tree import (
     PieChart,
     PieSlice,
     Quote,
+    ReferenceEntry,
+    References,
     Tab,
     TableCell,
     TableColumn,
@@ -813,13 +815,29 @@ def test_the_table_of_contents_lists_what_the_html_lists() -> None:
     )
 
 
-def test_references_are_bullets_led_by_their_number_with_a_source_link() -> None:
+def test_references_lower_to_a_node_holding_each_number_text_and_source_address() -> None:
     references = {
         "type": "references",
         "items": [{"key": "a", "text": "SOP", "url": "https://e.com"}, {"key": "b", "text": "Memo"}],
     }
 
     assert lowered([references]) == (
+        References(
+            (
+                ReferenceEntry(1, (Plain("SOP"),), "https://e.com"),
+                ReferenceEntry(2, (Plain("Memo"),)),
+            )
+        ),
+    )
+
+
+def test_references_are_written_today_as_bullets_led_by_their_number_with_a_source_link() -> None:
+    references = {
+        "type": "references",
+        "items": [{"key": "a", "text": "SOP", "url": "https://e.com"}, {"key": "b", "text": "Memo"}],
+    }
+
+    assert lowered_as_written_today([references]) == (
         ListNode(
             "bullet",
             (

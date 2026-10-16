@@ -693,9 +693,9 @@ content-type: application/json
 
 ## Sources
 
-Method definitions follow the warehouse counting SOP \[1\]; the discrepancy thresholds come from the Q2 reconciliation audit [\[2\]](https://example.com/q2-audit).
+Method definitions follow the warehouse counting SOP [^1]; the discrepancy thresholds come from the Q2 reconciliation audit [^2].
 
-- \[1\] *Warehouse Counting SOP*, rev. 7, §3 Cycle vs sampling.
-- \[2\] Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
+[^1]: *Warehouse Counting SOP*, rev. 7, §3 Cycle vs sampling.
+[^2]: Q2 Reconciliation Audit, p. 12. [source](https://example.com/q2-audit)
 
 WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.

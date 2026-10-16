@@ -61,6 +61,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     TableCell,
     TableNode,
     TableOfContents,
@@ -74,7 +76,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import SCRIPT_HTML_TAG, MarkerStyle, ScriptPosition
+from skaldr.richtext import SCRIPT_HTML_TAG, Citation, MarkerStyle, ScriptPosition
 
 OTHER_ALPHABETIC_SYMBOL_RANGES: Final = (
     range(0x24D0, 0x24EA),
@@ -134,11 +136,19 @@ def _refuse_a_block_a_cell_cannot_hold(node: Node) -> NoReturn:
 
 
 class _MarkdownRuns(CommonMarkRuns):
-    def __init__(self, heading_slugs: Mapping[str, str]) -> None:
+    def __init__(self, heading_slugs: Mapping[str, str], footnotes: frozenset[int]) -> None:
         self.heading_slugs = heading_slugs
+        self.footnotes = footnotes
+        self.cited: set[int] = set()
 
     def heading_slug(self, anchor: str, /) -> str | None:
         return self.heading_slugs.get(anchor)
+
+    def citation(self, run: Citation, /) -> str:
+        self.cited.add(run.number)
+        if run.number in self.footnotes:
+            return f"[^{run.number}]"
+        return super().citation(run)
 
     def unflanked_emphasis(self, style: MarkerStyle, inner: str, /) -> str:
         return styled_in_tags(style, inner)
@@ -253,7 +263,7 @@ def _is_written_natively(node: Node) -> bool:
             return node.open
         case ListNode():
             return node.numbering is not None
-        case FactStrip() | Cards() | DefinitionList():
+        case FactStrip() | Cards() | DefinitionList() | References():
             return True
         case _:
             return False
@@ -287,6 +297,10 @@ def _card_value(card: Card) -> ExportRich:
     return joined_by_breaks([card.value, plain(card.note)])
 
 
+def _is_a_markdown_list(node: Node) -> bool:
+    return (isinstance(node, ListNode) and node.numbering is None) or isinstance(node, References)
+
+
 def _marker_family(node: Node) -> MarkerFamily | None:
     if isinstance(node, ListNode):
         return MARKER_FAMILY[node.kind]
@@ -298,10 +312,12 @@ def _must_alternate_markers(family: MarkerFamily | None, after: _ListTail | None
 
 
 class _MarkdownWriter:
-    def __init__(self, heading_slugs: Mapping[str, str]) -> None:
-        self.runs = _MarkdownRuns(heading_slugs)
+    def __init__(self, heading_slugs: Mapping[str, str], footnotes: frozenset[int]) -> None:
+        self.runs = _MarkdownRuns(heading_slugs, footnotes)
         self.html = HtmlRuns(heading_slugs)
         self.container_depth = 0
+        self.html_block_depth = 0
+        self.defined_footnotes: set[int] = set()
 
     def inline(self, runs: ExportRich) -> str:
         return self.runs.write(runs)
@@ -341,7 +357,7 @@ class _MarkdownWriter:
             children = self.blocks(nodes)
         if not children:
             return []
-        gap = [] if after_a_bare_marker or isinstance(nodes[0], ListNode) else [""]
+        gap = [] if after_a_bare_marker or _is_a_markdown_list(nodes[0]) else [""]
         return gap + indent_lines(children, " " * width)
 
     def titled(self, title: str, children: Sequence[Node], after: _ListTail | None) -> _Written:
@@ -357,6 +373,17 @@ class _MarkdownWriter:
             yield
         finally:
             self.container_depth -= 1
+
+    @contextmanager
+    def inside_an_html_block(self) -> Generator[None]:
+        self.html_block_depth += 1
+        try:
+            yield
+        finally:
+            self.html_block_depth -= 1
+
+    def is_at_the_top_level(self) -> bool:
+        return self.container_depth == 0 and self.html_block_depth == 0
 
     def is_an_alert(self, node: Callout) -> bool:
         return node.shows_icon and node.authored_as != "grid cell" and self.container_depth == 0
@@ -398,7 +425,7 @@ class _MarkdownWriter:
     def columns_lines(self, node: Columns) -> list[str]:
         cells: list[list[str]] = []
         for column in node.columns:
-            with self.inside_a_container():
+            with self.inside_a_container(), self.inside_an_html_block():
                 cells.append(self.blocks(column.children))
         if not any(cells):
             return []
@@ -423,7 +450,7 @@ class _MarkdownWriter:
         lines = ["<dl>"]
         for definition in node.definitions:
             lines.append(f"<dt>{html.escape(_label_text(definition.term), quote=False)}</dt>")
-            with self.inside_a_container():
+            with self.inside_a_container(), self.inside_an_html_block():
                 body = self.blocks(definition.body)
             lines += ["<dd>", "", *body, "", "</dd>"] if body else ["<dd></dd>"]
         return [*lines, "</dl>"]
@@ -433,7 +460,7 @@ class _MarkdownWriter:
         lines = [f'<ol type="{ORDERED_LIST_TYPE[numbering]}"{start}>']
         for entry in node.entries:
             text = self.block_text(entry.text)
-            with self.inside_a_container():
+            with self.inside_a_container(), self.inside_an_html_block():
                 children = self.blocks(entry.children)
             content = joined([[text] if text else [], children])
             lines += ["<li>", "", *content, "", "</li>"] if content else ["<li></li>"]
@@ -445,8 +472,25 @@ class _MarkdownWriter:
         summary = self.html.write(title)
         if not summary.strip():
             return self.blocks_after(children, after)
-        body = self.blocks_after(children, None)
+        with self.inside_an_html_block():
+            body = self.blocks_after(children, None)
         return _Written.of(details_lines(summary, body.lines, opened=opened))
+
+    def references_written(self, node: References, after: _ListTail | None) -> _Written:
+        if not self.is_at_the_top_level():
+            return self.written(folded((node,))[0], after)
+        self.defined_footnotes.update(entry.number for entry in node.entries)
+        cited = [entry for entry in node.entries if entry.number in self.runs.footnotes]
+        uncited = References(tuple(entry for entry in node.entries if entry not in cited))
+        definitions = [f"[^{entry.number}]: {self.reference_text(entry)}" for entry in cited]
+        if not uncited.entries:
+            return _Written.of(definitions)
+        bullets = self.written(folded((uncited,))[0], after)
+        return _Written.of(joined([definitions, bullets.lines]), bullets.tail)
+
+    def reference_text(self, entry: ReferenceEntry) -> str:
+        source = [self.runs.link("source", entry.url)] if entry.url else []
+        return " ".join([self.inline(entry.text), *source])
 
     def tabs_written(self, node: Tabs, after: _ListTail | None) -> _Written:
         sections: list[Sequence[str]] = []
@@ -521,6 +565,8 @@ class _MarkdownWriter:
                 return _Written.of(self.cards_lines(node))
             case DefinitionList():
                 return _Written.of(self.definition_list_lines(node))
+            case References():
+                return self.references_written(node, after)
             case KeyValueList() | Timeline() | LinkCard():
                 raise ExportInvariantError(
                     f"the GitHub writer folds a {type(node).__name__} before it writes it"
@@ -545,7 +591,13 @@ class _MarkdownWriter:
 
 
 def render_markdown(nodes: Sequence[Node]) -> str:
-    return "\n".join(_MarkdownWriter(github_heading_slugs(nodes)).blocks(nodes)) + "\n"
+    slugs = github_heading_slugs(nodes)
+    survey = _MarkdownWriter(slugs, frozenset())
+    lines = survey.blocks(nodes)
+    footnotes = survey.defined_footnotes & survey.runs.cited
+    if footnotes:
+        lines = _MarkdownWriter(slugs, frozenset(footnotes)).blocks(nodes)
+    return "\n".join(lines) + "\n"
 
 
 def _cover_image(cover: str | None) -> tuple[Media, ...]:

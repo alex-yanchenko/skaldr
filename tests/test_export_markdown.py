@@ -42,6 +42,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     Tab,
     TableCell,
     TableNode,
@@ -365,17 +367,85 @@ def test_a_link_target_holding_whitespace_is_percent_encoded(url: str, written: 
         pytest.param("https://e.com/a<b>", "https://e.com/a%3Cb%3E", id="angles"),
     ],
 )
-def test_a_reference_url_is_percent_encoded_in_its_citation_and_its_source_link(
-    url: str, written: str
-) -> None:
+def test_a_reference_url_is_percent_encoded_in_its_source_link(url: str, written: str) -> None:
     references = {
         "type": "references",
         "items": [{"key": "a", "text": "SOP", "url": url}, {"key": "b", "text": "Memo"}],
     }
 
     assert markdown_of([{"type": "text", "body": "see [^a] [^b]"}, references]) == (
-        f"see [\\[1\\]]({written}) \\[2\\]\n\n- \\[1\\] SOP [source]({written})\n- \\[2\\] Memo\n"
+        f"see [^1] [^2]\n\n[^1]: SOP [source]({written})\n[^2]: Memo\n"
     )
+
+
+def test_a_citation_is_a_footnote_reference_and_its_reference_a_footnote_definition() -> None:
+    references = {
+        "type": "references",
+        "items": [
+            {"key": "sop", "text": "*Counting SOP*, rev. 7", "url": "https://example.com/sop"},
+            {"key": "audit", "text": "Q2 audit, p. 12"},
+        ],
+    }
+    text = {"type": "text", "body": "Per the SOP [^sop] and the audit [^audit], twice [^sop]."}
+
+    assert markdown_of([text, references]) == (
+        "Per the SOP [^1] and the audit [^2], twice [^1].\n\n"
+        "[^1]: *Counting SOP*, rev. 7 [source](https://example.com/sop)\n"
+        "[^2]: Q2 audit, p. 12\n"
+    )
+
+
+def test_a_reference_no_citation_names_stays_a_bullet_beside_the_footnotes() -> None:
+    references = {
+        "type": "references",
+        "items": [
+            {"key": "a", "text": "SOP"},
+            {"key": "b", "text": "Memo"},
+            {"key": "c", "text": "Audit", "url": "https://example.com/audit"},
+        ],
+    }
+    text = {"type": "text", "body": "Cites [^c] and [^a]."}
+
+    assert markdown_of([text, references]) == (
+        "Cites [^3] and [^1].\n\n"
+        "[^1]: SOP\n"
+        "[^3]: Audit [source](https://example.com/audit)\n\n"
+        "- \\[2\\] Memo\n"
+    )
+
+
+def test_a_citation_the_page_never_defines_keeps_its_linked_number() -> None:
+    nodes = [Paragraph((Plain("see "), Citation("a", 1, "https://example.com/a")))]
+
+    assert render_markdown(nodes) == "see [\\[1\\]](https://example.com/a)\n"
+
+
+def test_a_citation_in_a_summary_stays_a_linked_number_and_leaves_its_reference_a_bullet() -> None:
+    title = (Plain("See "), Citation("a", 1, "https://example.com/a"))
+    nodes = [
+        Toggle(title, None, (Paragraph((Plain("x"),)),)),
+        References((ReferenceEntry(1, (Plain("SOP"),)),)),
+    ]
+
+    assert render_markdown(nodes) == (
+        '<details>\n<summary>See <a href="https://example.com/a">[1]</a></summary>\n\nx\n\n</details>\n\n'
+        "- \\[1\\] SOP\n"
+    )
+
+
+def test_a_citation_in_a_table_cell_and_a_heading_is_a_footnote_reference_too() -> None:
+    table = {
+        "type": "table",
+        "columns": [{"key": "a", "label": "A", "kind": "rich"}],
+        "rows": [{"a": "claim [^a]"}],
+    }
+    blocks = [
+        {"type": "heading", "text": "Method"},
+        table,
+        {"type": "references", "items": [{"key": "a", "text": "SOP"}]},
+    ]
+
+    assert markdown_of(blocks) == "## Method\n\n| A |\n| --- |\n| claim [^1] |\n\n[^1]: SOP\n"
 
 
 def test_a_dollar_sign_is_escaped_so_github_does_not_render_math() -> None:

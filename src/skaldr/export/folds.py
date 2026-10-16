@@ -8,7 +8,7 @@ from skaldr import compute
 from skaldr.errors import ExportInvariantError
 from skaldr.export.capabilities import FIRST_LIST_NUMBER
 from skaldr.export.inline import bold, plain
-from skaldr.export.lower.context import joined_by_breaks, with_bold_label
+from skaldr.export.lower.context import joined_by_breaks, spaced, with_bold_label
 from skaldr.export.runs import Chip, ExportRich, StatusMark, export_visible_text
 from skaldr.export.tree import (
     AuthoredName,
@@ -35,6 +35,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     TableCell,
     TableNode,
     TableOfContents,
@@ -128,6 +130,13 @@ def _event_entry(event: TimelineEvent, path: str | None) -> ListEntry:
     return ListEntry(text, children=body)
 
 
+def _reference_entry(entry: ReferenceEntry) -> ListEntry:
+    parts: list[ExportRich] = [plain(f"[{entry.number}]"), entry.text]
+    if entry.url:
+        parts.append((Link((Plain("source"),), entry.url),))
+    return ListEntry(spaced(parts))
+
+
 def _link_card_quote(card: LinkCard) -> Quote:
     link = Link(plain(card.title), card.url)
     detail = LINK_CARD_SEPARATOR.join(part for part in (card.domain, card.caption) if part)
@@ -171,6 +180,8 @@ def _as_written_today(node: Node) -> tuple[GenericNode, ...]:
             return (_bullets(events, node.authored_at),)
         case LinkCard():
             return (_link_card_quote(node),)
+        case References():
+            return (_bullets(map(_reference_entry, node.entries), node.authored_at),)
         case (
             Heading()
             | Paragraph()

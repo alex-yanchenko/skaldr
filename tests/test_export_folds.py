@@ -86,7 +86,7 @@ def test_each_writer_writes_a_named_node_exactly_as_it_wrote_the_nodes_the_block
     assert _outcome(write, wrap((fold.named,))) == _outcome(write, wrap(fold.today))
 
 
-@pytest.mark.parametrize("case", ["cards", "fact strip", "timeline"])
+@pytest.mark.parametrize("case", ["cards", "fact strip", "timeline", "references"])
 def test_a_named_list_block_folds_to_exactly_the_nodes_it_lowered_to_before(case: str) -> None:
     fold = FOLD_CASES[case]
 

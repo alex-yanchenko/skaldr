@@ -46,6 +46,7 @@ from skaldr.export.tree import (
     PieChart,
     PieSlice,
     Quote,
+    References,
     Tab,
     TableCell,
     TableColumn,
@@ -976,6 +977,7 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Cards: "bulletList",
     Timeline: "bulletList",
     LinkCard: "blockquote",
+    References: "bulletList",
 }
 NODES_WRITING_A_FIRST_BLOCK = {
     kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents

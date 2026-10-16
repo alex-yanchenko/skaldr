@@ -319,6 +319,19 @@ class LinkCard:
     authored_at: str | None = field(default=None, compare=False)
 
 
+@dataclass(frozen=True)
+class ReferenceEntry:
+    number: int
+    text: ExportRich
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class References:
+    entries: tuple[ReferenceEntry, ...]
+    authored_at: str | None = field(default=None, compare=False)
+
+
 GenericNode = (
     Heading
     | Paragraph
@@ -336,7 +349,7 @@ GenericNode = (
     | Diagram
     | TableOfContents
 )
-BlockNode = FactStrip | KeyValueList | DefinitionList | Cards | Timeline | LinkCard
+BlockNode = FactStrip | KeyValueList | DefinitionList | Cards | Timeline | LinkCard | References
 Node = GenericNode | BlockNode
 
 AuthoredNode = Callout | Quote | TableNode | Tabs | Toggle
@@ -433,6 +446,7 @@ def with_authored_path(node: Node, path: str | None) -> Node:
             | Cards()
             | Timeline()
             | LinkCard()
+            | References()
         ):
             return replace(node, authored_at=path)
 
@@ -467,5 +481,6 @@ def nested_nodes(node: Node) -> tuple[Node, ...]:
             | Cards()
             | Timeline()
             | LinkCard()
+            | References()
         ):
             return ()

@@ -28,6 +28,8 @@ from skaldr.export.tree import (
     PieChart,
     PieSlice,
     Quote,
+    ReferenceEntry,
+    References,
     Tab,
     TableCell,
     TableColumn,
@@ -95,6 +97,7 @@ def minimal_nodes() -> Mapping[type, Node]:
         Cards: Cards((Card("Clean", plain("9")),)),
         Timeline: Timeline((TimelineEvent("Start"),)),
         LinkCard: LinkCard("Runbook", "https://example.com/runbook", "card"),
+        References: References((ReferenceEntry(1, plain("Runbook")),)),
     }
 
 
