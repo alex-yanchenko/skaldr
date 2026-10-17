@@ -296,6 +296,14 @@ def _write(path: Path, text: str) -> Path:
     return path
 
 
+def _node_tree(node: yaml.Node | None) -> object:
+    if isinstance(node, yaml.MappingNode):
+        return node.tag, [(_node_tree(key), _node_tree(value)) for key, value in node.value]
+    if isinstance(node, yaml.SequenceNode):
+        return node.tag, [_node_tree(item) for item in node.value]
+    return None if node is None else (node.tag, node.value)
+
+
 def _write_bytes_that_are_not_utf_8(path: Path) -> None:
     path.write_bytes(b"\xffversion: 1\n")
 
@@ -748,14 +756,17 @@ def test_show_reads_the_file_once_and_checks_only_the_region_it_prints(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = _write(tmp_path / "doc.yaml", SPACES_KEPT_AS_CONTENT)
-    composed: list[str] = []
+    whole_file = _node_tree(yaml.SafeLoader(SPACES_KEPT_AS_CONTENT).get_single_node())
+    region_b = _node_tree(yaml.SafeLoader("  - type: heading\n    text: B\n").get_single_node())
+    composed: list[object] = []
     compose_one_document = Composer.get_single_node
 
-    def record_the_composed_text(loader: yaml.SafeLoader) -> yaml.Node | None:
-        composed.append(str(loader.buffer).rstrip("\0"))
-        return compose_one_document(loader)
+    def record_what_was_composed(loader: Composer) -> yaml.Node | None:
+        node = compose_one_document(loader)
+        composed.append(_node_tree(node))
+        return node
 
-    monkeypatch.setattr(Composer, "get_single_node", record_the_composed_text)
+    monkeypatch.setattr(Composer, "get_single_node", record_what_was_composed)
     opened: list[Path] = []
     open_a_path = Path.open
 
@@ -773,8 +784,8 @@ def test_show_reads_the_file_once_and_checks_only_the_region_it_prints(
     monkeypatch.setattr(Path, "open", record_the_opened_path)
 
     assert _shown(f"{path}#b", capsys) == (0, ("  - type: heading\n    text: B\n", ""))
-    assert (sorted(composed), opened) == (
-        sorted([SPACES_KEPT_AS_CONTENT, SPACES_KEPT_AS_CONTENT, "  - type: heading\n    text: B\n"]),
+    assert (sorted(composed, key=repr), opened) == (
+        sorted([whole_file, whole_file, region_b], key=repr),
         [path],
     )
 

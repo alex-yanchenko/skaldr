@@ -3,13 +3,15 @@ import functools
 import math
 import re
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypeAlias
 
 import yaml
 from typing_extensions import TypedDict
+from yaml.composer import Composer
+from yaml.resolver import Resolver
 
 from skaldr.compute import anchor_slugs
 from skaldr.errors import IndexDocumentOutlineError, RegionOutsideFileError, ReportError, UnknownAnchorError
@@ -131,13 +133,32 @@ class _AliasNode(yaml.ScalarNode):
     pass
 
 
-class _AliasKeepingLoader(yaml.SafeLoader):
+class _AliasKeepingComposer(Composer):
     def compose_node(self, parent: yaml.Node | None, index: int) -> yaml.Node | None:
-        event = self.peek_event()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        event = self.peek_event()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(event, yaml.AliasEvent):
             return super().compose_node(parent, index)
-        self.get_event()  # pyright: ignore[reportUnknownMemberType]
+        self.get_event()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
         return _AliasNode(_ALIAS_TAG, event.anchor, event.start_mark, event.end_mark)
+
+
+class _AliasKeepingLoader(_AliasKeepingComposer, yaml.SafeLoader):
+    pass
+
+
+@functools.cache
+def _read_back_loader() -> Callable[[str], _AliasKeepingComposer]:
+    if not yaml.__with_libyaml__:
+        return _AliasKeepingLoader
+    from yaml._yaml import CParser
+
+    class _LibyamlAliasKeepingLoader(_AliasKeepingComposer, CParser, Resolver):
+        def __init__(self, stream: str) -> None:
+            CParser.__init__(self, stream)
+            Composer.__init__(self)
+            Resolver.__init__(self)
+
+    return _LibyamlAliasKeepingLoader
 
 
 def _classified(node: yaml.Node) -> Origin:
@@ -287,7 +308,7 @@ def _value_tree(node: yaml.Node) -> object:
 
 def _reads_back_as(text: str, items: Sequence[yaml.Node], *, in_flow: bool) -> bool:
     try:
-        read_back = _AliasKeepingLoader(f"[\n{text}\n]" if in_flow else text).get_single_node()
+        read_back = _read_back_loader()(f"[\n{text}\n]" if in_flow else text).get_single_node()
     except yaml.YAMLError:
         return False
     return isinstance(read_back, yaml.SequenceNode) and list(map(_value_tree, read_back.value)) == list(
