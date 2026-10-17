@@ -3557,7 +3557,9 @@ def parse_report(data: Any, *, built_by_an_index: bool = False) -> Report:
 _MAX_INCLUDE_DEPTH = 50
 
 
-def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...], loaded: list[Path]) -> Any:
+def _load_yaml_with_includes(
+    path: Path, ancestors: tuple[Path, ...], loaded: list[Path], text: str | None = None
+) -> Any:
     """Parse a YAML file, resolving `!include <relative-path>` tags by splicing in the parsed content
     of the referenced file. Paths resolve relative to the *including* file's directory (not the cwd),
     so a fragment set can move as a unit. `ancestors` is the chain of files currently being loaded —
@@ -3571,7 +3573,8 @@ def _load_yaml_with_includes(path: Path, ancestors: tuple[Path, ...], loaded: li
         raise ReportError(f"circular !include: {chain}")
     if len(ancestors) >= _MAX_INCLUDE_DEPTH:
         raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path}, likely a mistake")
-    text = read_text_file(path)
+    if text is None:
+        text = read_text_file(path)
     loaded.append(resolved)
 
     class _IncludeLoader(yaml.SafeLoader):
@@ -3832,8 +3835,12 @@ def load_report_and_source(path: Path) -> tuple[Report, Any]:
         raise ReportError(f"{err}; {where}") from err
 
 
-def is_an_index_document(path: Path) -> bool:
-    return _index_of(_load_yaml_with_includes(path, (), [])) is not None
+def document_data(path: Path, text: str) -> Any:
+    return _load_yaml_with_includes(path, (), [], text)
+
+
+def names_an_index(data: object) -> bool:
+    return _index_of(data) is not None
 
 
 def content_files(path: Path) -> tuple[Path, ...]:

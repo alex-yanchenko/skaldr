@@ -220,7 +220,7 @@ def _run_show(arguments: list[str]) -> int:
     if not file or not anchor:
         parser.error("name the region as FILE#ANCHOR; `skaldr outline FILE` lists the anchors")
     try:
-        source = region_source(outline_file(Path(file)), file, anchor)
+        source = region_source(Path(file), file, anchor)
     except _REGION_READ_ERRORS as err:
         return _region_read_failure(err)
     sys.stdout.flush()

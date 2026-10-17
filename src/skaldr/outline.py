@@ -17,9 +17,10 @@ from skaldr.models import (
     AnyBlock,
     Heading,
     Section,
-    is_an_index_document,
-    load_report,
+    document_data,
     located_child_blocks,
+    names_an_index,
+    parse_report,
     walk_blocks,
 )
 
@@ -366,23 +367,45 @@ def _composed(path: Path, text: str) -> Origin:
     return _NOT_WRITTEN_IN_PLACE if root is None else root
 
 
-def outline_file(path: Path) -> Outline:
+@dataclass(frozen=True)
+class _Anchored:
+    block: Heading | Section
+    anchor: str
+    placed: _Placed
+
+
+@dataclass(frozen=True)
+class _ReadDocument:
+    source_lines: tuple[str, ...]
+    anchored: tuple[_Anchored, ...]
+
+
+def _read_document(path: Path) -> _ReadDocument:
     text = _text_with_its_own_line_breaks(path)
     root = _composed(path, text)
-    if is_an_index_document(path):
+    data = document_data(path, text)
+    if names_an_index(data):
         raise IndexDocumentOutlineError(
             f"{path} is an index document; outline each file it lists under `index.parts` on its own"
         )
-    report = load_report(path)
+    report = parse_report(data)
     slugs = anchor_slugs(report)
     placements = {id(block): placed for block, placed in _placements(report.blocks, _child(root, "blocks"))}
-    source_lines = tuple(_YAML_LINE.findall(text))
-    regions = tuple(
-        _region(block, slugs[id(block)], placements[id(block)], source_lines)
+    anchored = tuple(
+        _Anchored(block, slugs[id(block)], placements[id(block)])
         for block in walk_blocks(report.blocks)
         if isinstance(block, Heading | Section)
     )
-    return Outline(source_lines, regions)
+    return _ReadDocument(tuple(_YAML_LINE.findall(text)), anchored)
+
+
+def outline_file(path: Path) -> Outline:
+    document = _read_document(path)
+    regions = tuple(
+        _region(anchored.block, anchored.anchor, anchored.placed, document.source_lines)
+        for anchored in document.anchored
+    )
+    return Outline(document.source_lines, regions)
 
 
 def _cell(value: int | None) -> str:
@@ -435,20 +458,20 @@ def outline_json(outline: Outline, file: str) -> OutlineJson:
     }
 
 
-def _unknown_anchor_message(outline: Outline, file: str, anchor: str) -> str:
-    anchors = [region.anchor for region in outline.regions]
+def _unknown_anchor_message(anchors: Sequence[str], file: str, anchor: str) -> str:
     closest = difflib.get_close_matches(anchor, anchors, n=_CLOSEST_ANCHORS)
     if closest:
         return f"no anchor '{anchor}' in {file}; did you mean: {', '.join(closest)}"
     return f"no anchor '{anchor}' in {file}; `skaldr outline {file}` lists them"
 
 
-def region_source(outline: Outline, file: str, anchor: str) -> str:
-    region = next((region for region in outline.regions if region.anchor == anchor), None)
-    if region is None:
-        raise UnknownAnchorError(_unknown_anchor_message(outline, file, anchor))
-    if isinstance(region.lines, OutsideFile):
-        raise RegionOutsideFileError(
-            f"{file}#{anchor} {region.lines.reason}, so {file} holds none of its lines"
-        )
-    return outline.text_of(region.lines)
+def region_source(path: Path, file: str, anchor: str) -> str:
+    document = _read_document(path)
+    found = next((anchored for anchored in document.anchored if anchored.anchor == anchor), None)
+    if found is None:
+        anchors = [anchored.anchor for anchored in document.anchored]
+        raise UnknownAnchorError(_unknown_anchor_message(anchors, file, anchor))
+    lines = _region_lines(found.block, found.placed, document.source_lines)
+    if isinstance(lines, OutsideFile):
+        raise RegionOutsideFileError(f"{file}#{anchor} {lines.reason}, so {file} holds none of its lines")
+    return _text_between(document.source_lines, lines)

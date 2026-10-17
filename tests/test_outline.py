@@ -2,11 +2,12 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import IO, Any, Literal
 
 import pytest
 import yaml
 from pydantic import TypeAdapter
+from yaml.composer import Composer
 
 from skaldr.cli import main
 from skaldr.outline import OutlineJson, OutlineRegionJson
@@ -741,6 +742,41 @@ def test_a_region_whose_text_does_not_read_back_as_its_blocks_has_no_lines(
         [_region("a", "A", 2, None), _region("b", "B", 2, (10, 11, 8))],
     )
     assert _shown(f"{path}#a", capsys) == _none_of_its_lines(path, "a", UNCHECKED_REASON)
+
+
+def test_show_reads_the_file_once_and_checks_only_the_region_it_prints(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _write(tmp_path / "doc.yaml", SPACES_KEPT_AS_CONTENT)
+    composed: list[str] = []
+    compose_one_document = Composer.get_single_node
+
+    def record_the_composed_text(loader: yaml.SafeLoader) -> yaml.Node | None:
+        composed.append(str(loader.buffer).rstrip("\0"))
+        return compose_one_document(loader)
+
+    monkeypatch.setattr(Composer, "get_single_node", record_the_composed_text)
+    opened: list[Path] = []
+    open_a_path = Path.open
+
+    def record_the_opened_path(
+        self: Path,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> IO[Any]:
+        opened.append(self)
+        return open_a_path(self, mode, buffering, encoding, errors, newline)
+
+    monkeypatch.setattr(Path, "open", record_the_opened_path)
+
+    assert _shown(f"{path}#b", capsys) == (0, ("  - type: heading\n    text: B\n", ""))
+    assert (sorted(composed), opened) == (
+        sorted([SPACES_KEPT_AS_CONTENT, SPACES_KEPT_AS_CONTENT, "  - type: heading\n    text: B\n"]),
+        [path],
+    )
 
 
 def test_a_block_whose_type_comes_through_an_alias_is_not_written_in_place(
