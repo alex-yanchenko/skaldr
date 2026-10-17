@@ -95,6 +95,7 @@ from tests.factories import (
     markdown_of,
     refused_block_types,
 )
+from tests.factories.capability_factory import PIE_TEXT_VARIABLES_JSON
 from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
@@ -960,7 +961,7 @@ def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the
                 "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1.5}],
             },
             '```mermaid\n%%{init: {"theme": "base", '
-            '"themeVariables": {"pie1": "#15803d", "pie2": "#15803d"}}}%%\n'
+            '"themeVariables": {"pie1": "#15803d", "pie2": "#15803d", ' + PIE_TEXT_VARIABLES_JSON + "}}}%%\n"
             'pie\n    "A" : 3\n    "B" : 1.5\n```\n\n'
             "| Slice | Value | Share |\n| --- | --- | --- |\n| A | 3 | 67% |\n| B | 1.5 | 33% |\n"
             "| **Total** | **4.5** |  |\n",
@@ -1354,6 +1355,19 @@ def test_a_section_title_ending_in_a_newline_links_to_its_heading() -> None:
 
     assert markdown_of([section], meta={"title": "T", "toc": True}) == (
         "- [Appendix](#appendix)\n\n## Appendix\n\n[x](#appendix)\n"
+    )
+
+
+def test_a_collapsed_section_title_ending_in_a_newline_links_to_its_heading() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix\n",
+        "blocks": [{"type": "text", "body": "[x](#appendix)"}],
+    }
+
+    assert markdown_of([section], meta={"title": "T", "toc": True}) == (
+        "- [Appendix](#appendix)\n\n<details>\n<summary><h2>Appendix</h2></summary>\n\n"
+        "[x](#appendix)\n\n</details>\n"
     )
 
 

@@ -347,7 +347,7 @@ xychart-beta
 **How discrepancies resolved**
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"pie1": "#15803d", "pie2": "#b45309", "pie3": "#b91c1c"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"pie1": "#15803d", "pie2": "#b45309", "pie3": "#b91c1c", "pieTitleTextColor": "#768390", "pieLegendTextColor": "#768390", "pieSectionTextColor": "#ffffff", "pieStrokeColor": "#768390", "pieOuterStrokeColor": "#768390"}}}%%
 pie
     "Fixed on floor" : 900
     "System defect" : 760

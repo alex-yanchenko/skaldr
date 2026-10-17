@@ -131,10 +131,10 @@ SWAPPED_FORMS: dict[Feature, dict[ExportTarget, Any]] = {
 }
 STACKED_TABLE = f"{TWO_SERIES_TABLE}| **Total** | **5** | **8** |\n"
 ONE_BAR_MERMAID = '```mermaid\nxychart-beta\n    x-axis ["Mon", "Tue"]\n    bar [4, 6]\n```\n'
-ONE_BAR_MERMAID_WITH_PAGE_PALETTE = ONE_BAR_MERMAID.replace(
-    "xychart-beta",
-    '%%{init: {"theme": "base", "themeVariables": {"xyChart": {"plotColorPalette": "#1d4ed8"}}}}%%\n'
-    "xychart-beta",
+ONE_BAR_MERMAID_WITH_PAGE_PALETTE = (
+    '```mermaid\n%%{init: {"theme": "base", '
+    '"themeVariables": {"xyChart": {"plotColorPalette": "#1d4ed8"}}}}%%\n'
+    'xychart-beta\n    x-axis ["Mon", "Tue"]\n    bar [4, 6]\n```\n'
 )
 SWAP_CELLS = [
     pytest.param(feature, target, id=f"{target}-{feature}")

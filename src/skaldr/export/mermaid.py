@@ -45,6 +45,14 @@ RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD: Final[tuple[type[ExportRun], ...]] = (
 )
 POINT_MARKER: Final = "• "
 PIE_COLOUR_COUNT: Final = 12
+PIE_TEXT_GREY: Final = "#768390"
+PIE_TEXT_VARIABLES: Final[Mapping[str, str]] = {
+    "pieTitleTextColor": PIE_TEXT_GREY,
+    "pieLegendTextColor": PIE_TEXT_GREY,
+    "pieSectionTextColor": "#ffffff",
+    "pieStrokeColor": PIE_TEXT_GREY,
+    "pieOuterStrokeColor": PIE_TEXT_GREY,
+}
 
 
 class NodeColors(NamedTuple):
@@ -195,16 +203,18 @@ def _init_line(theme_variables: Mapping[str, object]) -> str:
     return "%%{init: " + json.dumps({"theme": "base", "themeVariables": theme_variables}) + "}%%"
 
 
+def _palette_prefixed(lines: list[str], init_line: str, *, with_page_palette: bool) -> list[str]:
+    return [init_line, *lines] if with_page_palette else lines
+
+
 def _pie_init_line(chart: PieChart) -> str:
     coloured = enumerate(chart.slices[:PIE_COLOUR_COUNT], start=1)
-    return _init_line(
-        {f"pie{number}": chart_light_colour(item.tone, number - 1) for number, item in coloured}
-    )
+    slice_colours = {f"pie{number}": chart_light_colour(item.tone, number - 1) for number, item in coloured}
+    return _init_line({**slice_colours, **PIE_TEXT_VARIABLES})
 
 
 def _xy_init_line(chart: XYChart) -> str:
-    tones = chart.series_tones or (None,) * len(chart.series)
-    palette = ", ".join(chart_light_colour(tone, index) for index, tone in enumerate(tones))
+    palette = ", ".join(chart_light_colour(tone, index) for index, tone in enumerate(chart.series_tones))
     return _init_line({"xyChart": {"plotColorPalette": palette}})
 
 
@@ -216,9 +226,13 @@ def _mermaid_lines(figure: Figure, *, with_step_details: bool, with_page_palette
             slices = (
                 f"    {_quoted_string(item.label)} : {_mermaid_number(item.value)}" for item in figure.slices
             )
-            return [*([_pie_init_line(figure)] if with_page_palette else []), "pie", *slices]
+            return _palette_prefixed(
+                ["pie", *slices], _pie_init_line(figure), with_page_palette=with_page_palette
+            )
         case XYChart():
-            return [*([_xy_init_line(figure)] if with_page_palette else []), *_xy_lines(figure)]
+            return _palette_prefixed(
+                _xy_lines(figure), _xy_init_line(figure), with_page_palette=with_page_palette
+            )
         case _:
             assert_never(figure)
 

@@ -109,7 +109,7 @@ GITHUB_ALERT_TYPE: Final[Mapping[ToneName, str]] = {
 }
 ORDERED_LIST_TYPE: Final[Mapping[TextNumbering, str]] = {"letters": "a", "roman": "i"}
 MOST_COLUMNS_THAT_KEEP_THEIR_WIDTH: Final = 3
-FIRST_GRID_CONTAINER_DEPTH: Final = 1
+DEPTH_OF_A_TOP_LEVEL_GRID_CELL: Final = 1
 CHECKED_BOX: Final = "☑ "
 UNCHECKED_BOX: Final = "☐ "
 MarkerFamily = Literal["dash", "ordinal"]
@@ -409,8 +409,9 @@ class _MarkdownWriter:
         return self.container_depth == 0 and self.html_block_depth == 0
 
     def is_an_alert(self, node: Callout) -> bool:
-        depth_of_an_alert = FIRST_GRID_CONTAINER_DEPTH if node.authored_as == "grid cell" else 0
-        return node.shows_icon and self.container_depth == depth_of_an_alert
+        is_a_toned_grid_cell = node.authored_as == "grid cell"
+        alert_depth = DEPTH_OF_A_TOP_LEVEL_GRID_CELL if is_a_toned_grid_cell else 0
+        return node.shows_icon and self.container_depth == alert_depth
 
     def callout_lines(self, node: Callout) -> list[str]:
         alert = self.is_an_alert(node)
@@ -503,8 +504,8 @@ class _MarkdownWriter:
             return self.blocks_after(children, after)
         with self.inside_an_html_block():
             body = self.blocks_after(children, None)
-        titled = summary if heading_level is None else summary_heading(heading_level, summary)
-        return _Written.of(details_lines(titled, body.lines, opened=opened))
+        summary_text = summary if heading_level is None else summary_heading(heading_level, summary)
+        return _Written.of(details_lines(summary_text, body.lines, opened=opened))
 
     def references_written(self, node: References, after: _ListTail | None) -> _Written:
         if not self.is_at_the_top_level():

@@ -981,7 +981,15 @@ def test_a_toned_donut_is_a_pie_with_mermaid_default_colours() -> None:
         "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1}],
     }
 
-    assert notion_of([donut]).startswith('```mermaid\npie\n    "A" : 3\n    "B" : 1\n```\n')
+    assert notion_of([donut]) == (
+        '```mermaid\npie\n    "A" : 3\n    "B" : 1\n```\n'
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**Slice**</td>\n\t\t<td>**Value**</td>\n\t\t<td>**Share**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td color="green_bg">A</td>\n\t\t<td>3</td>\n\t\t<td>75%</td>\n\t</tr>\n'
+        "\t<tr>\n\t\t<td>B</td>\n\t\t<td>1</td>\n\t\t<td>25%</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**4**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
 
 
 def test_a_request_with_several_cases_is_native_tabs_with_the_status_icon() -> None:

@@ -229,7 +229,7 @@ class XYChart:
     categories: tuple[str, ...]
     series: tuple[tuple[float, ...], ...]
     stacked: bool
-    series_tones: tuple[ToneLiteral | None, ...] = ()
+    series_tones: tuple[ToneLiteral | None, ...]
 
 
 Figure = Graph | PieChart | XYChart
