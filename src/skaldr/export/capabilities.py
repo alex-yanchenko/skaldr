@@ -284,6 +284,7 @@ class Rejection:
     why: str
     instead: str
     names_the_heading: bool = False
+    in_the_guide: str = field(kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -297,17 +298,24 @@ _ADF_CANNOT_PLACE: Final = Rejection(
     "ADF cannot place a {held} inside {holder}",
     "move the {held} out of the {holder_name}",
     names_the_heading=True,
+    in_the_guide="ADF cannot place it inside that container, since ADF limits what each container may hold; "
+    "move it out of the container",
 )
 _CANVAS_LIST_ITEM_WHY: Final = (
     "a Slack canvas list item holds only text and one nested list, so it cannot show {held}"
 )
+_CANVAS_LIST_ITEM_GUIDE: Final = "a canvas list item holds only text and one nested list; "
 _WITHOUT_THE_MARK: Final = "write the text without the {mark} or export the document elsewhere"
 _WITHOUT_THE_COLOUR: Final = _WITHOUT_THE_MARK.format(mark="colour")
 _GITHUB_CANNOT_COLOUR: Final = Rejection(
-    "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
+    "GitHub Markdown cannot colour text, so it cannot show the colour of '{text}'",
+    _WITHOUT_THE_COLOUR,
+    in_the_guide=f"GitHub cannot colour text; {_WITHOUT_THE_COLOUR}",
 )
 _CANVAS_CANNOT_COLOUR: Final = Rejection(
-    "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'", _WITHOUT_THE_COLOUR
+    "a Slack canvas cannot colour text, so it cannot show the colour of '{text}'",
+    _WITHOUT_THE_COLOUR,
+    in_the_guide=f"a canvas cannot colour text; {_WITHOUT_THE_COLOUR}",
 )
 _WITHOUT_THE_HIGHLIGHT: Final = _WITHOUT_THE_MARK.format(mark="highlight")
 _FROM_ONE_WHY: Final = (
@@ -329,6 +337,25 @@ _DIGITS_ONLY_WHY: Final = (
 _DIGITS_ONLY_INSTEAD: Final = "number the list with digits, or export it elsewhere"
 
 
+def _from_one_guide(subject: str) -> str:
+    return f"{subject} numbers every list from 1; {_FROM_ONE_INSTEAD}"
+
+
+def _own_heading_guide(subject: str) -> str:
+    return f"{subject} cannot link to its own headings; {_OWN_HEADING_INSTEAD}"
+
+
+def _other_document_guide(subject: str) -> str:
+    return (
+        f"{subject} cannot link to it, since skaldr has no address for that document there; "
+        f"{_OTHER_DOCUMENT_INSTEAD}"
+    )
+
+
+def _digits_only_guide(subject: str) -> str:
+    return f"{subject} numbers a list only with digits; {_DIGITS_ONLY_INSTEAD}"
+
+
 def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget, Capability]:
     kept: dict[ExportTarget, Capability] = dict.fromkeys(EXPORT_TARGETS, "keep")
     return {**kept, **cells}
@@ -339,12 +366,15 @@ _CANVAS_CALLOUT_CANNOT_HOLD: Final = Rejection(
     "so it cannot show the {held} inside {holder}",
     "move the {held} out of the {holder_name}",
     names_the_heading=True,
+    in_the_guide="a canvas callout holds only text, headings, lists, quotes, code blocks and images; "
+    "move it out of the callout",
 )
 _CANVAS_COLUMN_CANNOT_HOLD: Final = Rejection(
     "a Slack canvas column holds no table, callout or divider, "
     "so it cannot show the {held} inside a grid cell",
     "move the {held} out of the grid",
     names_the_heading=True,
+    in_the_guide="a canvas column holds no table, callout or divider; move it out of the grid",
 )
 TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
     "markdown": "GitHub",
@@ -352,11 +382,21 @@ TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
     "adf": "ADF",
     "slack": "a Slack canvas",
 }
+GUIDE_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
+    "markdown": "GitHub",
+    "notion": "Notion",
+    "adf": "ADF",
+    "slack": "a canvas",
+}
 
 
 _TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
 _TARGETS_WITH_MERMAID_DIAGRAMS: Final[tuple[ExportTarget, ...]] = ("markdown", "notion")
 _HOST_THE_IMAGE: Final = "host the image and give its https address"
+_UPLOAD_THE_IMAGE: Final = "upload the image to Slack and give its permalink"
+_ADF_DATA_URI_WHY: Final = (
+    "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue"
+)
 _CHART_AS_ITS_TABLE: Final = Swap(
     "the chart's data table: a donut's slices, a row each with its value and share, then a total row; "
     "a bar or line chart's series, a row each with its value in each category, "
@@ -365,9 +405,22 @@ _CHART_AS_ITS_TABLE: Final = Swap(
 
 
 def _refused_by(
-    targets: Iterable[ExportTarget], cannot: str, instead: str
+    targets: Iterable[ExportTarget],
+    cannot: str,
+    instead: str,
+    *,
+    guide_cannot: str | None = None,
+    guide_instead: str | None = None,
 ) -> Mapping[ExportTarget, Capability]:
-    return {target: Rejection(f"{TARGET_SUBJECTS[target]} cannot {cannot}", instead) for target in targets}
+    guide_clause = f"cannot {guide_cannot or cannot}; {guide_instead or instead}"
+    return {
+        target: Rejection(
+            f"{TARGET_SUBJECTS[target]} cannot {cannot}",
+            instead,
+            in_the_guide=f"{GUIDE_SUBJECTS[target]} {guide_clause}",
+        )
+        for target in targets
+    }
 
 
 CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
@@ -381,15 +434,35 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "table inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "toggle inside a toggle inside a toggle": _kept_except({"adf": _ADF_CANNOT_PLACE}),
     "block inside a list item": _kept_except(
-        {"slack": Rejection(_CANVAS_LIST_ITEM_WHY, "move it out of the list, after the list")}
+        {
+            "slack": Rejection(
+                _CANVAS_LIST_ITEM_WHY,
+                "move it out of the list, after the list",
+                in_the_guide=f"{_CANVAS_LIST_ITEM_GUIDE}move it out of the list, after the list",
+            )
+        }
     ),
     "block inside a walkthrough step": _kept_except(
-        {"slack": Rejection(_CANVAS_LIST_ITEM_WHY, "move it out of the step, after the walkthrough")}
+        {
+            "slack": Rejection(
+                _CANVAS_LIST_ITEM_WHY,
+                "move it out of the step, after the walkthrough",
+                in_the_guide=f"{_CANVAS_LIST_ITEM_GUIDE}move it out of the step, after the walkthrough",
+            )
+        }
     ),
     "numbered list starting past 1": _kept_except(
         {
-            "notion": Rejection(_FROM_ONE_WHY.format(target="Notion"), _FROM_ONE_INSTEAD),
-            "slack": Rejection(_FROM_ONE_WHY.format(target="a Slack canvas"), _FROM_ONE_INSTEAD),
+            "notion": Rejection(
+                _FROM_ONE_WHY.format(target="Notion"),
+                _FROM_ONE_INSTEAD,
+                in_the_guide=_from_one_guide(GUIDE_SUBJECTS["notion"]),
+            ),
+            "slack": Rejection(
+                _FROM_ONE_WHY.format(target="a Slack canvas"),
+                _FROM_ONE_INSTEAD,
+                in_the_guide=_from_one_guide(GUIDE_SUBJECTS["slack"]),
+            ),
         }
     ),
     "table over 300 cells": _kept_except(
@@ -399,6 +472,9 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "over the {limit} such a table can hold",
                 "split the {held} in two or export it elsewhere",
                 names_the_heading=True,
+                in_the_guide=f"a canvas table holds at most {CANVAS_TABLE_CELL_LIMIT} cells, "
+                "the header row included; "
+                "split the table in two, or export the document elsewhere",
             )
         }
     ),
@@ -408,6 +484,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "a Slack canvas cannot show a grid inside a walkthrough step, "
                 "since a canvas list item holds only text",
                 "move the grid out of the step, after the walkthrough",
+                in_the_guide=f"{_CANVAS_LIST_ITEM_GUIDE}move the grid out of the step, after the walkthrough",
             )
         }
     ),
@@ -417,6 +494,9 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "a Slack canvas cannot show the {position} '{text}', "
                 "since '{character}' has no Unicode {position} form",
                 _WITHOUT_THE_MARK.format(mark="{position}"),
+                in_the_guide="a canvas shows only the subscripts and superscripts that have a Unicode form, "
+                "which the `H~2~O` row of the table above lists; "
+                "write the text without the subscript or superscript, or export the document elsewhere",
             )
         }
     ),
@@ -426,6 +506,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "slack": Rejection(
                 "a Slack canvas cannot highlight text, so it cannot show the highlight on '{text}'",
                 _WITHOUT_THE_HIGHLIGHT,
+                in_the_guide=f"a canvas cannot highlight text; {_WITHOUT_THE_HIGHLIGHT}",
             ),
         }
     ),
@@ -436,6 +517,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "a Notion text run takes a colour or a highlight, not both, "
                 "so it cannot show both on '{text}'",
                 "keep either the colour or the highlight on the text",
+                in_the_guide="a Notion text run takes a colour or a highlight, not both; "
+                "keep either the colour or the highlight on the text",
             ),
             "slack": _CANVAS_CANNOT_COLOUR,
         }
@@ -445,6 +528,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "slack": Rejection(
                 "a Slack canvas cannot underline text, so it cannot show the underline on '{text}'",
                 _WITHOUT_THE_MARK.format(mark="underline"),
+                in_the_guide=f"a canvas cannot underline text; {_WITHOUT_THE_MARK.format(mark='underline')}",
             )
         }
     ),
@@ -454,29 +538,55 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
                 "so it cannot show the highlight on '{text}'",
                 _WITHOUT_THE_HIGHLIGHT,
+                in_the_guide="Notion cannot show a highlight inside the coloured title of a toned "
+                f"walkthrough step; {_WITHOUT_THE_HIGHLIGHT}",
             )
         }
     ),
     "link to a heading of the same document": _kept_except(
         {
-            "notion": Rejection(_OWN_HEADING_WHY.format(target="a Notion page"), _OWN_HEADING_INSTEAD),
-            "adf": Rejection(_OWN_HEADING_WHY.format(target="a Jira description"), _OWN_HEADING_INSTEAD),
-            "slack": Rejection(_OWN_HEADING_WHY.format(target="a Slack canvas"), _OWN_HEADING_INSTEAD),
+            "notion": Rejection(
+                _OWN_HEADING_WHY.format(target="a Notion page"),
+                _OWN_HEADING_INSTEAD,
+                in_the_guide=_own_heading_guide(GUIDE_SUBJECTS["notion"]),
+            ),
+            "adf": Rejection(
+                _OWN_HEADING_WHY.format(target="a Jira description"),
+                _OWN_HEADING_INSTEAD,
+                in_the_guide=_own_heading_guide(GUIDE_SUBJECTS["adf"]),
+            ),
+            "slack": Rejection(
+                _OWN_HEADING_WHY.format(target="a Slack canvas"),
+                _OWN_HEADING_INSTEAD,
+                in_the_guide=_own_heading_guide(GUIDE_SUBJECTS["slack"]),
+            ),
         }
     ),
     "link to another skaldr document": _kept_except(
         {
-            "notion": Rejection(_OTHER_DOCUMENT_WHY.format(target="Notion"), _OTHER_DOCUMENT_INSTEAD),
-            "adf": Rejection(
-                _OTHER_DOCUMENT_WHY.format(target="a Jira description"), _OTHER_DOCUMENT_INSTEAD
+            "notion": Rejection(
+                _OTHER_DOCUMENT_WHY.format(target="Notion"),
+                _OTHER_DOCUMENT_INSTEAD,
+                in_the_guide=_other_document_guide(GUIDE_SUBJECTS["notion"]),
             ),
-            "slack": Rejection(_OTHER_DOCUMENT_WHY.format(target="a Slack canvas"), _OTHER_DOCUMENT_INSTEAD),
+            "adf": Rejection(
+                _OTHER_DOCUMENT_WHY.format(target="a Jira description"),
+                _OTHER_DOCUMENT_INSTEAD,
+                in_the_guide=_other_document_guide(GUIDE_SUBJECTS["adf"]),
+            ),
+            "slack": Rejection(
+                _OTHER_DOCUMENT_WHY.format(target="a Slack canvas"),
+                _OTHER_DOCUMENT_INSTEAD,
+                in_the_guide=_other_document_guide(GUIDE_SUBJECTS["slack"]),
+            ),
         }
     ),
     "inline code holding a backtick": _kept_except(
         {
             "notion": Rejection(
                 "Notion cannot show inline code holding a backtick, as in '{code}'",
+                "write the code in a code block, or without the backtick",
+                in_the_guide="Notion cannot show inline code holding a backtick; "
                 "write the code in a code block, or without the backtick",
             )
         }
@@ -486,6 +596,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "notion": Rejection(
                 "Notion loses a table cell whose inline code holds '</', as in '{code}'",
                 "write the code outside the table, or without '</'",
+                in_the_guide="Notion loses a table cell whose inline code holds `</`; "
+                "write the code outside the table, or without `</`",
             )
         }
     ),
@@ -495,13 +607,24 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "Notion closes a coloured, highlighted or underlined span early at inline code holding '</', "
                 "as in '{code}'",
                 "write the code outside the coloured, highlighted or underlined text, or without '</'",
+                in_the_guide="Notion closes a coloured, highlighted or underlined span early at inline code "
+                "holding `</`; write the code outside the coloured, highlighted or underlined text, "
+                "or without `</`",
             )
         }
     ),
     "list numbered with letters or roman numerals": _kept_except(
         {
-            "adf": Rejection(_DIGITS_ONLY_WHY.format(target="ADF"), _DIGITS_ONLY_INSTEAD),
-            "slack": Rejection(_DIGITS_ONLY_WHY.format(target="a Slack canvas"), _DIGITS_ONLY_INSTEAD),
+            "adf": Rejection(
+                _DIGITS_ONLY_WHY.format(target="ADF"),
+                _DIGITS_ONLY_INSTEAD,
+                in_the_guide=_digits_only_guide(GUIDE_SUBJECTS["adf"]),
+            ),
+            "slack": Rejection(
+                _DIGITS_ONLY_WHY.format(target="a Slack canvas"),
+                _DIGITS_ONLY_INSTEAD,
+                in_the_guide=_digits_only_guide(GUIDE_SUBJECTS["slack"]),
+            ),
         }
     ),
     "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step": _kept_except(
@@ -510,6 +633,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "ADF cannot place a {held} inside a {item}",
                 "move the {held} out of the {out_of}, after the {after}",
                 names_the_heading=True,
+                in_the_guide="ADF cannot place it there, since ADF limits what a list item or walkthrough "
+                "step may hold; move it out of the list or step, after the list or walkthrough",
             )
         }
     ),
@@ -518,6 +643,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "slack": Rejection(
                 "a Slack canvas quote holds only text, so it cannot show a list inside a quote",
                 "move the list out of the quote, after it",
+                in_the_guide="a canvas quote holds only text; move the list out of the quote, after it",
             )
         }
     ),
@@ -529,6 +655,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "{cells} cells",
                 "split the grid into grids of at most {limit} cells",
                 names_the_heading=True,
+                in_the_guide=f"a canvas column layout holds at most {CANVAS_LAYOUT_COLUMN_LIMIT} columns; "
+                f"split the grid into grids of at most {CANVAS_LAYOUT_COLUMN_LIMIT} cells",
             )
         }
     ),
@@ -541,6 +669,7 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "a Slack canvas column has no tone, so it cannot show a grid cell with the tone '{tone}'",
                 "drop the tone from the grid cell",
                 names_the_heading=True,
+                in_the_guide="a canvas column has no tone; drop the tone from the grid cell",
             )
         }
     ),
@@ -550,6 +679,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "a Slack canvas cannot show a grid's columns inside a grid cell",
                 "write the inner grid's cells as cells of the outer grid",
                 names_the_heading=True,
+                in_the_guide="a canvas cannot show a grid's columns inside a grid cell; "
+                "write the inner grid's cells as cells of the outer grid",
             )
         }
     ),
@@ -558,6 +689,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "slack": Rejection(
                 "a Slack canvas holds headings down to level {limit}, "
                 "so it cannot show the heading '{text}' at level {level}",
+                "write the heading as bold text, or export the document elsewhere",
+                in_the_guide=f"a canvas holds headings down to level {CANVAS_HEADING_LEVEL_LIMIT}; "
                 "write the heading as bold text, or export the document elsewhere",
             )
         }
@@ -569,6 +702,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "since Jira writes a step as a list item",
                 "move the divider out of the step, after the walkthrough",
                 names_the_heading=True,
+                in_the_guide="ADF cannot place it there, since Jira writes a walkthrough step as a "
+                "list item, which holds no divider; move the divider out of the step, after the walkthrough",
             )
         }
     ),
@@ -581,12 +716,18 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
     "flow diagram": _kept_except(
         _refused_by(
-            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a flow diagram", "write the steps as a numbered list"
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH,
+            "draw a flow diagram",
+            "write the steps as a numbered list",
+            guide_cannot="draw a diagram",
         )
     ),
     "fan diagram": _kept_except(
         _refused_by(
-            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a fan diagram", "write the hub and its spokes as a list"
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH,
+            "draw a fan diagram",
+            "write the hub and its spokes as a list",
+            guide_cannot="draw a diagram",
         )
     ),
     RICH_STEP_NOTE: _kept_except(
@@ -595,6 +736,13 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "show a link, citation, math, struck-through text, or a subscript or superscript "
             "with no Unicode form in a flow or fan step's note, since a diagram label holds plain text only",
             "write the note as plain text and put the rest in a text block after the diagram",
+            guide_cannot="show a link, citation, inline math, struck-through text, "
+            "or a subscript or superscript with no Unicode form in a step's note, "
+            "since a Mermaid label holds plain text only (the Slack canvas section lists the characters "
+            "that have a Unicode form)",
+            guide_instead="write the note as plain text and put the rest in a text block "
+            "after the diagram. Any other mark in a note, such as bold, italic, underline, "
+            "a colour or inline code, keeps its characters and loses its formatting",
         )
     ),
     "chart": _kept_except(dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, _CHART_AS_ITS_TABLE)),
@@ -608,12 +756,14 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "image from a data: URI": {
         **_refused_by(("markdown", "notion"), "show an image from a data: URI", _HOST_THE_IMAGE),
         "adf": Rejection(
-            "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue",
+            _ADF_DATA_URI_WHY,
             _HOST_THE_IMAGE,
+            in_the_guide=f"{_ADF_DATA_URI_WHY}; {_HOST_THE_IMAGE}",
         ),
         "slack": Rejection(
             "a Slack canvas cannot show an image from a data: URI",
-            "upload the image to Slack and give its permalink",
+            _UPLOAD_THE_IMAGE,
+            in_the_guide=f"a canvas cannot show an image from a data: URI; {_UPLOAD_THE_IMAGE}",
         ),
     },
 }

@@ -28,6 +28,12 @@ uv run skaldr ...           # uv uses the system Python ≥ 3.10
 4. **Done = skaldr prints `OK` and the output file exists.** A structural mistake fails the build
    with a precise path (`blocks.3.items.2.value: ...`); read it, fix, re-run.
 
+## Contributing
+
+The refusal lists in `src/skaldr/skill/GUIDE.md` are generated from the capability table in
+`src/skaldr/export/capabilities.py`; after changing a `Rejection`, rewrite them with
+`SKALDR_WRITE_GUIDE=1 uv run pytest tests/test_guide_refusals.py` and never edit them by hand.
+
 ## Don't
 
 - Don't hand-write HTML/CSS or hunt for a source generator: skaldr owns rendering; just run it.
