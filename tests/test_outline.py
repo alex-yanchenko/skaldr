@@ -238,6 +238,41 @@ blocks:
   - type: *t
     text: B
 """
+HEADINGS_IN_TABS = """version: 1
+meta: {title: T}
+blocks:
+  - type: tabs
+    tabs:
+      - label: One
+        blocks:
+          - type: heading
+            text: In tab one
+          - type: text
+            body: first tab
+      - label: Two
+        blocks:
+          - type: heading
+            text: In tab two
+          - type: text
+            body: second tab
+"""
+HEADING_IN_A_WALKTHROUGH_STEP = """version: 1
+meta: {title: T}
+blocks:
+  - type: walkthrough
+    steps:
+      - label: Parse
+        detail:
+          - type: heading
+            text: Step heading
+            level: 3
+          - type: text
+            body: detail text
+      - label: Ship
+        detail:
+          - type: text
+            body: no heading here
+"""
 
 ALIAS_REASON = "is not written in place (it comes through a YAML alias or merge key)"
 UNCHECKED_REASON = "could not be checked against the file"
@@ -1041,6 +1076,53 @@ def test_a_heading_ending_in_an_empty_value_keeps_its_lines(
     assert (exit_code, outlined["regions"]) == (
         0,
         [_region("a", "A", 2, (4, 6, 10)), _region("b", "B", 2, (7, 8, 8))],
+    )
+
+
+def test_a_heading_in_a_tab_ends_at_the_end_of_its_own_tab(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path / "doc.yaml", HEADINGS_IN_TABS)
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (
+        0,
+        [
+            _region("in-tab-one", "In tab one", 2, (8, 11, 27)),
+            _region("in-tab-two", "In tab two", 2, (14, 17, 27)),
+        ],
+    )
+    assert _shown(f"{path}#in-tab-two", capsys) == (
+        0,
+        (
+            "          - type: heading\n"
+            "            text: In tab two\n"
+            "          - type: text\n"
+            "            body: second tab\n",
+            "",
+        ),
+    )
+
+
+def test_a_heading_in_a_walkthrough_step_ends_at_the_end_of_its_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path / "doc.yaml", HEADING_IN_A_WALKTHROUGH_STEP)
+
+    exit_code, outlined = _outlined(path, capsys)
+
+    assert (exit_code, outlined["regions"]) == (0, [_region("step-heading", "Step heading", 3, (8, 12, 33))])
+    assert _shown(f"{path}#step-heading", capsys) == (
+        0,
+        (
+            "          - type: heading\n"
+            "            text: Step heading\n"
+            "            level: 3\n"
+            "          - type: text\n"
+            "            body: detail text\n",
+            "",
+        ),
     )
 
 
