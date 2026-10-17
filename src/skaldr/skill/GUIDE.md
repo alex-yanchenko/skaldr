@@ -1278,6 +1278,19 @@ blocks:                       # optional: an intro shown before the first part
 - A part cannot be an index itself, and `index` takes only `layout: one_page` for now. An index document cannot carry `publish` yet, and a part's own `publish` block is left out of the combined page; publish each part file on its own.
 - `part` is the block an index builds; it is not written by hand, and the build refuses one outside an index. To group content inside one file, use a `section` or a `heading`.
 
+## Reading one region: `outline` and `show`
+
+A large document does not have to be read whole. `skaldr outline FILE` prints one row per heading (at any level) and per section, in document order: its anchor (the same id the page and its table of contents use), its kind and level, whether the anchor is an author-set `id` (`set`) or derived from the text (`derived`), the first and last line of its region in FILE, and an approximate token count (characters / 4, rounded up). The last line gives the file's total lines and approximate tokens. `--json` prints the same as `{file, lines, tokens, regions}`.
+
+```bash
+skaldr outline plan.yaml            # find the anchor and the size of each region
+skaldr show plan.yaml#risks         # print that region word for word
+```
+
+`skaldr show FILE#ANCHOR` prints the region's lines exactly as FILE holds them, comments and indentation included, and nothing else. A section's region is the section alone, from its first line to its last. A heading's region runs from the heading to the last line of the last block before the next heading in the same list at the same level or shallower, so the blocks and sections after it belong to it, and comments or blank lines just before that next heading belong to no region; a heading inside a section, grid cell, tab or panel is measured within that list. An unknown anchor fails; the error names the closest anchors when there are some, and otherwise points to `skaldr outline FILE`.
+
+Content an `!include` brings in is outlined at its include point only: its rows show `-` for lines and tokens, and `show` refuses it, naming the include, so read the included file instead. A block reached through a YAML alias or a merge key (`<<`) shows `-` too, and so does one written on a line it shares with another block or with the list around it, such as a flow list `blocks: [{…}, {…}]`. Before a region gets its lines, skaldr reads those lines back and checks they hold the same blocks; a region that fails the check shows `-` as well. An index document is refused; outline each part file.
+
 ## Where it publishes: `publish`
 
 An optional top-level `publish` block says where the document is meant to live outside skaldr: Notion pages, Jira issues and Slack canvases. skaldr reads the block, validates it, and keeps it out of the source a rendered page embeds. The block changes nothing about what a render or an export does; the `skaldr publish`, `skaldr diff` and `skaldr status` commands read it (see Publishing below). `skaldr auth` keeps one sign-in per Jira site, per Notion workspace and per Slack workspace (`skaldr auth status` lists them, `skaldr auth logout jira <site>`, `skaldr auth logout notion <workspace>` and `skaldr auth logout slack <workspace>` remove one), so a second site or workspace never replaces the first. `where` has a different shape for each service; the other keys mean the same thing everywhere.

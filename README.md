@@ -57,6 +57,8 @@ the result:
 skaldr --guide                     # the authoring guide: every block, the rules, a full example
 skaldr --guide request             # one block: its table row, its guide section and its fields (--guide --list names them all)
 skaldr new plan plan.yaml          # write a working-plan starter to fill in (also: skaldr --guide plan)
+skaldr outline report.yaml         # every heading and section with its anchor, exact line range and ~token count (--json too)
+skaldr show report.yaml#anchor     # print one heading's or section's source text, word for word
 skaldr --write-schema page.schema.json   # JSON Schema for your editor's YAML language server
 skaldr report.yaml --embed -o out.html   # Artifact-ready fragment (no <html> skeleton) to publish as a claude.ai Artifact
 skaldr --check report.yaml         # validate against the schema, write nothing (exits non-zero on error)

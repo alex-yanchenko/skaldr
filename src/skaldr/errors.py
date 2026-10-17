@@ -57,6 +57,18 @@ class UnknownGuideTopicError(LookupError):
     pass
 
 
+class IndexDocumentOutlineError(ReportError):
+    pass
+
+
+class UnknownAnchorError(LookupError):
+    pass
+
+
+class RegionOutsideFileError(LookupError):
+    pass
+
+
 class ReadOnlyFileError(PermissionError):
     pass
 

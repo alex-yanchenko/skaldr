@@ -15,7 +15,16 @@ from typing import Literal
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ConnectorError, PageFetchError, PublishError, ReportError, UnknownGuideTopicError
+from skaldr.errors import (
+    ConnectorError,
+    IndexDocumentOutlineError,
+    PageFetchError,
+    PublishError,
+    RegionOutsideFileError,
+    ReportError,
+    UnknownAnchorError,
+    UnknownGuideTopicError,
+)
 from skaldr.export import (
     EXPORT_MANIFEST,
     EXPORT_TARGETS,
@@ -28,6 +37,7 @@ from skaldr.export import (
 )
 from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Part, Report, content_files, load_report, package_path, package_text
+from skaldr.outline import outline_file, outline_json, outline_table, region_source
 from skaldr.pdf import html_to_pdf
 from skaldr.render import (
     RecordedRender,
@@ -145,6 +155,7 @@ def _run_auth(argv: list[str]) -> int:
 
 
 _NEW_KINDS = {"plan": "skill/plan-starter.yaml"}
+_REGION_READ_ERRORS = (ReportError, UnknownAnchorError, RegionOutsideFileError)
 
 
 def _fail(message: str) -> int:
@@ -174,6 +185,55 @@ def _run_new(arguments: list[str]) -> int:
     return 0
 
 
+def _run_outline(arguments: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="skaldr outline",
+        description="List every heading and section of a content file with its anchor, its line range in "
+        "the file and an approximate token count (characters / 4, rounded up), so one region can be read "
+        "alone with `skaldr show FILE#ANCHOR`. Content an `!include` brings in has no lines in FILE and "
+        "shows `-`.",
+    )
+    parser.add_argument("file", metavar="FILE", help="the content YAML to outline (not an index document)")
+    parser.add_argument("--json", action="store_true", help="print {file, lines, tokens, regions} as JSON")
+    args = parser.parse_args(arguments)
+    try:
+        outline = outline_file(Path(args.file))
+    except ReportError as err:
+        return _region_read_failure(err)
+    print(
+        json.dumps(outline_json(outline, args.file), indent=2)
+        if args.json
+        else outline_table(outline, args.file)
+    )
+    return 0
+
+
+def _run_show(arguments: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="skaldr show",
+        description="Print one region of a content file word for word: the exact lines `skaldr outline` "
+        "lists for that anchor, and nothing else.",
+    )
+    parser.add_argument("region", metavar="FILE#ANCHOR", help="the content file and the region's anchor")
+    args = parser.parse_args(arguments)
+    file, _, anchor = args.region.rpartition("#")
+    if not file or not anchor:
+        parser.error("name the region as FILE#ANCHOR; `skaldr outline FILE` lists the anchors")
+    try:
+        source = region_source(Path(file), file, anchor)
+    except _REGION_READ_ERRORS as err:
+        return _region_read_failure(err)
+    sys.stdout.flush()
+    sys.stdout.buffer.write(source.encode("utf-8"))
+    sys.stdout.buffer.flush()
+    return 0
+
+
+def _region_read_failure(err: Exception) -> int:
+    print(f"error: {err}", file=sys.stderr)
+    return 2 if isinstance(err, IndexDocumentOutlineError) else 1
+
+
 def _run_publish(argv: list[str]) -> int:
     try:
         from skaldr.publish.cli import main as publish_main
@@ -188,12 +248,18 @@ def main(argv: list[str] | None = None) -> int:
         return _run_auth(arguments[1:])
     if arguments[:1] == ["new"]:
         return _run_new(arguments[1:])
+    if arguments[:1] == ["outline"]:
+        return _run_outline(arguments[1:])
+    if arguments[:1] == ["show"]:
+        return _run_show(arguments[1:])
     if arguments[:1] and arguments[0] in _PUBLISH_COMMANDS:
         return _run_publish(arguments)
     parser = argparse.ArgumentParser(
         description="Render a skaldr content file to an HTML page.",
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
-        "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`.",
+        "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`. List a large "
+        "file's headings and sections with `skaldr outline FILE` and print one of them word for word with "
+        "`skaldr show FILE#ANCHOR`.",
     )
     parser.add_argument(
         "--version",
