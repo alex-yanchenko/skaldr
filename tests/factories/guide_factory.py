@@ -1,18 +1,20 @@
 import os
 import re
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final
 
 from markdown_it import MarkdownIt
 
 from skaldr.export.capabilities import CAPABILITIES, Capability, Feature, Rejection
 from skaldr.export_targets import ExportTarget
-from skaldr.models import package_path
+from skaldr.replace_file import replace_file
+from tests.conftest import REPO_ROOT
 
 CapabilityTable = Mapping[Feature, Mapping[ExportTarget, Capability]]
 
-GUIDE_FILE: Final = package_path("skill/GUIDE.md")
+GUIDE_FILE: Final = REPO_ROOT / "src" / "skaldr" / "skill" / "GUIDE.md"
 GUIDE_REWRITE_VARIABLE: Final = "SKALDR_WRITE_GUIDE"
 GUIDE_REWRITE_COMMAND: Final = f"{GUIDE_REWRITE_VARIABLE}=1 uv run pytest tests/test_guide_refusals.py"
 REFUSAL_LEAD_INS: Final[Mapping[ExportTarget, str]] = {
@@ -27,10 +29,14 @@ EXPORT_TABLE_COLUMNS: Final[Mapping[str, ExportTarget]] = {
     "ADF": "adf",
     "Canvas Markdown": "slack",
 }
-SAYS_REFUSED: Final = re.compile(r"refus|fails? the export")
+SAYS_REFUSED: Final = re.compile(r"refus|fails? the export", re.IGNORECASE)
 
 
 class RefusalLeadInError(ValueError):
+    pass
+
+
+class GuideTableRowError(ValueError):
     pass
 
 
@@ -41,11 +47,20 @@ class RefusingCell:
     text: str
 
 
+def _bold_names(features: Sequence[Feature]) -> str:
+    names = [f"**{feature}**" for feature in features]
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
 def refusal_list(target: ExportTarget, capabilities: CapabilityTable = CAPABILITIES) -> str:
+    features_by_sentence: dict[str, list[Feature]] = {}
+    for feature, cells in capabilities.items():
+        if isinstance(capability := cells[target], Rejection):
+            features_by_sentence.setdefault(capability.in_the_guide, []).append(feature)
     return "\n".join(
-        f"- {feature}: {capability.in_the_guide}."
-        for feature, cells in capabilities.items()
-        if isinstance(capability := cells[target], Rejection)
+        f"- {_bold_names(features)}: {sentence}." for sentence, features in features_by_sentence.items()
     )
 
 
@@ -60,11 +75,12 @@ def guide_with_refusal_lists(guide: str, capabilities: CapabilityTable = CAPABIL
     return guide
 
 
-def guide_text_to_check(on_disk: str, generated: str) -> str:
-    if not os.environ.get(GUIDE_REWRITE_VARIABLE):
-        return on_disk
-    GUIDE_FILE.write_text(generated, encoding="utf-8")
-    return generated
+def rewrite_guide_when_requested(guide_file: Path, generated: str) -> None:
+    if os.environ.get(GUIDE_REWRITE_VARIABLE) != "1":
+        return
+    if guide_file.read_text(encoding="utf-8") == generated:
+        return
+    replace_file(guide_file, generated)
 
 
 def guide_sync_failure(on_disk: str, generated: str) -> str | None:
@@ -92,30 +108,26 @@ def _guide_tables(guide: str) -> list[list[list[str]]]:
     return tables
 
 
-def refusing_cells(guide: str | None = None) -> list[RefusingCell]:
-    text = GUIDE_FILE.read_text(encoding="utf-8") if guide is None else guide
+def refusing_cells_in(guide: str) -> list[RefusingCell]:
     cells: list[RefusingCell] = []
-    for header, *rows in _guide_tables(text):
+    for header, *rows in _guide_tables(guide):
         columns = header[1:]
         if header[0] != "Block" or not columns or not set(columns) <= set(EXPORT_TABLE_COLUMNS):
             continue
         for row, *prose in rows:
-            cells.extend(
-                RefusingCell(EXPORT_TABLE_COLUMNS[column], row, cell)
-                for column, cell in zip(columns, prose, strict=True)
-                if SAYS_REFUSED.search(cell)
-            )
+            for column, cell in zip(columns, prose, strict=True):
+                if not cell:
+                    raise GuideTableRowError(
+                        f"the table headed '{' | '.join(header)}' in GUIDE.md has an empty "
+                        f"'{column}' cell in the row '{row}'"
+                    )
+                if SAYS_REFUSED.search(cell):
+                    cells.append(RefusingCell(EXPORT_TABLE_COLUMNS[column], row, cell))
     return cells
 
 
-def refusing_cells_matching(
-    cell: RefusingCell, rows_by_target: Collection[tuple[ExportTarget, str]]
-) -> list[tuple[ExportTarget, str]]:
-    return [
-        (target, row_start)
-        for target, row_start in rows_by_target
-        if target == cell.target and cell.row.startswith(row_start)
-    ]
+def refusing_cells() -> list[RefusingCell]:
+    return refusing_cells_in(GUIDE_FILE.read_text(encoding="utf-8"))
 
 
 def features_the_table_does_not_refuse(

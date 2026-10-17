@@ -1564,25 +1564,24 @@ case, where the page is shared as a URL an agent later has to read back.
 
 The GitHub-flavored export refuses:
 
-- colour span: GitHub cannot colour text; write the text without the colour or export the document elsewhere.
-- colour and highlight span: GitHub cannot colour text; write the text without the colour or export the document elsewhere.
-- range: this export cannot draw a range bar; use a `meter` or a `table`.
-- link, citation, math or strikethrough in a flow or fan step's note: this export cannot show a link, citation, inline math, struck-through text, or a subscript or superscript with no Unicode form in a flow or fan step's note, since a Mermaid label holds plain text only (the Slack canvas section lists the characters that have a Unicode form); write the note as plain text and put the rest in a text block after the diagram. Any other mark in a note, such as bold, italic, underline, a colour or inline code, keeps its characters and loses its formatting.
-- image from a data: URI: this export cannot show an image from a `data:` URI; host the image and give its https address.
+- **colour span** and **colour and highlight span**: GitHub cannot colour text; write the text without the colour or export the document elsewhere.
+- **range**: GitHub cannot draw a range bar; use a meter or a table.
+- **link, citation, math or strikethrough in a flow or fan step's note**: GitHub cannot show a link, citation, inline math, struck-through text, or a subscript or superscript with no Unicode form in a step's note, since a Mermaid label holds plain text only (the Slack canvas section lists the characters that have a Unicode form); write the note as plain text and put the rest in a text block after the diagram. Any other mark in a note, such as bold, italic, underline, a colour or inline code, keeps its characters and loses its formatting.
+- **image from a data: URI**: GitHub cannot show an image from a data: URI; host the image and give its https address.
 
 The Notion export refuses:
 
-- numbered list starting past 1: this export numbers every list from 1; number the list from 1, or export it elsewhere.
-- colour and highlight span: a Notion text run takes a colour or a highlight, not both; keep either the colour or the highlight on the text.
-- highlight span inside a toned walkthrough step title: Notion cannot show a highlight inside the coloured title of a toned walkthrough step; write the text without the highlight or export the document elsewhere.
-- link to a heading of the same document: this export cannot link to its own headings; write the heading's name without the link, or export the document elsewhere.
-- link to another skaldr document: skaldr has no address for that document in this export; link to the document's https address, or export it elsewhere.
-- inline code holding a backtick: Notion cannot show inline code holding a backtick; write the code in a code block, or without the backtick.
-- inline code holding a closing tag in a table cell: Notion loses a table cell whose inline code holds `</`; write the code outside the table, or without `</`.
-- inline code holding a closing tag in a coloured, highlighted or underlined span: Notion closes a coloured, highlighted or underlined span early at inline code holding `</`; write the code outside the coloured, highlighted or underlined text, or without `</`.
-- range: this export cannot draw a range bar; use a `meter` or a `table`.
-- link, citation, math or strikethrough in a flow or fan step's note: this export cannot show a link, citation, inline math, struck-through text, or a subscript or superscript with no Unicode form in a flow or fan step's note, since a Mermaid label holds plain text only (the Slack canvas section lists the characters that have a Unicode form); write the note as plain text and put the rest in a text block after the diagram. Any other mark in a note, such as bold, italic, underline, a colour or inline code, keeps its characters and loses its formatting.
-- image from a data: URI: this export cannot show an image from a `data:` URI; host the image and give its https address.
+- **numbered list starting past 1**: Notion numbers every list from 1; number the list from 1, or export it elsewhere.
+- **colour and highlight span**: a Notion text run takes a colour or a highlight, not both; keep either the colour or the highlight on the text.
+- **highlight span inside a toned walkthrough step title**: Notion cannot show a highlight inside the coloured title of a toned walkthrough step; write the text without the highlight or export the document elsewhere.
+- **link to a heading of the same document**: Notion cannot link to its own headings; write the heading's name without the link, or export the document elsewhere.
+- **link to another skaldr document**: Notion cannot link to it, since skaldr has no address for that document there; link to the document's https address, or export it elsewhere.
+- **inline code holding a backtick**: Notion cannot show inline code holding a backtick; write the code in a code block, or without the backtick.
+- **inline code holding a closing tag in a table cell**: Notion loses a table cell whose inline code holds `</`; write the code outside the table, or without `</`.
+- **inline code holding a closing tag in a coloured, highlighted or underlined span**: Notion closes a coloured, highlighted or underlined span early at inline code holding `</`; write the code outside the coloured, highlighted or underlined text, or without `</`.
+- **range**: Notion cannot draw a range bar; use a meter or a table.
+- **link, citation, math or strikethrough in a flow or fan step's note**: Notion cannot show a link, citation, inline math, struck-through text, or a subscript or superscript with no Unicode form in a step's note, since a Mermaid label holds plain text only (the Slack canvas section lists the characters that have a Unicode form); write the note as plain text and put the rest in a text block after the diagram. Any other mark in a note, such as bold, italic, underline, a colour or inline code, keeps its characters and loses its formatting.
+- **image from a data: URI**: Notion cannot show an image from a data: URI; host the image and give its https address.
 
 Interactive parts of the HTML (request input fields, live reload) have no Markdown form, so a request shows each case's command (or its `query`, as a fenced block in its language under the runner's name), with that case's `values` written in, and its recorded response, and a `request_flow` step names each value it captures and where in the response it comes from (its `json_path`, or the whole response body). Same-page `[…](#id)` links work in GitHub-flavored Markdown; the Notion export refuses a document holding one you wrote, since a Notion page cannot link to its own headings, and writes a section's `fields.links` entry as the linked section's title. The Notion page takes its title from the page, so the Notion export starts with the body; the GitHub-flavored file starts with the title, led by `meta.icon` when there is one, then the cover as an image, `![Cover](url)`, when `meta.cover` is set. Notion does not fit a table written through its API to the page; it takes the column widths the export writes. With `meta.notion_width: normal` (the default) only columns given a `width` (or the default share of a `number` or `indicator` column) are sized, to Notion's 708 px page. With `meta.notion_width: full` every table is sized to 1,200 px, or to its column's share of that inside a `grid`: columns given a `width` (or the default share of a `number` or `indicator` column) keep their share, the others split the rest by their longest text (header included), and no column is narrower than 64 px. No Notion API switches a page to Full width; switch it in Notion's ••• menu, or start from a page that is already Full width (a page created from a Full width template, or a duplicate of one, is Full width too). `--chunk N` (Notion only) splits the page at level 1 and 2 headings into `page.00.md`, `page.01.md`, …, each holding as many whole sections as fit in N characters. A section longer than N on its own is split between its blocks, keeping a heading with the block after it. A table is never split, because Notion shows the parts of a split table as separate tables. A part that still cannot fit in N, such as a long table, a long code block, or a heading together with the block after it, stays whole in one file, and the command prints a warning naming its section. The folder keeps a `.skaldr-export.json` list of what skaldr wrote, and a re-export removes only files on that list, so nothing else in the folder is touched. An export that would replace a page file not on that list, such as your own `page.md` in a folder skaldr has never exported to, stops with an error naming the file and writes nothing, and so does an export whose page name is taken by a folder; move the file or folder away or choose another `--export-dir`.
 
@@ -1629,21 +1628,16 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 
 The ADF export refuses:
 
-- table inside a callout: this export cannot place it there, since ADF limits what each container may hold; move it out of the container.
-- callout inside a callout: this export cannot place it there, since ADF limits what each container may hold; move it out of the container.
-- quote inside a callout: this export cannot place it there, since ADF limits what each container may hold; move it out of the container.
-- toggle inside a callout: this export cannot place it there, since ADF limits what each container may hold; move it out of the container.
-- table inside a toggle inside a toggle: this export cannot place it there, since ADF limits what each container may hold; move it out of the container.
-- toggle inside a toggle inside a toggle: this export cannot place it there, since ADF limits what each container may hold; move it out of the container.
-- link to a heading of the same document: this export cannot link to its own headings; write the heading's name without the link, or export the document elsewhere.
-- link to another skaldr document: skaldr has no address for that document in this export; link to the document's https address, or export it elsewhere.
-- list numbered with letters or roman numerals: this export numbers a list only with digits; number the list with digits, or export it elsewhere.
-- table, callout, heading, quote, toggle or divider inside a list item or walkthrough step: ADF limits what a list item or walkthrough step may hold, so this export cannot place it there; move it out of the list or step, after the list or walkthrough.
-- divider inside a walkthrough step: Jira writes a walkthrough step as a list item, which holds no divider; move the divider out of the step, after the walkthrough.
-- range: this export cannot draw a range bar; use a `meter` or a `table`.
-- flow diagram: this export cannot draw a flow diagram; write the steps as a numbered list.
-- fan diagram: this export cannot draw a fan diagram; write the hub and its spokes as a list.
-- image from a data: URI: Jira embeds only files attached to the issue; host the image and give its https address.
+- **table inside a callout**, **callout inside a callout**, **quote inside a callout**, **toggle inside a callout**, **table inside a toggle inside a toggle** and **toggle inside a toggle inside a toggle**: ADF cannot place it inside that container, since ADF limits what each container may hold; move it out of the container.
+- **link to a heading of the same document**: ADF cannot link to its own headings; write the heading's name without the link, or export the document elsewhere.
+- **link to another skaldr document**: ADF cannot link to it, since skaldr has no address for that document there; link to the document's https address, or export it elsewhere.
+- **list numbered with letters or roman numerals**: ADF numbers a list only with digits; number the list with digits, or export it elsewhere.
+- **table, callout, heading, quote, toggle or divider inside a list item or walkthrough step**: ADF cannot place it there, since ADF limits what a list item or walkthrough step may hold; move it out of the list or step, after the list or walkthrough.
+- **divider inside a walkthrough step**: ADF cannot place it there, since Jira writes a walkthrough step as a list item, which holds no divider; move the divider out of the step, after the walkthrough.
+- **range**: ADF cannot draw a range bar; use a meter or a table.
+- **flow diagram**: ADF cannot draw a diagram; write the steps as a numbered list.
+- **fan diagram**: ADF cannot draw a diagram; write the hub and its spokes as a list.
+- **image from a data: URI**: ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue; host the image and give its https address.
 
 ADF limits what each container may hold, and skaldr does not guess. A walkthrough step, list item or checklist entry holds text, lists, code blocks, math, images and media; one holding a table, a callout or panel, a heading, a quote, a toggle, a set of tabs or a divider fails the export naming that block's path, as in `ADF cannot place a table inside a walkthrough step, at blocks.1.walkthrough.steps.0.detail.1.table; move the table out of the step, after the walkthrough`, and a divider in a walkthrough step is refused since Jira writes a step as a list item. A block ADF cannot place at all stops the export, and a publish to Jira, before anything is written or sent, with an error naming the block in the document's own terms, what it was inside, its path in the YAML, the nearest heading above it, and what to do instead, for example `ADF cannot place a table inside a panel, at blocks.2.panel.blocks.0.table, under the heading 'Totals'; move the table out of the panel` or `ADF cannot place a toggle inside a toggle that is itself inside a toggle, at blocks.0.toggle.blocks.0.toggle.blocks.0.toggle; move the toggle out of the toggle`. The block, and the panel, grid cell, toggle, collapsed section or part, or set of tabs that refuses it, are named as you wrote them (`ADF cannot place a comparison inside a panel`, `ADF cannot place a toggle inside a toggle that is itself inside a section`), so a `link` card is a link card, a `comparison` is a comparison, and a `note` is a note, even though ADF would write each as a quote, a table or a panel. In a document built by an `index`, the path counts the parts as blocks of the index (`blocks.0.part.blocks.1.toggle`). Jira limits a description to 32,767 characters of compact JSON, so the export prints a warning with the size when the document is over that.
 
@@ -1688,35 +1682,29 @@ ADF limits what each container may hold, and skaldr does not guess. A walkthroug
 
 The canvas export refuses:
 
-- table inside a callout: a canvas callout holds only text, headings, lists, quotes, code blocks and images; move it out of the callout.
-- callout inside a callout: a canvas callout holds only text, headings, lists, quotes, code blocks and images; move it out of the callout.
-- toggle inside a callout: a canvas callout holds only text, headings, lists, quotes, code blocks and images; move it out of the callout.
-- block inside a list item: a canvas list item holds only text and one nested list; move it out of the list, after the list.
-- block inside a walkthrough step: a canvas list item holds only text and one nested list; move it out of the step, after the walkthrough.
-- numbered list starting past 1: this export numbers every list from 1; number the list from 1, or export it elsewhere.
-- table over 300 cells: a canvas table holds at most 300 cells, the header row included; split the table in two, or export the document elsewhere.
-- grid inside a walkthrough step: a canvas list item holds only text and one nested list; move the grid out of the step, after the walkthrough.
-- subscript or superscript with no Unicode form: a canvas shows only the subscripts and superscripts that have a Unicode form, which the `H~2~O` row of the table above lists; write the text without the subscript or superscript, or export the document elsewhere.
-- colour span: a canvas cannot colour text; write the text without the colour or export the document elsewhere.
-- highlight span: a canvas cannot highlight text; write the text without the highlight or export the document elsewhere.
-- colour and highlight span: a canvas cannot colour text; write the text without the colour or export the document elsewhere.
-- underline: a canvas cannot underline text; write the text without the underline or export the document elsewhere.
-- link to a heading of the same document: this export cannot link to its own headings; write the heading's name without the link, or export the document elsewhere.
-- link to another skaldr document: skaldr has no address for that document in this export; link to the document's https address, or export it elsewhere.
-- list numbered with letters or roman numerals: this export numbers a list only with digits; number the list with digits, or export it elsewhere.
-- list inside a quote: a canvas quote holds only text; move the list out of the quote, after it.
-- divider inside a callout: a canvas callout holds only text, headings, lists, quotes, code blocks and images; move it out of the callout.
-- grid with more than three cells: a canvas column layout holds at most 3 columns; split the grid into grids of at most 3 cells.
-- table inside a grid cell: a canvas column holds no table, callout or divider; move it out of the grid.
-- callout inside a grid cell: a canvas column holds no table, callout or divider; move it out of the grid.
-- divider inside a grid cell: a canvas column holds no table, callout or divider; move it out of the grid.
-- toned grid cell: a canvas column has no tone; drop the tone from the grid cell.
-- grid inside a grid cell: a canvas cannot show a grid's columns inside a grid cell; write the inner grid's cells as cells of the outer grid.
-- heading deeper than a canvas holds: a canvas holds headings down to level 3; write the heading as bold text, or export the document elsewhere.
-- range: this export cannot draw a range bar; use a `meter` or a `table`.
-- flow diagram: this export cannot draw a flow diagram; write the steps as a numbered list.
-- fan diagram: this export cannot draw a fan diagram; write the hub and its spokes as a list.
-- image from a data: URI: a canvas cannot show an image from a `data:` URI; upload the image to Slack and give its permalink.
+- **table inside a callout**, **callout inside a callout**, **toggle inside a callout** and **divider inside a callout**: a canvas callout holds only text, headings, lists, quotes, code blocks and images; move it out of the callout.
+- **block inside a list item**: a canvas list item holds only text and one nested list; move it out of the list, after the list.
+- **block inside a walkthrough step**: a canvas list item holds only text and one nested list; move it out of the step, after the walkthrough.
+- **numbered list starting past 1**: a canvas numbers every list from 1; number the list from 1, or export it elsewhere.
+- **table over 300 cells**: a canvas table holds at most 300 cells, the header row included; split the table in two, or export the document elsewhere.
+- **grid inside a walkthrough step**: a canvas list item holds only text and one nested list; move the grid out of the step, after the walkthrough.
+- **subscript or superscript with no Unicode form**: a canvas shows only the subscripts and superscripts that have a Unicode form, which the `H~2~O` row of the table above lists; write the text without the subscript or superscript, or export the document elsewhere.
+- **colour span** and **colour and highlight span**: a canvas cannot colour text; write the text without the colour or export the document elsewhere.
+- **highlight span**: a canvas cannot highlight text; write the text without the highlight or export the document elsewhere.
+- **underline**: a canvas cannot underline text; write the text without the underline or export the document elsewhere.
+- **link to a heading of the same document**: a canvas cannot link to its own headings; write the heading's name without the link, or export the document elsewhere.
+- **link to another skaldr document**: a canvas cannot link to it, since skaldr has no address for that document there; link to the document's https address, or export it elsewhere.
+- **list numbered with letters or roman numerals**: a canvas numbers a list only with digits; number the list with digits, or export it elsewhere.
+- **list inside a quote**: a canvas quote holds only text; move the list out of the quote, after it.
+- **grid with more than three cells**: a canvas column layout holds at most 3 columns; split the grid into grids of at most 3 cells.
+- **table inside a grid cell**, **callout inside a grid cell** and **divider inside a grid cell**: a canvas column holds no table, callout or divider; move it out of the grid.
+- **toned grid cell**: a canvas column has no tone; drop the tone from the grid cell.
+- **grid inside a grid cell**: a canvas cannot show a grid's columns inside a grid cell; write the inner grid's cells as cells of the outer grid.
+- **heading deeper than a canvas holds**: a canvas holds headings down to level 3; write the heading as bold text, or export the document elsewhere.
+- **range**: a canvas cannot draw a range bar; use a meter or a table.
+- **flow diagram**: a canvas cannot draw a diagram; write the steps as a numbered list.
+- **fan diagram**: a canvas cannot draw a diagram; write the hub and its spokes as a list.
+- **image from a data: URI**: a canvas cannot show an image from a data: URI; upload the image to Slack and give its permalink.
 
 A canvas table holds at most 300 cells, the header row included, with short rows counted at the table's full width. A document with a longer table fails the export with an error naming its cell count, its path in the YAML and the heading above it, and nothing is written; split the table in two in the YAML, or export the document elsewhere. A `chart`, which a canvas shows as its data table, counts the same way, and the error names the chart; split its data into two charts. A canvas holds at most 1,048,576 characters of Markdown, the limit Slack's `canvases.create` and `canvases.edit` documentation gives as "1 MiB (1,048,576 characters)", so skaldr counts characters, not bytes; a document whose canvas Markdown is longer fails the same way, naming its size in characters, and `skaldr --check --for slack` fails it too, since it writes the canvas in memory to measure it. A walkthrough step is a canvas list item, which holds only text and one nested list, so a `grid` of two or more cells in a step's `detail` fails the export with an error naming its path in the YAML (`blocks.1.walkthrough.steps.1.detail.1.grid`); move the grid out of the step, after the walkthrough. A grid of one cell, in a step or in a grid cell, shows no columns, so it is its cell's blocks and they are checked where it stands. A step's `detail` may hold text and then one list; any other block there, such as a `code`, `callout`, `table`, `image` or `divider`, a second list, or text after the list, fails the same way, naming that block's path (`blocks.1.walkthrough.steps.1.detail.1.code`). A list in a `text` or `callout` body whose item holds two nested lists, such as bullets and then numbers under one item, or a paragraph after its nested list, fails naming the block that holds it (`blocks.3.text`); move the second list or the paragraph out of the list. A `def_list` body is not a list item, so its text and lists are written one after another and never fail for this.
 

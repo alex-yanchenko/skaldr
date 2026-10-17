@@ -298,7 +298,7 @@ _ADF_CANNOT_PLACE: Final = Rejection(
     "ADF cannot place a {held} inside {holder}",
     "move the {held} out of the {holder_name}",
     names_the_heading=True,
-    in_the_guide="this export cannot place it there, since ADF limits what each container may hold; "
+    in_the_guide="ADF cannot place it inside that container, since ADF limits what each container may hold; "
     "move it out of the container",
 )
 _CANVAS_LIST_ITEM_WHY: Final = (
@@ -322,25 +322,38 @@ _FROM_ONE_WHY: Final = (
     "{target} numbers every list from 1, so it cannot show a numbered list that starts at {{start}}"
 )
 _FROM_ONE_INSTEAD: Final = "number the list from 1, or export it elsewhere"
-_FROM_ONE_GUIDE: Final = f"this export numbers every list from 1; {_FROM_ONE_INSTEAD}"
 _OWN_HEADING_WHY: Final = (
     "{target} cannot link to its own headings, so it cannot show the link '{{text}}' to '{{link}}'"
 )
 _OWN_HEADING_INSTEAD: Final = "write the heading's name without the link, or export the document elsewhere"
-_OWN_HEADING_GUIDE: Final = f"this export cannot link to its own headings; {_OWN_HEADING_INSTEAD}"
 _OTHER_DOCUMENT_WHY: Final = (
     "{target} cannot link '{{text}}' to the document '{{doc_id}}', "
     "since skaldr has no address for that document there"
 )
 _OTHER_DOCUMENT_INSTEAD: Final = "link to the document's https address, or export it elsewhere"
-_OTHER_DOCUMENT_GUIDE: Final = (
-    f"skaldr has no address for that document in this export; {_OTHER_DOCUMENT_INSTEAD}"
-)
 _DIGITS_ONLY_WHY: Final = (
     "{target} numbers a list only with digits, so it cannot show a list numbered with {{numbering}}"
 )
 _DIGITS_ONLY_INSTEAD: Final = "number the list with digits, or export it elsewhere"
-_DIGITS_ONLY_GUIDE: Final = f"this export numbers a list only with digits; {_DIGITS_ONLY_INSTEAD}"
+
+
+def _from_one_guide(subject: str) -> str:
+    return f"{subject} numbers every list from 1; {_FROM_ONE_INSTEAD}"
+
+
+def _own_heading_guide(subject: str) -> str:
+    return f"{subject} cannot link to its own headings; {_OWN_HEADING_INSTEAD}"
+
+
+def _other_document_guide(subject: str) -> str:
+    return (
+        f"{subject} cannot link to it, since skaldr has no address for that document there; "
+        f"{_OTHER_DOCUMENT_INSTEAD}"
+    )
+
+
+def _digits_only_guide(subject: str) -> str:
+    return f"{subject} numbers a list only with digits; {_DIGITS_ONLY_INSTEAD}"
 
 
 def _kept_except(cells: Mapping[ExportTarget, Capability]) -> dict[ExportTarget, Capability]:
@@ -369,11 +382,21 @@ TARGET_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
     "adf": "ADF",
     "slack": "a Slack canvas",
 }
+GUIDE_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
+    "markdown": "GitHub",
+    "notion": "Notion",
+    "adf": "ADF",
+    "slack": "a canvas",
+}
 
 
 _TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
 _TARGETS_WITH_MERMAID_DIAGRAMS: Final[tuple[ExportTarget, ...]] = ("markdown", "notion")
 _HOST_THE_IMAGE: Final = "host the image and give its https address"
+_UPLOAD_THE_IMAGE: Final = "upload the image to Slack and give its permalink"
+_ADF_DATA_URI_WHY: Final = (
+    "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue"
+)
 _CHART_AS_ITS_TABLE: Final = Swap(
     "the chart's data table: a donut's slices, a row each with its value and share, then a total row; "
     "a bar or line chart's series, a row each with its value in each category, "
@@ -382,11 +405,20 @@ _CHART_AS_ITS_TABLE: Final = Swap(
 
 
 def _refused_by(
-    targets: Iterable[ExportTarget], cannot: str, instead: str, in_the_guide: str | None = None
+    targets: Iterable[ExportTarget],
+    cannot: str,
+    instead: str,
+    *,
+    guide_cannot: str | None = None,
+    guide_instead: str | None = None,
 ) -> Mapping[ExportTarget, Capability]:
-    guide_sentence = f"this export cannot {cannot}; {instead}" if in_the_guide is None else in_the_guide
+    guide_clause = f"cannot {guide_cannot or cannot}; {guide_instead or instead}"
     return {
-        target: Rejection(f"{TARGET_SUBJECTS[target]} cannot {cannot}", instead, in_the_guide=guide_sentence)
+        target: Rejection(
+            f"{TARGET_SUBJECTS[target]} cannot {cannot}",
+            instead,
+            in_the_guide=f"{GUIDE_SUBJECTS[target]} {guide_clause}",
+        )
         for target in targets
     }
 
@@ -422,10 +454,14 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "numbered list starting past 1": _kept_except(
         {
             "notion": Rejection(
-                _FROM_ONE_WHY.format(target="Notion"), _FROM_ONE_INSTEAD, in_the_guide=_FROM_ONE_GUIDE
+                _FROM_ONE_WHY.format(target="Notion"),
+                _FROM_ONE_INSTEAD,
+                in_the_guide=_from_one_guide(GUIDE_SUBJECTS["notion"]),
             ),
             "slack": Rejection(
-                _FROM_ONE_WHY.format(target="a Slack canvas"), _FROM_ONE_INSTEAD, in_the_guide=_FROM_ONE_GUIDE
+                _FROM_ONE_WHY.format(target="a Slack canvas"),
+                _FROM_ONE_INSTEAD,
+                in_the_guide=_from_one_guide(GUIDE_SUBJECTS["slack"]),
             ),
         }
     ),
@@ -512,17 +548,17 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "notion": Rejection(
                 _OWN_HEADING_WHY.format(target="a Notion page"),
                 _OWN_HEADING_INSTEAD,
-                in_the_guide=_OWN_HEADING_GUIDE,
+                in_the_guide=_own_heading_guide(GUIDE_SUBJECTS["notion"]),
             ),
             "adf": Rejection(
                 _OWN_HEADING_WHY.format(target="a Jira description"),
                 _OWN_HEADING_INSTEAD,
-                in_the_guide=_OWN_HEADING_GUIDE,
+                in_the_guide=_own_heading_guide(GUIDE_SUBJECTS["adf"]),
             ),
             "slack": Rejection(
                 _OWN_HEADING_WHY.format(target="a Slack canvas"),
                 _OWN_HEADING_INSTEAD,
-                in_the_guide=_OWN_HEADING_GUIDE,
+                in_the_guide=_own_heading_guide(GUIDE_SUBJECTS["slack"]),
             ),
         }
     ),
@@ -531,17 +567,17 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "notion": Rejection(
                 _OTHER_DOCUMENT_WHY.format(target="Notion"),
                 _OTHER_DOCUMENT_INSTEAD,
-                in_the_guide=_OTHER_DOCUMENT_GUIDE,
+                in_the_guide=_other_document_guide(GUIDE_SUBJECTS["notion"]),
             ),
             "adf": Rejection(
                 _OTHER_DOCUMENT_WHY.format(target="a Jira description"),
                 _OTHER_DOCUMENT_INSTEAD,
-                in_the_guide=_OTHER_DOCUMENT_GUIDE,
+                in_the_guide=_other_document_guide(GUIDE_SUBJECTS["adf"]),
             ),
             "slack": Rejection(
                 _OTHER_DOCUMENT_WHY.format(target="a Slack canvas"),
                 _OTHER_DOCUMENT_INSTEAD,
-                in_the_guide=_OTHER_DOCUMENT_GUIDE,
+                in_the_guide=_other_document_guide(GUIDE_SUBJECTS["slack"]),
             ),
         }
     ),
@@ -580,12 +616,14 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "list numbered with letters or roman numerals": _kept_except(
         {
             "adf": Rejection(
-                _DIGITS_ONLY_WHY.format(target="ADF"), _DIGITS_ONLY_INSTEAD, in_the_guide=_DIGITS_ONLY_GUIDE
+                _DIGITS_ONLY_WHY.format(target="ADF"),
+                _DIGITS_ONLY_INSTEAD,
+                in_the_guide=_digits_only_guide(GUIDE_SUBJECTS["adf"]),
             ),
             "slack": Rejection(
                 _DIGITS_ONLY_WHY.format(target="a Slack canvas"),
                 _DIGITS_ONLY_INSTEAD,
-                in_the_guide=_DIGITS_ONLY_GUIDE,
+                in_the_guide=_digits_only_guide(GUIDE_SUBJECTS["slack"]),
             ),
         }
     ),
@@ -595,8 +633,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "ADF cannot place a {held} inside a {item}",
                 "move the {held} out of the {out_of}, after the {after}",
                 names_the_heading=True,
-                in_the_guide="ADF limits what a list item or walkthrough step may hold, so this export "
-                "cannot place it there; move it out of the list or step, after the list or walkthrough",
+                in_the_guide="ADF cannot place it there, since ADF limits what a list item or walkthrough "
+                "step may hold; move it out of the list or step, after the list or walkthrough",
             )
         }
     ),
@@ -664,8 +702,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "since Jira writes a step as a list item",
                 "move the divider out of the step, after the walkthrough",
                 names_the_heading=True,
-                in_the_guide="Jira writes a walkthrough step as a list item, which holds no divider; "
-                "move the divider out of the step, after the walkthrough",
+                in_the_guide="ADF cannot place it there, since Jira writes a walkthrough step as a "
+                "list item, which holds no divider; move the divider out of the step, after the walkthrough",
             )
         }
     ),
@@ -675,20 +713,21 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "request with several cases": _kept_except(
         {"adf": Swap("one expand per case, its title led by the icon of the case's status")}
     ),
-    "range": _refused_by(
-        EXPORT_TARGETS,
-        "draw a range bar",
-        "use a meter or a table",
-        in_the_guide="this export cannot draw a range bar; use a `meter` or a `table`",
-    ),
+    "range": _refused_by(EXPORT_TARGETS, "draw a range bar", "use a meter or a table"),
     "flow diagram": _kept_except(
         _refused_by(
-            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a flow diagram", "write the steps as a numbered list"
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH,
+            "draw a flow diagram",
+            "write the steps as a numbered list",
+            guide_cannot="draw a diagram",
         )
     ),
     "fan diagram": _kept_except(
         _refused_by(
-            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH, "draw a fan diagram", "write the hub and its spokes as a list"
+            _TARGETS_WITHOUT_DIAGRAMS_OR_MATH,
+            "draw a fan diagram",
+            "write the hub and its spokes as a list",
+            guide_cannot="draw a diagram",
         )
     ),
     RICH_STEP_NOTE: _kept_except(
@@ -697,10 +736,11 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             "show a link, citation, math, struck-through text, or a subscript or superscript "
             "with no Unicode form in a flow or fan step's note, since a diagram label holds plain text only",
             "write the note as plain text and put the rest in a text block after the diagram",
-            in_the_guide="this export cannot show a link, citation, inline math, struck-through text, "
-            "or a subscript or superscript with no Unicode form in a flow or fan step's note, "
+            guide_cannot="show a link, citation, inline math, struck-through text, "
+            "or a subscript or superscript with no Unicode form in a step's note, "
             "since a Mermaid label holds plain text only (the Slack canvas section lists the characters "
-            "that have a Unicode form); write the note as plain text and put the rest in a text block "
+            "that have a Unicode form)",
+            guide_instead="write the note as plain text and put the rest in a text block "
             "after the diagram. Any other mark in a note, such as bold, italic, underline, "
             "a colour or inline code, keeps its characters and loses its formatting",
         )
@@ -714,22 +754,16 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
         dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))
     ),
     "image from a data: URI": {
-        **_refused_by(
-            ("markdown", "notion"),
-            "show an image from a data: URI",
-            _HOST_THE_IMAGE,
-            in_the_guide=f"this export cannot show an image from a `data:` URI; {_HOST_THE_IMAGE}",
-        ),
+        **_refused_by(("markdown", "notion"), "show an image from a data: URI", _HOST_THE_IMAGE),
         "adf": Rejection(
-            "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue",
+            _ADF_DATA_URI_WHY,
             _HOST_THE_IMAGE,
-            in_the_guide=f"Jira embeds only files attached to the issue; {_HOST_THE_IMAGE}",
+            in_the_guide=f"{_ADF_DATA_URI_WHY}; {_HOST_THE_IMAGE}",
         ),
         "slack": Rejection(
             "a Slack canvas cannot show an image from a data: URI",
-            "upload the image to Slack and give its permalink",
-            in_the_guide="a canvas cannot show an image from a `data:` URI; "
-            "upload the image to Slack and give its permalink",
+            _UPLOAD_THE_IMAGE,
+            in_the_guide=f"a canvas cannot show an image from a data: URI; {_UPLOAD_THE_IMAGE}",
         ),
     },
 }
