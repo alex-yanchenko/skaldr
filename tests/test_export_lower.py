@@ -324,7 +324,7 @@ def test_a_donut_is_a_pie_over_a_table_of_its_values_shares_and_total() -> None:
 
     assert lowered([donut]) == (
         Diagram(
-            PieChart((PieSlice("A", 3), PieSlice("B", 1.5))),
+            PieChart((PieSlice("A", 3, "success"), PieSlice("B", 1.5))),
             (
                 TableNode(
                     _cells("Slice", "Value", "Share"),
@@ -395,7 +395,7 @@ def test_a_single_series_line_chart_keeps_its_table_with_the_series_tone() -> No
     assert lowered([line]) == (
         Paragraph(bold("Open")),
         Diagram(
-            XYChart("line", ("Q1", "Q2"), ((1, 2),), stacked=False),
+            XYChart("line", ("Q1", "Q2"), ((1, 2),), stacked=False, series_tones=("danger",)),
             (
                 TableNode(
                     _cells("Series", "Q1", "Q2"),
@@ -416,7 +416,7 @@ def test_an_untitled_single_series_bar_chart_is_a_bar_diagram_over_its_table() -
 
     assert lowered([chart]) == (
         Diagram(
-            XYChart("bar", ("Q1",), ((4,),), stacked=False),
+            XYChart("bar", ("Q1",), ((4,),), stacked=False, series_tones=(None,)),
             (TableNode(_cells("Series", "Q1"), (TableRow(_cells("x", "4")),)),),
         ),
     )
@@ -444,7 +444,8 @@ def test_an_xy_chart_keeps_its_stacking_over_a_table_of_its_series(
 
     assert lowered([chart]) == (
         Diagram(
-            XYChart(variant, ("Q1",), values, stacked), (TableNode(_cells("Series", "Q1"), (*rows, *totals)),)
+            XYChart(variant, ("Q1",), values, stacked, series_tones=(None,) * len(series)),
+            (TableNode(_cells("Series", "Q1"), (*rows, *totals)),),
         ),
     )
 

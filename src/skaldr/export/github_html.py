@@ -7,6 +7,7 @@ from urllib.parse import quote
 from skaldr.errors import ExportInvariantError
 from skaldr.export.markup import STYLE_TAG, URL_SAFE_CHARACTERS, MarkupRuns, wrap_around_core
 from skaldr.export.runs import Chip, ExportRich, IndicatorMark, write_export_runs
+from skaldr.export.tree import HeadingLevel
 from skaldr.models import BADGE_COLOR_TONE, ToneLiteral
 from skaldr.richtext import SCRIPT_HTML_TAG, Citation, ScriptPosition, StyleName
 from skaldr.typed_links import date_target_text
@@ -108,6 +109,10 @@ class HtmlRuns(MarkupRuns):
     def chip(self, run: Chip, /) -> str:
         dot = self.mark(IndicatorMark(BADGE_COLOR_TONE[run.tone]))
         return f"{dot} <strong>{self.escape(run.label)}</strong>"
+
+
+def summary_heading(level: HeadingLevel, summary: str) -> str:
+    return f"<h{level}>{summary}</h{level}>"
 
 
 def details_lines(summary: str, body: Sequence[str], *, opened: bool) -> list[str]:
