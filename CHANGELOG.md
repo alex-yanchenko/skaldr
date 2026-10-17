@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.1.0](https://github.com/alex-yanchenko/skaldr/compare/v4.0.1...v4.1.0) (2026-10-17)
+
+
+### Features
+
+* **cli:** add outline and show to read one region of a content file word for word ([#234](https://github.com/alex-yanchenko/skaldr/issues/234)) ([6c86efb](https://github.com/alex-yanchenko/skaldr/commit/6c86efbc1a0e30934529b90ca8c6fdc7eaf2f7e9))
+* **export:** write a slack link card as its bare url and keep an emoji shortcode as text ([#231](https://github.com/alex-yanchenko/skaldr/issues/231)) ([122929b](https://github.com/alex-yanchenko/skaldr/commit/122929b6c764dc1c273f7469090971cb0216725b))
+* **export:** write blocks as jira's native forms in the adf export ([#224](https://github.com/alex-yanchenko/skaldr/issues/224)) ([7deadfe](https://github.com/alex-yanchenko/skaldr/commit/7deadfee2dfeac5b9b9c73f4ddfee0974f949236))
+* **export:** write blocks in the forms github renders natively ([#230](https://github.com/alex-yanchenko/skaldr/issues/230)) ([372c4bb](https://github.com/alex-yanchenko/skaldr/commit/372c4bb0726f36dbfbffb7c93877489e5e27034a))
+* **export:** write fact strips, cards, key-value lists, definitions and quote lists natively for notion ([#223](https://github.com/alex-yanchenko/skaldr/issues/223)) ([38c46f0](https://github.com/alex-yanchenko/skaldr/commit/38c46f06d60b3dd2d474d19f94f30958d5cea04e))
+* **export:** write fact strips, definitions, cards and cell lists in canvas forms on slack ([#225](https://github.com/alex-yanchenko/skaldr/issues/225)) ([53abdfd](https://github.com/alex-yanchenko/skaldr/commit/53abdfdf298a9a5a1c14af56716ab7c7aea58511))
+* **export:** write highlights, decision lists and column widths to adf ([#233](https://github.com/alex-yanchenko/skaldr/issues/233)) ([6f38b6f](https://github.com/alex-yanchenko/skaldr/commit/6f38b6ff9c910d96db50bd3b096f4d229881e6ae))
+* **export:** write tabs and multi-case requests as native notion tabs ([#232](https://github.com/alex-yanchenko/skaldr/issues/232)) ([71266b3](https://github.com/alex-yanchenko/skaldr/commit/71266b397c33fcf69dcd67fdb3f02b2fbc074885))
+* **publish:** write a split section's fields to its jira issue when the target asks for it ([#227](https://github.com/alex-yanchenko/skaldr/issues/227)) ([24a207a](https://github.com/alex-yanchenko/skaldr/commit/24a207a079eb04982edfd53e8dc8e22340c3818b))
+
+
+### Bug Fixes
+
+* **export:** write a slack canvas nested list in its parent's kind and compare it as slack stores it ([#222](https://github.com/alex-yanchenko/skaldr/issues/222)) ([a4ed84f](https://github.com/alex-yanchenko/skaldr/commit/a4ed84fc059e95214e8e19afbb30afac0b614451))
+* **models:** refuse index parts outside the index folder, an empty index intro and a negative estimate ([#226](https://github.com/alex-yanchenko/skaldr/issues/226)) ([79ed57d](https://github.com/alex-yanchenko/skaldr/commit/79ed57df2098c456604c72f894bdb6cd38b7b345))
+* **render:** write the pdf through the file replace, read scripts beside operators as prose and budget highlighting ([#228](https://github.com/alex-yanchenko/skaldr/issues/228)) ([d334b3a](https://github.com/alex-yanchenko/skaldr/commit/d334b3a58bef69bb3112ba177bd7e1decc5674fa))
+
 ## [4.0.1](https://github.com/alex-yanchenko/skaldr/compare/v4.0.0...v4.0.1) (2026-10-15)
 
 
