@@ -974,6 +974,16 @@ def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
     )
 
 
+def test_a_toned_donut_is_a_pie_with_mermaid_default_colours() -> None:
+    donut = {
+        "type": "chart",
+        "variant": "donut",
+        "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1}],
+    }
+
+    assert notion_of([donut]).startswith('```mermaid\npie\n    "A" : 3\n    "B" : 1\n```\n')
+
+
 def test_a_request_with_several_cases_is_native_tabs_with_the_status_icon() -> None:
     cases = [
         {"label": "finding", "tone": "warning", "response": {"body": "[]"}},

@@ -215,6 +215,7 @@ class Graph:
 class PieSlice:
     label: str
     value: float
+    tone: ToneLiteral | None = None
 
 
 @dataclass(frozen=True)
@@ -228,6 +229,7 @@ class XYChart:
     categories: tuple[str, ...]
     series: tuple[tuple[float, ...], ...]
     stacked: bool
+    series_tones: tuple[ToneLiteral | None, ...] = ()
 
 
 Figure = Graph | PieChart | XYChart

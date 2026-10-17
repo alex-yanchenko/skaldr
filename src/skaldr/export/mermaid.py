@@ -1,9 +1,11 @@
+import json
 from collections.abc import Mapping
 from decimal import Decimal
 from typing import Final, NamedTuple, NoReturn
 
 from typing_extensions import assert_never
 
+from skaldr.charts import chart_light_colour
 from skaldr.errors import ExportInvariantError
 from skaldr.export.capabilities import character_without_a_unicode_form, in_unicode_script_form
 from skaldr.export.glyphs import mark_glyph
@@ -42,6 +44,7 @@ RUNS_A_DIAGRAM_LABEL_CANNOT_HOLD: Final[tuple[type[ExportRun], ...]] = (
     InlineMath,
 )
 POINT_MARKER: Final = "• "
+PIE_COLOUR_COUNT: Final = 12
 
 
 class NodeColors(NamedTuple):
@@ -188,7 +191,24 @@ def _xy_lines(chart: XYChart) -> list[str]:
     return ["xychart-beta", axis, *marks]
 
 
-def _mermaid_lines(figure: Figure, *, with_step_details: bool) -> list[str]:
+def _init_line(theme_variables: Mapping[str, object]) -> str:
+    return "%%{init: " + json.dumps({"theme": "base", "themeVariables": theme_variables}) + "}%%"
+
+
+def _pie_init_line(chart: PieChart) -> str:
+    coloured = enumerate(chart.slices[:PIE_COLOUR_COUNT], start=1)
+    return _init_line(
+        {f"pie{number}": chart_light_colour(item.tone, number - 1) for number, item in coloured}
+    )
+
+
+def _xy_init_line(chart: XYChart) -> str:
+    tones = chart.series_tones or (None,) * len(chart.series)
+    palette = ", ".join(chart_light_colour(tone, index) for index, tone in enumerate(tones))
+    return _init_line({"xyChart": {"plotColorPalette": palette}})
+
+
+def _mermaid_lines(figure: Figure, *, with_step_details: bool, with_page_palette: bool) -> list[str]:
     match figure:
         case Graph():
             return _graph_lines(figure, with_details=with_step_details)
@@ -196,12 +216,15 @@ def _mermaid_lines(figure: Figure, *, with_step_details: bool) -> list[str]:
             slices = (
                 f"    {_quoted_string(item.label)} : {_mermaid_number(item.value)}" for item in figure.slices
             )
-            return ["pie", *slices]
+            return [*([_pie_init_line(figure)] if with_page_palette else []), "pie", *slices]
         case XYChart():
-            return _xy_lines(figure)
+            return [*([_xy_init_line(figure)] if with_page_palette else []), *_xy_lines(figure)]
         case _:
             assert_never(figure)
 
 
-def mermaid_fence_lines(figure: Figure, *, with_step_details: bool = False) -> list[str]:
-    return ["```mermaid", *_mermaid_lines(figure, with_step_details=with_step_details), "```"]
+def mermaid_fence_lines(
+    figure: Figure, *, with_step_details: bool = False, with_page_palette: bool = False
+) -> list[str]:
+    lines = _mermaid_lines(figure, with_step_details=with_step_details, with_page_palette=with_page_palette)
+    return ["```mermaid", *lines, "```"]

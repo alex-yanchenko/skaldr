@@ -18,6 +18,7 @@ from skaldr.export.github_html import (
     details_lines,
     scripted,
     start_attribute,
+    summary_heading,
     underlined,
 )
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
@@ -108,6 +109,7 @@ GITHUB_ALERT_TYPE: Final[Mapping[ToneName, str]] = {
 }
 ORDERED_LIST_TYPE: Final[Mapping[TextNumbering, str]] = {"letters": "a", "roman": "i"}
 MOST_COLUMNS_THAT_KEEP_THEIR_WIDTH: Final = 3
+FIRST_GRID_CONTAINER_DEPTH: Final = 1
 CHECKED_BOX: Final = "☑ "
 UNCHECKED_BOX: Final = "☐ "
 MarkerFamily = Literal["dash", "ordinal"]
@@ -387,12 +389,6 @@ class _MarkdownWriter:
         gap = [] if after_a_bare_marker or _is_a_markdown_list(nodes[0]) else [""]
         return gap + indent_lines(children, " " * width)
 
-    def titled(self, title: str, children: Sequence[Node], after: _ListTail | None) -> _Written:
-        if not title:
-            return self.blocks_after(children, after)
-        body = self.blocks_after(children, None)
-        return _Written.of([title, *spaced(body.lines)], body.tail)
-
     @contextmanager
     def inside_a_container(self) -> Generator[None]:
         self.container_depth += 1
@@ -413,7 +409,8 @@ class _MarkdownWriter:
         return self.container_depth == 0 and self.html_block_depth == 0
 
     def is_an_alert(self, node: Callout) -> bool:
-        return node.shows_icon and node.authored_as != "grid cell" and self.container_depth == 0
+        depth_of_an_alert = FIRST_GRID_CONTAINER_DEPTH if node.authored_as == "grid cell" else 0
+        return node.shows_icon and self.container_depth == depth_of_an_alert
 
     def callout_lines(self, node: Callout) -> list[str]:
         alert = self.is_an_alert(node)
@@ -493,14 +490,21 @@ class _MarkdownWriter:
         return [*lines, "</ol>"]
 
     def details_written(
-        self, title: ExportRich, children: Sequence[Node], after: _ListTail | None, *, opened: bool
+        self,
+        title: ExportRich,
+        children: Sequence[Node],
+        after: _ListTail | None,
+        *,
+        opened: bool,
+        heading_level: HeadingLevel | None = None,
     ) -> _Written:
         summary = self.html.write(title)
         if not summary.strip():
             return self.blocks_after(children, after)
         with self.inside_an_html_block():
             body = self.blocks_after(children, None)
-        return _Written.of(details_lines(summary, body.lines, opened=opened))
+        titled = summary if heading_level is None else summary_heading(heading_level, summary)
+        return _Written.of(details_lines(titled, body.lines, opened=opened))
 
     def references_written(self, node: References, after: _ListTail | None) -> _Written:
         if not self.is_at_the_top_level():
@@ -561,11 +565,9 @@ class _MarkdownWriter:
             case Divider():
                 return _Written.of([DIVIDER_LINE])
             case Toggle():
-                if node.heading_level is not None:
-                    return self.titled(
-                        self.heading_line(node.heading_level, node.title), node.children, after
-                    )
-                return self.details_written(node.title, node.children, after, opened=node.open)
+                return self.details_written(
+                    node.title, node.children, after, opened=node.open, heading_level=node.heading_level
+                )
             case Columns():
                 return _Written.of(self.columns_lines(node))
             case Tabs():
@@ -578,7 +580,10 @@ class _MarkdownWriter:
                 in_labels = _shows_its_step_details_in_its_labels(figure)
                 supplement = self.blocks_after((() if in_labels else node.supplement), None)
                 return _Written.of(
-                    [*mermaid_fence_lines(figure, with_step_details=in_labels), *spaced(supplement.lines)],
+                    [
+                        *mermaid_fence_lines(figure, with_step_details=in_labels, with_page_palette=True),
+                        *spaced(supplement.lines),
+                    ],
                     supplement.tail,
                 )
             case TableOfContents():

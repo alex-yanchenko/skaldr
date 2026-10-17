@@ -178,3 +178,53 @@ def test_an_xy_chart_writes_zero_and_negative_zero_without_a_sign() -> None:
         "    bar [0, 0.0, 0.0]",
         "```",
     ]
+
+
+def test_a_pie_with_the_page_palette_writes_each_slice_colour_from_its_tone_or_the_page_cycle() -> None:
+    pie = PieChart((PieSlice("a", 3), PieSlice("b", 1, "danger"), PieSlice("c", 2)))
+
+    assert mermaid_fence_lines(pie, with_page_palette=True) == [
+        "```mermaid",
+        '%%{init: {"theme": "base", "themeVariables": '
+        '{"pie1": "#1d4ed8", "pie2": "#b91c1c", "pie3": "#b45309"}}}%%',
+        "pie",
+        '    "a" : 3',
+        '    "b" : 1',
+        '    "c" : 2',
+        "```",
+    ]
+
+
+def test_a_pie_colours_at_most_the_twelve_slices_mermaid_has_a_colour_variable_for() -> None:
+    pie = PieChart(tuple(PieSlice(f"s{index}", 1) for index in range(14)))
+
+    init = mermaid_fence_lines(pie, with_page_palette=True)[1]
+
+    assert [f'"pie{number}"' in init for number in (12, 13)] == [True, False]
+
+
+def test_a_single_series_xy_chart_with_the_page_palette_writes_the_series_colour() -> None:
+    chart = XYChart("bar", ("Q1", "Q2"), ((1, 2),), stacked=False, series_tones=("teal",))
+
+    assert mermaid_fence_lines(chart, with_page_palette=True) == [
+        "```mermaid",
+        '%%{init: {"theme": "base", "themeVariables": {"xyChart": {"plotColorPalette": "#0f766e"}}}}%%',
+        "xychart-beta",
+        '    x-axis ["Q1", "Q2"]',
+        "    bar [1, 2]",
+        "```",
+    ]
+
+
+def test_an_xy_chart_series_with_no_tone_takes_the_first_colour_of_the_page_cycle() -> None:
+    chart = XYChart("line", ("Q1",), ((1,),), stacked=False, series_tones=(None,))
+
+    assert mermaid_fence_lines(chart, with_page_palette=True)[1] == (
+        '%%{init: {"theme": "base", "themeVariables": {"xyChart": {"plotColorPalette": "#1d4ed8"}}}}%%'
+    )
+
+
+def test_a_flowchart_has_no_init_line_with_the_page_palette() -> None:
+    graph = Graph("TB", (GraphNode("s1", "Scan"),), (), "flow")
+
+    assert mermaid_fence_lines(graph, with_page_palette=True) == mermaid_fence_lines(graph)

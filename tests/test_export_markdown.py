@@ -959,7 +959,9 @@ def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the
                 "variant": "donut",
                 "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1.5}],
             },
-            '```mermaid\npie\n    "A" : 3\n    "B" : 1.5\n```\n\n'
+            '```mermaid\n%%{init: {"theme": "base", '
+            '"themeVariables": {"pie1": "#15803d", "pie2": "#15803d"}}}%%\n'
+            'pie\n    "A" : 3\n    "B" : 1.5\n```\n\n'
             "| Slice | Value | Share |\n| --- | --- | --- |\n| A | 3 | 67% |\n| B | 1.5 | 33% |\n"
             "| **Total** | **4.5** |  |\n",
             id="donut-slice",
@@ -971,7 +973,9 @@ def test_a_swimlane_bolds_each_lane_cell_as_a_whole_and_leaves_the_header_to_the
                 "categories": ["Q1", "Q2"],
                 "series": [{"label": "x", "tone": "danger", "values": [1, 2]}],
             },
-            '```mermaid\nxychart-beta\n    x-axis ["Q1", "Q2"]\n    line [1, 2]\n```\n\n'
+            '```mermaid\n%%{init: {"theme": "base", '
+            '"themeVariables": {"xyChart": {"plotColorPalette": "#b91c1c"}}}}%%\n'
+            'xychart-beta\n    x-axis ["Q1", "Q2"]\n    line [1, 2]\n```\n\n'
             "| Series | Q1 | Q2 |\n| --- | --- | --- |\n| x | 1 | 2 |\n",
             id="line-series",
         ),
@@ -1030,11 +1034,59 @@ def test_a_grid_cell_holding_a_table_is_a_raw_table_without_widths_around_a_pipe
     )
 
 
-def test_a_toned_grid_cell_is_a_raw_table_without_widths_around_an_icon_led_quote() -> None:
+def test_a_toned_grid_cell_is_a_raw_table_without_widths_around_an_alert() -> None:
     grid = {"type": "grid", "cells": [_text_cell(3, "a", tone="warning"), _text_cell(3, "b")]}
 
     assert markdown_of([grid]) == (
-        "<table>\n<tr>\n<td>\n\n> ⚠️ a\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+        "<table>\n<tr>\n<td>\n\n> [!WARNING]\n> a\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("tone", "alert"),
+    [
+        pytest.param("info", "NOTE", id="info"),
+        pytest.param("success", "TIP", id="success"),
+        pytest.param("accent", "IMPORTANT", id="accent"),
+        pytest.param("danger", "CAUTION", id="danger"),
+    ],
+)
+def test_a_toned_grid_cell_takes_the_alert_kind_a_callout_of_its_tone_takes(tone: str, alert: str) -> None:
+    grid = {"type": "grid", "cells": [_text_cell(3, "a", tone=tone), _text_cell(3, "b")]}
+
+    assert markdown_of([grid]) == (
+        f"<table>\n<tr>\n<td>\n\n> [!{alert}]\n> a\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+    )
+
+
+def test_a_toned_grid_cell_holding_a_list_is_an_alert_over_its_list() -> None:
+    cell = {"span": 3, "tone": "info", "blocks": [{"type": "list", "items": ["x", "y"]}]}
+
+    assert markdown_of([{"type": "grid", "cells": [cell, _text_cell(3, "b")]}]) == (
+        "<table>\n<tr>\n<td>\n\n> [!NOTE]\n>\n> - x\n> - y\n\n</td>\n<td>\n\nb\n\n</td>\n</tr>\n</table>\n"
+    )
+
+
+def test_a_toned_grid_cell_inside_a_grid_cell_stays_an_icon_led_quote() -> None:
+    inner = Columns(
+        (GridColumn(100, (Callout("warning", (Paragraph((Plain("i"),)),), authored_as="grid cell"),)),)
+    )
+    outer = Columns((GridColumn(100, (inner,)),))
+
+    assert render_markdown([outer]) == (
+        '<table>\n<tr>\n<td width="100%">\n\n'
+        "<table>\n<tr>\n<td>\n\n> ⚠️ i\n\n</td>\n</tr>\n</table>\n\n"
+        "</td>\n</tr>\n</table>\n"
+    )
+
+
+def test_a_toned_grid_cell_inside_a_details_block_is_an_alert() -> None:
+    cell = Callout("success", (Paragraph((Plain("ok"),)),), authored_as="grid cell")
+    toggle = Toggle((Plain("More"),), None, (Columns((GridColumn(100, (cell,)),)),))
+
+    assert render_markdown([toggle]) == (
+        "<details>\n<summary>More</summary>\n\n"
+        "<table>\n<tr>\n<td>\n\n> [!TIP]\n> ok\n\n</td>\n</tr>\n</table>\n\n</details>\n"
     )
 
 
@@ -1296,6 +1348,7 @@ def test_a_section_title_ending_in_a_newline_links_to_its_heading() -> None:
     section = {
         "type": "section",
         "title": "Appendix\n",
+        "collapsed": False,
         "blocks": [{"type": "text", "body": "[x](#appendix)"}],
     }
 
@@ -2157,19 +2210,56 @@ def test_a_toned_row_dots_a_cell_holding_a_list_and_strikes_its_text_when_muted(
     )
 
 
-def test_a_collapsed_section_becomes_a_heading_with_its_content_below() -> None:
+def test_a_collapsed_section_is_a_details_block_whose_summary_holds_its_heading() -> None:
     section = {
         "type": "section",
         "title": "Appendix",
         "blocks": [{"type": "heading", "text": "Raw"}, {"type": "text", "body": "t"}],
     }
 
-    assert markdown_of([section]) == "## Appendix\n\n### Raw\n\nt\n"
+    assert markdown_of([section]) == (
+        "<details>\n<summary><h2>Appendix</h2></summary>\n\n### Raw\n\nt\n\n</details>\n"
+    )
+
+
+def test_a_collapsed_part_is_a_details_block_with_a_level_one_heading_in_its_summary() -> None:
+    part = Toggle((Plain("Part"),), 1, (Paragraph((Plain("t"),)),), "part")
+
+    assert render_markdown([part]) == "<details>\n<summary><h1>Part</h1></summary>\n\nt\n\n</details>\n"
+
+
+def test_a_collapsed_section_nested_in_another_nests_its_details_and_keeps_its_own_level() -> None:
+    inner = Toggle((Plain("Inner"),), 3, (Paragraph((Plain("t"),)),), "inner")
+    outer = Toggle((Plain("Outer"),), 2, (inner,), "outer")
+
+    assert render_markdown([outer]) == (
+        "<details>\n<summary><h2>Outer</h2></summary>\n\n"
+        "<details>\n<summary><h3>Inner</h3></summary>\n\nt\n\n</details>\n\n"
+        "</details>\n"
+    )
+
+
+def test_a_collapsed_section_title_is_written_as_html_inside_its_summary_heading() -> None:
+    nodes = [Toggle((Plain("a<b "), Styled("bold", (Plain("c"),))), 3, (Paragraph((Plain("x"),)),), "ab")]
+
+    assert render_markdown(nodes) == (
+        "<details>\n<summary><h3>a&lt;b <strong>c</strong></h3></summary>\n\nx\n\n</details>\n"
+    )
+
+
+def test_a_collapsed_section_with_no_content_is_a_summary_alone() -> None:
+    assert render_markdown([Toggle((Plain("Empty"),), 2, (), "empty")]) == (
+        "<details>\n<summary><h2>Empty</h2></summary>\n</details>\n"
+    )
+
+
+def test_a_collapsed_section_with_a_blank_title_writes_its_content_alone() -> None:
+    assert render_markdown([Toggle((Plain(" "),), 2, (Paragraph((Plain("x"),)),), "blank")]) == "x\n"
 
 
 def test_a_panel_inside_a_section_becomes_a_callout_under_the_section_heading() -> None:
     panel = {"type": "panel", "title": "Card", "blocks": [{"type": "text", "body": "inside"}]}
-    section = {"type": "section", "title": "Appendix", "blocks": [panel]}
+    section = {"type": "section", "title": "Appendix", "collapsed": False, "blocks": [panel]}
 
     assert markdown_of([section]) == "## Appendix\n\n> **Card**\n>\n> inside\n"
 

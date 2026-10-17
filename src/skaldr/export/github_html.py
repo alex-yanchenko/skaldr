@@ -110,6 +110,10 @@ class HtmlRuns(MarkupRuns):
         return f"{dot} <strong>{self.escape(run.label)}</strong>"
 
 
+def summary_heading(level: int, summary: str) -> str:
+    return f"<h{level}>{summary}</h{level}>"
+
+
 def details_lines(summary: str, body: Sequence[str], *, opened: bool) -> list[str]:
     opening = "<details open>" if opened else "<details>"
     head = [opening, f"<summary>{summary}</summary>"]
