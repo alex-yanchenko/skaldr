@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import IO, Any, Literal
 
@@ -10,7 +10,12 @@ from pydantic import TypeAdapter
 from yaml.composer import Composer
 
 from skaldr.cli import main
-from skaldr.outline import OutlineJson, OutlineRegionJson
+from skaldr.outline import (
+    OutlineJson,
+    OutlineRegionJson,
+    _AliasKeepingLoader,  # pyright: ignore[reportPrivateUsage]
+    _read_back_loader,  # pyright: ignore[reportPrivateUsage]
+)
 from tests.factories import make_index_report
 
 DOCUMENT = """version: 1
@@ -282,6 +287,28 @@ OUTLINE_AND_SHOW = [
     pytest.param(("show", "{path}#a"), id="show"),
 ]
 _OUTLINE_JSON = TypeAdapter(OutlineJson)
+
+
+@pytest.fixture
+def fresh_read_back_loader() -> Iterator[None]:
+    _read_back_loader.cache_clear()
+    yield
+    _read_back_loader.cache_clear()
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            True, id="with-libyaml", marks=pytest.mark.skipif(not yaml.__with_libyaml__, reason="no libyaml")
+        ),
+        pytest.param(False, id="without-libyaml"),
+    ]
+)
+def each_read_back_parser(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setattr(yaml, "__with_libyaml__", request.param)
+    _read_back_loader.cache_clear()
+    yield
+    _read_back_loader.cache_clear()
 
 
 @pytest.fixture
@@ -738,6 +765,7 @@ def test_an_item_whose_dash_stands_alone_starts_on_the_dash_line(
     assert _shown(f"{path}#b", capsys) == (0, ("  -\n    type: heading\n    text: B\n", ""))
 
 
+@pytest.mark.usefixtures("each_read_back_parser")
 def test_a_region_whose_text_does_not_read_back_as_its_blocks_has_no_lines(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -750,6 +778,21 @@ def test_a_region_whose_text_does_not_read_back_as_its_blocks_has_no_lines(
         [_region("a", "A", 2, None), _region("b", "B", 2, (10, 11, 8))],
     )
     assert _shown(f"{path}#a", capsys) == _none_of_its_lines(path, "a", UNCHECKED_REASON)
+
+
+@pytest.mark.skipif(not yaml.__with_libyaml__, reason="libyaml is not installed")
+@pytest.mark.usefixtures("fresh_read_back_loader")
+def test_the_read_back_parses_with_libyaml_when_it_is_installed() -> None:
+    from yaml._yaml import CParser
+
+    assert isinstance(_read_back_loader()("x: 1"), CParser)
+
+
+@pytest.mark.usefixtures("fresh_read_back_loader")
+def test_the_read_back_parses_with_pure_pyyaml_without_libyaml(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(yaml, "__with_libyaml__", False)
+
+    assert _read_back_loader() is _AliasKeepingLoader
 
 
 def test_show_reads_the_file_once_and_checks_only_the_region_it_prints(
@@ -768,7 +811,7 @@ def test_show_reads_the_file_once_and_checks_only_the_region_it_prints(
 
     monkeypatch.setattr(Composer, "get_single_node", record_what_was_composed)
     opened: list[Path] = []
-    open_a_path = Path.open
+    original_path_open = Path.open
 
     def record_the_opened_path(
         self: Path,
@@ -779,7 +822,7 @@ def test_show_reads_the_file_once_and_checks_only_the_region_it_prints(
         newline: str | None = None,
     ) -> IO[Any]:
         opened.append(self)
-        return open_a_path(self, mode, buffering, encoding, errors, newline)
+        return original_path_open(self, mode, buffering, encoding, errors, newline)
 
     monkeypatch.setattr(Path, "open", record_the_opened_path)
 
