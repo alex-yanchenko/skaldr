@@ -7,13 +7,15 @@ Kept separate from `compute` because it is a self-contained geometry unit with n
 """
 
 import math
+import re
+from functools import cache
 from typing import Final, TypedDict
 
 from markupsafe import Markup, escape
 from typing_extensions import assert_never
 
 from skaldr import compute
-from skaldr.models import Chart, Tone
+from skaldr.models import Chart, Tone, package_text
 
 
 class LegendRow(TypedDict):
@@ -40,8 +42,22 @@ _SEPARATOR_WIDTH_EM: Final = 0.3
 _CYCLE: tuple[Tone, ...] = ("info", "success", "warning", "danger", "accent", "neutral")
 
 
+def chart_tone(tone: Tone | None, index: int) -> Tone:
+    return tone or _CYCLE[index % len(_CYCLE)]
+
+
 def _fill(tone: Tone | None, index: int) -> str:
-    return f"var(--{tone or _CYCLE[index % len(_CYCLE)]}-fg)"
+    return f"var(--{chart_tone(tone, index)}-fg)"
+
+
+@cache
+def _light_foregrounds() -> dict[str, str]:
+    declarations = re.findall(r"--(\w+)-fg:\s*light-dark\((#[0-9a-fA-F]{6}),", package_text("styles.css"))
+    return dict(declarations)
+
+
+def chart_light_colour(tone: Tone | None, index: int) -> str:
+    return _light_foregrounds()[chart_tone(tone, index)]
 
 
 def _nice_max(value: float) -> float:

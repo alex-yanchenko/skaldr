@@ -702,14 +702,16 @@ def test_the_notion_export_writes_each_part_title_as_a_level_one_heading(tmp_pat
     assert page == '# Overview\n## Inside one\n## Inner {toggle="true"}\n\tx\n# Details\nsecond\n'
 
 
-def test_the_github_export_writes_an_open_or_collapsed_part_title_as_a_level_one_heading(
+def test_the_github_export_writes_an_open_part_title_as_a_level_one_heading_and_a_collapsed_one_in_a_summary(
     tmp_path: Path,
 ) -> None:
     open_page = render_markdown(lower_report(_combined(tmp_path / "open")).body)
     collapsed_page = render_markdown(lower_report(_collapsed(tmp_path / "collapsed")).body)
 
     assert open_page.endswith("\n# Details\n\nsecond\n")
-    assert collapsed_page.endswith("\n# Details\n\nsecond\n")
+    assert collapsed_page.endswith(
+        "\n<details>\n<summary><h1>Details</h1></summary>\n\nsecond\n\n</details>\n"
+    )
 
 
 def test_emit_json_of_an_index_prints_the_combined_page(
@@ -859,7 +861,9 @@ def test_a_document_link_to_a_part_of_the_index_is_kept_as_an_in_page_link_on_gi
     report = load_report(_index_with_a_linked_part(tmp_path, "[the plan](doc:onboarding-plan#st2)"))
 
     assert render_export(report, "markdown").pages == {
-        "page.md": "# Combined\n\n[the plan](#st2)\n\n# Test Report\n\nIntro.\n\n## st1\n\nx\n\n## st2\n\nx\n"
+        "page.md": "# Combined\n\n[the plan](#st2)\n\n# Test Report\n\nIntro.\n\n"
+        "<details>\n<summary><h2>st1</h2></summary>\n\nx\n\n</details>\n\n"
+        "<details>\n<summary><h2>st2</h2></summary>\n\nx\n\n</details>\n"
     }
 
 

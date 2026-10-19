@@ -822,7 +822,7 @@ def test_a_request_with_several_cases_is_one_expand_per_case_titled_with_its_sta
 def test_a_chart_is_its_data_table_alone() -> None:
     table = TableNode((_cell("Slice"), _cell("Value")), (TableRow((_cell("a"), _cell("1"))),))
     pie = Diagram(PieChart((PieSlice("a", 1),)), (table,))
-    bars = Diagram(XYChart("bar", ("x",), ((1.0,),), stacked=False), (table,))
+    bars = Diagram(XYChart("bar", ("x",), ((1.0,),), stacked=False, series_tones=(None,)), (table,))
 
     expected = _doc(
         _table(

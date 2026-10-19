@@ -23,7 +23,7 @@ from skaldr.export.tree import (
     XYChart,
     XYChartMark,
 )
-from skaldr.models import Chart, Fan, Flow, FlowStep
+from skaldr.models import Chart, Fan, Flow, FlowStep, ToneLiteral
 
 SERIES_COLUMN: Final = "Series"
 DONUT_COLUMNS: Final = ("Slice", "Value", "Share")
@@ -86,7 +86,7 @@ def _donut_table(block: Chart) -> TableNode:
 
 
 def _donut(block: Chart) -> Diagram:
-    pie = PieChart(tuple(PieSlice(item.label, item.value) for item in block.slices))
+    pie = PieChart(tuple(PieSlice(item.label, item.value, item.tone) for item in block.slices))
     return Diagram(pie, (_donut_table(block),))
 
 
@@ -106,7 +106,8 @@ def _xy_chart(block: Chart, mark: XYChartMark) -> Diagram:
         plain_cells(SERIES_COLUMN, *block.categories), (*rows, *_stack_totals(block)), authored_as="chart"
     )
     values = tuple(tuple(series.values) for series in block.series)
-    return Diagram(XYChart(mark, tuple(block.categories), values, block.stacked), (table,))
+    tones: tuple[ToneLiteral | None, ...] = tuple(series.tone for series in block.series)
+    return Diagram(XYChart(mark, tuple(block.categories), values, block.stacked, tones), (table,))
 
 
 def lower_chart(block: Chart) -> list[Node]:

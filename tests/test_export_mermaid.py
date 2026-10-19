@@ -2,9 +2,11 @@ from typing import get_args
 
 import pytest
 
+from skaldr.charts import chart_light_colour
 from skaldr.errors import ExportInvariantError
 from skaldr.export.mermaid import MERMAID_FILL, mermaid_fence_lines
 from skaldr.export.tree import Graph, GraphEdge, GraphNode, PieChart, PieSlice, ToneName, XYChart
+from skaldr.models import ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
     Citation,
@@ -16,6 +18,18 @@ from skaldr.richtext import (
     Run,
     Styled,
 )
+from tests.factories.capability_factory import PIE_TEXT_VARIABLES_JSON
+
+LIGHT_THEME_COLOUR_OF: dict[str, str] = {
+    "neutral": "#475569",
+    "info": "#1d4ed8",
+    "success": "#15803d",
+    "warning": "#b45309",
+    "danger": "#b91c1c",
+    "accent": "#7c3aed",
+    "teal": "#0f766e",
+    "sky": "#0369a1",
+}
 
 
 def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
@@ -106,7 +120,7 @@ def test_a_pie_quotes_its_labels_and_writes_values_without_an_exponent() -> None
 
 
 def test_an_xy_chart_quotes_its_categories_and_writes_large_values_in_full() -> None:
-    chart = XYChart("line", ('Q "1"', "Q2"), ((1e16, 2.5),), stacked=False)
+    chart = XYChart("line", ('Q "1"', "Q2"), ((1e16, 2.5),), stacked=False, series_tones=(None,))
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",
@@ -118,7 +132,7 @@ def test_an_xy_chart_quotes_its_categories_and_writes_large_values_in_full() -> 
 
 
 def test_a_stacked_xy_chart_with_one_series_is_drawn_as_an_unstacked_one() -> None:
-    chart = XYChart("bar", ("Q1", "Q2"), ((1, 2),), stacked=True)
+    chart = XYChart("bar", ("Q1", "Q2"), ((1, 2),), stacked=True, series_tones=(None,))
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",
@@ -158,7 +172,7 @@ def test_a_note_holding_a_run_the_check_refuses_in_a_mermaid_label_is_an_interna
 def test_an_xy_chart_with_several_series_is_an_internal_error_since_the_export_swaps_it(
     stacked: bool,
 ) -> None:
-    chart = XYChart("bar", ("Q1",), ((1,), (2,)), stacked=stacked)
+    chart = XYChart("bar", ("Q1",), ((1,), (2,)), stacked=stacked, series_tones=(None, None))
 
     with pytest.raises(ExportInvariantError) as raised:
         mermaid_fence_lines(chart)
@@ -169,7 +183,7 @@ def test_an_xy_chart_with_several_series_is_an_internal_error_since_the_export_s
 
 
 def test_an_xy_chart_writes_zero_and_negative_zero_without_a_sign() -> None:
-    chart = XYChart("bar", ("Q1", "Q2", "Q3"), ((0, 0.0, -0.0),), stacked=False)
+    chart = XYChart("bar", ("Q1", "Q2", "Q3"), ((0, 0.0, -0.0),), stacked=False, series_tones=(None,))
 
     assert mermaid_fence_lines(chart) == [
         "```mermaid",
@@ -178,3 +192,79 @@ def test_an_xy_chart_writes_zero_and_negative_zero_without_a_sign() -> None:
         "    bar [0, 0.0, 0.0]",
         "```",
     ]
+
+
+def test_a_pie_with_the_page_palette_writes_each_slice_colour_from_its_tone_or_the_page_cycle() -> None:
+    pie = PieChart((PieSlice("a", 3), PieSlice("b", 1, "danger"), PieSlice("c", 2)))
+
+    assert mermaid_fence_lines(pie, with_page_palette=True) == [
+        "```mermaid",
+        '%%{init: {"theme": "base", "themeVariables": '
+        '{"pie1": "#1d4ed8", "pie2": "#b91c1c", "pie3": "#b45309", ' + PIE_TEXT_VARIABLES_JSON + "}}}%%",
+        "pie",
+        '    "a" : 3',
+        '    "b" : 1',
+        '    "c" : 2',
+        "```",
+    ]
+
+
+def test_a_pie_numbers_its_colours_in_the_order_the_slices_are_written_not_by_value() -> None:
+    pie = PieChart(
+        (PieSlice("small", 1, "danger"), PieSlice("big", 5, "success"), PieSlice("mid", 3, "info"))
+    )
+
+    assert mermaid_fence_lines(pie, with_page_palette=True)[1:6] == [
+        '%%{init: {"theme": "base", "themeVariables": '
+        '{"pie1": "#b91c1c", "pie2": "#15803d", "pie3": "#1d4ed8", ' + PIE_TEXT_VARIABLES_JSON + "}}}%%",
+        "pie",
+        '    "small" : 1',
+        '    "big" : 5',
+        '    "mid" : 3',
+    ]
+
+
+def test_a_pie_colours_at_most_the_twelve_slices_mermaid_has_a_colour_variable_for() -> None:
+    pie = PieChart(tuple(PieSlice(f"s{index}", 1) for index in range(14)))
+    cycle = ["#1d4ed8", "#15803d", "#b45309", "#b91c1c", "#7c3aed", "#475569"]
+    colours = ", ".join(f'"pie{number}": "{cycle[(number - 1) % 6]}"' for number in range(1, 13))
+
+    assert mermaid_fence_lines(pie, with_page_palette=True)[1] == (
+        '%%{init: {"theme": "base", "themeVariables": {' + colours + ", " + PIE_TEXT_VARIABLES_JSON + "}}}%%"
+    )
+
+
+@pytest.mark.parametrize("tone", get_args(ToneLiteral))
+def test_every_tone_resolves_to_its_light_theme_colour_in_the_page_stylesheet(tone: ToneLiteral) -> None:
+    assert chart_light_colour(tone, 0) == LIGHT_THEME_COLOUR_OF[tone]
+
+
+def test_the_light_theme_colours_this_file_expects_cover_exactly_the_tones() -> None:
+    assert sorted(LIGHT_THEME_COLOUR_OF) == sorted(get_args(ToneLiteral))
+
+
+def test_a_single_series_xy_chart_with_the_page_palette_writes_the_series_colour() -> None:
+    chart = XYChart("bar", ("Q1", "Q2"), ((1, 2),), stacked=False, series_tones=("teal",))
+
+    assert mermaid_fence_lines(chart, with_page_palette=True) == [
+        "```mermaid",
+        '%%{init: {"theme": "base", "themeVariables": {"xyChart": {"plotColorPalette": "#0f766e"}}}}%%',
+        "xychart-beta",
+        '    x-axis ["Q1", "Q2"]',
+        "    bar [1, 2]",
+        "```",
+    ]
+
+
+def test_an_xy_chart_series_with_no_tone_takes_the_first_colour_of_the_page_cycle() -> None:
+    chart = XYChart("line", ("Q1",), ((1,),), stacked=False, series_tones=(None,))
+
+    assert mermaid_fence_lines(chart, with_page_palette=True)[1] == (
+        '%%{init: {"theme": "base", "themeVariables": {"xyChart": {"plotColorPalette": "#1d4ed8"}}}}%%'
+    )
+
+
+def test_a_flowchart_has_no_init_line_with_the_page_palette() -> None:
+    graph = Graph("TB", (GraphNode("s1", "Scan"),), (), "flow")
+
+    assert mermaid_fence_lines(graph, with_page_palette=True) == mermaid_fence_lines(graph)
