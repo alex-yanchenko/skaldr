@@ -404,7 +404,8 @@ def test_every_other_target_exports_what_one_target_refuses_without_a_refusal(
         pytest.param(
             LINK_TO_A_SECTION,
             "markdown",
-            "# Test Report\n\n## Counts\n\nTen.\n\nSee [the counts](#counts).\n",
+            "# Test Report\n\n<details>\n<summary><h2>Counts</h2></summary>\n\nTen.\n\n</details>\n\n"
+            "See [the counts](#counts).\n",
             id="same-page-link-on-github",
         ),
         pytest.param(

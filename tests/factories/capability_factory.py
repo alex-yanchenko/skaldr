@@ -17,6 +17,10 @@ from tests.factories.report_factory import (
 
 TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "a"}]}
 LONG_TABLE = {"type": "table", "columns": [{"key": "name", "label": "Name"}], "rows": [{"name": "v"}] * 300}
+PIE_TEXT_VARIABLES_JSON = (
+    '"pieTitleTextColor": "#768390", "pieLegendTextColor": "#768390", "pieSectionTextColor": "#ffffff", '
+    '"pieStrokeColor": "#768390", "pieOuterStrokeColor": "#768390"'
+)
 LIST_ITEM_WHY = "a Slack canvas list item holds only text and one nested list, so it cannot show {what}"
 OUT_OF_THE_LIST = "move it out of the list, after the list"
 OUT_OF_THE_STEP = "move it out of the step, after the walkthrough"
@@ -1297,7 +1301,9 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
     "markdown-chart-donut": AcceptedCase(
         "markdown",
         [DONUT],
-        '# Plan\n\n```mermaid\npie\n    "Fixed" : 9\n    "Open" : 3\n```\n\n'
+        '# Plan\n\n```mermaid\n%%{init: {"theme": "base", '
+        '"themeVariables": {"pie1": "#15803d", "pie2": "#15803d", ' + PIE_TEXT_VARIABLES_JSON + "}}}%%\n"
+        'pie\n    "Fixed" : 9\n    "Open" : 3\n```\n\n'
         "| Slice | Value | Share |\n| --- | --- | --- |\n"
         "| Fixed | 9 | 75% |\n| Open | 3 | 25% |\n| **Total** | **12** |  |\n",
     ),
