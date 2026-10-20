@@ -29,6 +29,7 @@ WORKSPACE = UUID(WORKSPACE_ID)
 OTHER_WORKSPACE = UUID(OTHER_WORKSPACE_ID)
 DOCUMENT_PAGE = numbered_id(1).replace("-", "")
 TOOLS_PAGE = numbered_id(2).replace("-", "")
+DOCUMENT_PAGE_ID = "00000001000040008000000000000001"
 
 
 def _notion() -> InMemoryNotion:
@@ -304,11 +305,45 @@ def test_a_page_left_empty_by_a_fill_that_failed_is_adopted_and_filled_by_the_ne
     plain = _notion()
     main(["publish", str(write_garden_report(tmp_path / "plain")), "--apply"], registry=_registry(plain))
     assert (interrupted, left_behind, rerun) == (1, "", 0)
-    plain_lines = plain.markdown_of(DOCUMENT_PAGE).splitlines()
-    child_link = plain_lines.pop()
-    plain_lines.insert(plain_lines.index("<table_of_contents/>") + 1, child_link)
-    assert notion.markdown_of(DOCUMENT_PAGE) == "\n".join(plain_lines)
+    assert notion.markdown_of(DOCUMENT_PAGE) == plain.markdown_of(DOCUMENT_PAGE)
     assert notion.markdown_of(TOOLS_PAGE) == plain.markdown_of(TOOLS_PAGE)
+
+
+def test_a_page_a_person_wrote_in_after_a_failed_fill_is_not_filled_over_by_the_next_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    whole = {"publish": make_notion_publish()}
+    path = write_garden_report(tmp_path, **whole)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.pages[DOCUMENT_PAGE].markdown = "My own notes"
+    notion.requests.clear()
+    capsys.readouterr()
+
+    rerun = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    replaced = [
+        request
+        for request in notion.requests
+        if request.method == "PATCH" and b"replace_content" in request.content
+    ]
+    assert (
+        rerun,
+        replaced,
+        "My own notes" in notion.markdown_of(DOCUMENT_PAGE),
+        capsys.readouterr().err,
+    ) == (
+        1,
+        [],
+        True,
+        f"error: Notion page {DOCUMENT_PAGE_ID} changed after skaldr read it, so nothing was written; "
+        "publish again\n",
+    )
 
 
 def test_a_page_with_no_children_left_empty_by_a_fill_that_failed_is_filled_exactly_by_the_next_run(
