@@ -125,6 +125,13 @@ def notion_failure(status: int, error: ErrorBody, action: _Action) -> ConnectorE
         return ItemNotFoundError(
             f"Notion could not {action.to_do}: it has no such object, or this sign-in cannot see it"
         )
+    if status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE and not message:
+        reason = f"the request was too large (HTTP {status})"
+        if action.writes:
+            return WriteRejectedError(
+                f"Notion refused to {action.to_do}: {reason}; give a large section its own page with `split`"
+            )
+        return ConnectorError(f"Notion could not {action.to_do}: {reason}")
     if action.writes and status in REFUSED_WRITE_STATUSES:
         return WriteRejectedError(f"Notion refused to {action.to_do}: {message} ({code})")
     return ConnectorError(f"Notion could not {action.to_do}: HTTP {status} {code}: {message}")
