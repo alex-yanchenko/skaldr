@@ -45,6 +45,7 @@ from skaldr.render import (
     RenderOptions,
     extract_source,
     find_placeholders,
+    placeholder_locations,
     recorded_render,
     render_html,
     render_report,
@@ -815,6 +816,8 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
                 f"FAIL  {path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
                 file=sys.stderr,
             )
+            for name, places in placeholder_locations(report, unfilled).items():
+                print(f"      {name}: {', '.join(places)}", file=sys.stderr)
         elif unfilled:
             print(f"OK    {path}  ({_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)})")
         else:

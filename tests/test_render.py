@@ -33,6 +33,7 @@ from skaldr.render import (
     find_placeholders,
     hide_script_close,
     html_environment,
+    placeholder_locations,
     recorded_render,
     render_embed,
     render_html,
@@ -3592,6 +3593,33 @@ def test_find_placeholders_collects_sorted_unique_names_across_the_report() -> N
     )
 
     assert find_placeholders(report) == ["deployed_url", "ticket"]
+
+
+def test_placeholder_locations_name_the_block_or_meta_field_that_holds_each_blank() -> None:
+    report = parse_report(
+        make_report(
+            meta={"title": "Plan for {{team}}", "date": "{{when}}"},
+            blocks=[
+                {"type": "text", "body": "See {{ticket}} and {{ticket}}."},
+                {
+                    "type": "section",
+                    "title": "Rollout of {{ticket}}",
+                    "blocks": [
+                        {"type": "callout", "tone": "info", "body": "Ping {{owner}}."},
+                        {"type": "text", "body": "Literal \\{{ticket}} here and `{{owner}}` in code."},
+                    ],
+                },
+                {"type": "text", "body": "No blanks."},
+            ],
+        )
+    )
+
+    assert placeholder_locations(report, find_placeholders(report)) == {
+        "owner": ["blocks.1.section.blocks.0.callout"],
+        "team": ["meta.title"],
+        "ticket": ["blocks.0.text", "blocks.1.section"],
+        "when": ["meta.date"],
+    }
 
 
 def test_report_with_no_placeholders_collects_nothing() -> None:

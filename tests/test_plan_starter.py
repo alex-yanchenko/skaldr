@@ -18,6 +18,23 @@ STARTER_PLACEHOLDERS = (
     "plan-title, reason-one, reason-two, second-action, step-in-progress, step-not-started, "
     "step-waiting-on-something, what-done-looks-like-and-why-it-matters"
 )
+STARTER_PLACEHOLDER_LOCATIONS = (
+    "      date: meta.updated\n"
+    "      decision-one: blocks.3.list\n"
+    "      decision-two: blocks.3.list\n"
+    "      finished-step: blocks.5.status_list\n"
+    "      first-action: blocks.7.list\n"
+    "      mistake-to-avoid: blocks.9.list\n"
+    "      one-line-summary: meta.subtitle\n"
+    "      plan-title: meta.title\n"
+    "      reason-one: blocks.3.list\n"
+    "      reason-two: blocks.3.list\n"
+    "      second-action: blocks.7.list\n"
+    "      step-in-progress: blocks.5.status_list\n"
+    "      step-not-started: blocks.5.status_list\n"
+    "      step-waiting-on-something: blocks.5.status_list\n"
+    "      what-done-looks-like-and-why-it-matters: blocks.1.callout\n"
+)
 GUIDE_STARTER_SECTION = re.compile(r"^## Working plan starter\n(.*?)(?=^## |\Z)", re.DOTALL | re.MULTILINE)
 FENCED_YAML = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 
@@ -50,7 +67,8 @@ def test_the_starter_fails_the_strict_check_naming_every_placeholder(
     assert (exit_code, captured.out, captured.err) == (
         1,
         "",
-        f"FAIL  {path}: 15 unfilled placeholders: {STARTER_PLACEHOLDERS}\n\n1 file failed\n",
+        f"FAIL  {path}: 15 unfilled placeholders: {STARTER_PLACEHOLDERS}\n{STARTER_PLACEHOLDER_LOCATIONS}"
+        "\n1 file failed\n",
     )
 
 

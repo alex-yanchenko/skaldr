@@ -821,7 +821,31 @@ def test_check_strict_fails_on_placeholders_inside_a_link_label_and_url(
 
     assert (exit_code, capsys.readouterr().err) == (
         1,
-        f"FAIL  {data_path}: 2 unfilled placeholders: pr, ticket\n\n1 file failed\n",
+        f"FAIL  {data_path}: 2 unfilled placeholders: pr, ticket\n"
+        "      pr: blocks.0.text\n"
+        "      ticket: blocks.0.text\n"
+        "\n1 file failed\n",
+    )
+
+
+def test_check_strict_lists_where_each_unfilled_placeholder_sits(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [
+        {"type": "text", "body": "Open {{url}}."},
+        {"type": "section", "title": "Rollout", "blocks": [{"type": "text", "body": "{{url}} for {{who}}"}]},
+    ]
+    data_path = _write(tmp_path, make_report(meta={"title": "T", "date": "{{when}}"}, blocks=blocks))
+
+    exit_code = main(["--check", "--strict", str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        f"FAIL  {data_path}: 3 unfilled placeholders: url, when, who\n"
+        "      url: blocks.0.text, blocks.1.section.blocks.0.text\n"
+        "      when: meta.date\n"
+        "      who: blocks.1.section.blocks.0.text\n"
+        "\n1 file failed\n",
     )
 
 

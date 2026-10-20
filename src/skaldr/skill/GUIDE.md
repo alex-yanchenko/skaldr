@@ -207,7 +207,8 @@ A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts t
 
 - `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
-  you run before "final".
+  you run before "final". Under the failing line it lists each blank with the blocks (`blocks.3.list`)
+  or `meta` fields (`meta.title`) that hold it, numbered the way a validation error numbers them.
 
 > **Self-checking a rendered page?** Every render, full page and `--embed` fragment alike, **embeds its
 > own YAML source** (so `--extract-source` can recover it), which means any `{{…}}` or `[^ref]` in the
