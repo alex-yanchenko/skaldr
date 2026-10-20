@@ -13,6 +13,7 @@ from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
+    NOTION_ESCAPES,
     NotionChunks,
     chunk_notion,
     notion_inline,
@@ -21,6 +22,7 @@ from skaldr.export.notion import (
 from skaldr.export.runs import Break, Chip, ExportRich, Gauge, SectionLink, StatusMark, TonedLabel
 from skaldr.export.tree import (
     Callout,
+    CodeBlock,
     Columns,
     Diagram,
     Graph,
@@ -98,6 +100,63 @@ from tests.factories.example_factory import (
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
+ZERO_WIDTH_SPACE = "\N{ZERO WIDTH SPACE}"
+LINKIFIED_FILE_EXTENSIONS = (
+    "rs",
+    "pl",
+    "pm",
+    "ml",
+    "ai",
+    "io",
+    "zip",
+    "mov",
+    "cc",
+    "ps",
+    "so",
+    "tf",
+    "cr",
+    "nu",
+    "is",
+    "it",
+    "in",
+    "me",
+    "to",
+    "do",
+    "ar",
+    "java",
+    "sh",
+    "py",
+    "md",
+)
+UNLINKED_FILE_EXTENSIONS = (
+    "cs",
+    "go",
+    "rb",
+    "kt",
+    "lua",
+    "ex",
+    "hs",
+    "sql",
+    "toml",
+    "ini",
+    "cfg",
+    "txt",
+    "log",
+    "csv",
+    "xml",
+    "ts",
+    "tsx",
+    "jsx",
+    "json",
+    "yml",
+    "html",
+    "css",
+    "c",
+    "h",
+    "swift",
+    "php",
+    "pdf",
+)
 NOTION_CHIP_COLOR: dict[str, str] = {
     "slate": "gray",
     "blue": "blue",
@@ -127,10 +186,180 @@ def _chunked(nodes: Sequence[Node], limit: int, page_width: NotionWidth = "norma
         pytest.param("see app.py:10-20 now", "see `app.py:10-20` now", id="file-with-a-line-range"),
         pytest.param("`notes.md` stays one span", "`notes.md` stays one span", id="already-code"),
         pytest.param("a readme file", "a readme file", id="no-extension"),
+        *[
+            pytest.param(f"see notes.{extension} now", f"see `notes.{extension}` now", id=f"{extension}-file")
+            for extension in LINKIFIED_FILE_EXTENSIONS
+        ],
+        *[
+            pytest.param(f"see notes.{extension} now", f"see notes.{extension} now", id=f"{extension}-file")
+            for extension in UNLINKED_FILE_EXTENSIONS
+        ],
+        pytest.param("see my_tool.rs:7-9 now", "see `my_tool.rs:7-9` now", id="rust-file-with-a-line-range"),
+        pytest.param("see notes.json5 now", "see notes.json5 now", id="extension-continues-past-a-match"),
+        pytest.param("see notes.ini now", "see notes.ini now", id="extension-starting-with-a-match"),
     ],
 )
 def test_a_file_name_notion_would_turn_into_a_web_link_becomes_inline_code(text: str, notion: str) -> None:
     assert notion_inline(parse_rich(text)) == notion
+
+
+@pytest.mark.parametrize(
+    ("code", "notion"),
+    [
+        pytest.param('{color="red"}', f'`{{{ZERO_WIDTH_SPACE}color="red"}}`', id="a-block-colour"),
+        pytest.param('{color="nope"}', f'`{{{ZERO_WIDTH_SPACE}color="nope"}}`', id="any-colour-value"),
+        pytest.param('{toggle="true"}', f'`{{{ZERO_WIDTH_SPACE}toggle="true"}}`', id="a-heading-toggle"),
+        pytest.param(
+            'x {color="red"} y {toggle="true"}',
+            f'`x {{{ZERO_WIDTH_SPACE}color="red"}} y {{{ZERO_WIDTH_SPACE}toggle="true"}}`',
+            id="two-attributes",
+        ),
+        pytest.param("{color=red}", "`{color=red}`", id="an-unquoted-value-is-kept"),
+        pytest.param('{ color="red" }', '`{ color="red" }`', id="a-spaced-attribute-is-kept"),
+        pytest.param('{COLOR="red"}', '`{COLOR="red"}`', id="an-upper-case-name-is-kept"),
+        pytest.param("{a: 1}", "`{a: 1}`", id="plain-braces-are-kept"),
+    ],
+)
+def test_inline_code_holding_a_block_attribute_gets_a_zero_width_space_after_the_brace(
+    code: str, notion: str
+) -> None:
+    assert notion_inline((Code(code),)) == notion
+
+
+def test_inline_code_holding_a_block_attribute_is_left_alone_in_a_table_cell() -> None:
+    assert notion_inline((Code('{color="red"}'),), in_a_table_cell=True) == '`{color="red"}`'
+
+
+@pytest.mark.parametrize(
+    ("block", "expected"),
+    [
+        pytest.param(
+            {"type": "text", "body": 'Mid `{color="red"}` end.'},
+            f'Mid `{{{ZERO_WIDTH_SPACE}color="red"}}` end.\n',
+            id="a-paragraph",
+        ),
+        pytest.param(
+            {"type": "quote", "body": 'Mid `{color="red"}` end.'},
+            f'> Mid `{{{ZERO_WIDTH_SPACE}color="red"}}` end.\n',
+            id="a-quote",
+        ),
+        pytest.param(
+            {"type": "list", "items": ['Item `{color="red"}` end']},
+            f'- Item `{{{ZERO_WIDTH_SPACE}color="red"}}` end\n',
+            id="a-list-item",
+        ),
+        pytest.param(
+            {"type": "code", "content": '{color="red"}', "lang": "text"},
+            '```text\n{color="red"}\n```\n',
+            id="a-fenced-block-is-kept",
+        ),
+    ],
+)
+def test_a_block_attribute_in_inline_code_cannot_colour_the_block_it_sits_in(
+    block: dict[str, Any], expected: str
+) -> None:
+    assert notion_of([block]) == expected
+
+
+@pytest.mark.parametrize(
+    "tag",
+    ["<td>", "<tr>", "<table>", "<td colspan=2>", "<tr/>", "a <td> b"],
+)
+def test_inline_code_holding_a_table_tag_is_written_as_escaped_text_in_a_table_cell(tag: str) -> None:
+    written = notion_inline((Code(tag),), in_a_table_cell=True)
+
+    assert written == tag.translate(NOTION_ESCAPES)
+
+
+@pytest.mark.parametrize("text", ["<tdx>", "<track>", "<b>", "<table-of-contents>", "a<b", "td"])
+def test_inline_code_holding_other_text_stays_code_in_a_table_cell(text: str) -> None:
+    assert notion_inline((Code(text),), in_a_table_cell=True) == f"`{text}`"
+
+
+def test_inline_code_holding_a_table_tag_stays_code_outside_a_table_cell() -> None:
+    assert notion_inline((Code("<td>"),)) == "`<td>`"
+
+
+def test_a_table_cell_with_inline_code_holding_a_table_tag_is_one_cell() -> None:
+    table = make_table(
+        [{"key": "a", "label": "Tag"}, {"key": "b", "label": "Note"}],
+        rows=[{"a": "open `<td>` only", "b": "see `<table>` too"}],
+    )
+
+    assert notion_of([table]) == (
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**Tag**</td>\n\t\t<td>**Note**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>open \\<td\\> only</td>\n\t\t<td>see \\<table\\> too</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+CODE_HOLDING_THE_CLOSER = CodeBlock("before\n</callout>\nafter", "javascript")
+
+
+@pytest.mark.parametrize(
+    ("node", "message"),
+    [
+        pytest.param(
+            Callout("info", (CODE_HOLDING_THE_CLOSER,)),
+            "Notion reads the code line '</callout>' as a tag of the callout around it; "
+            "the export check should have refused it",
+            id="callout-closer",
+        ),
+        pytest.param(
+            Callout("info", (CodeBlock("<callout>", ""),)),
+            "Notion reads the code line '<callout>' as a tag of the callout around it; "
+            "the export check should have refused it",
+            id="callout-opener",
+        ),
+        pytest.param(
+            Toggle((Plain("More"),), None, (CodeBlock("\t</details>", ""),)),
+            "Notion reads the code line '</details>' as a tag of the details around it; "
+            "the export check should have refused it",
+            id="details-closer-after-indentation",
+        ),
+        pytest.param(
+            Columns((GridColumn(1, (CodeBlock("</column>", ""),)),)),
+            "Notion reads the code line '</column>' as a tag of the column around it; "
+            "the export check should have refused it",
+            id="column-closer",
+        ),
+        pytest.param(
+            Tabs((Tab((Plain("One"),), (CodeBlock("</tab>", ""),)),)),
+            "Notion reads the code line '</tab>' as a tag of the tab around it; "
+            "the export check should have refused it",
+            id="tab-closer",
+        ),
+        pytest.param(
+            Callout("info", (Toggle((Plain("More"),), None, (CODE_HOLDING_THE_CLOSER,)),)),
+            "Notion reads the code line '</callout>' as a tag of the callout around it; "
+            "the export check should have refused it",
+            id="callout-closer-two-containers-down",
+        ),
+    ],
+)
+def test_the_writer_stops_at_a_code_line_that_reads_as_a_tag_of_a_container_around_it(
+    node: Node, message: str
+) -> None:
+    with pytest.raises(ExportInvariantError, match=f"^{re.escape(message)}$"):
+        render_notion([node])
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        pytest.param(CODE_HOLDING_THE_CLOSER, id="no-container"),
+        pytest.param(Callout("info", (CodeBlock("</details>", ""),)), id="another-containers-closer"),
+        pytest.param(Callout("info", (CodeBlock("x </callout> y", ""),)), id="tag-inside-a-longer-line"),
+        pytest.param(
+            Toggle((Plain("More"),), 2, (CODE_HOLDING_THE_CLOSER,)),
+            id="a-heading-toggle-is-no-container",
+        ),
+        pytest.param(Callout("info", (CodeBlock("</callout >", ""),)), id="a-different-tag"),
+    ],
+)
+def test_the_writer_writes_a_code_line_that_is_no_tag_of_a_container_around_it(node: Node) -> None:
+    assert render_notion([node])
 
 
 def test_notion_special_characters_are_escaped_in_text_but_not_in_code_or_link_urls() -> None:

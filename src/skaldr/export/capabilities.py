@@ -34,6 +34,7 @@ InlineCodeFeature = Literal[
     "inline code holding a closing tag in a table cell",
     "inline code holding a closing tag in a coloured, highlighted or underlined span",
 ]
+CodeLineFeature = Literal["code line reading as a tag of the container around it"]
 TextNumberingFeature = Literal["list numbered with letters or roman numerals"]
 FencedInAListItemFeature = Literal[
     "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step"
@@ -72,6 +73,7 @@ Feature = Literal[
     SameDocumentLinkFeature,
     OtherDocumentLinkFeature,
     InlineCodeFeature,
+    CodeLineFeature,
     TextNumberingFeature,
     FencedInAListItemFeature,
     ListInAQuoteFeature,
@@ -177,6 +179,15 @@ class InlineCode:
 
 
 @dataclass(frozen=True)
+class CodeLine:
+    line: str
+    container: str
+    feature: CodeLineFeature = field(
+        default="code line reading as a tag of the container around it", init=False
+    )
+
+
+@dataclass(frozen=True)
 class TextNumbering:
     numbering: Literal["letters", "roman numerals"]
     feature: TextNumberingFeature = field(default="list numbered with letters or roman numerals", init=False)
@@ -265,6 +276,7 @@ Details = (
     | SameDocumentLink
     | OtherDocumentLink
     | InlineCode
+    | CodeLine
     | TextNumbering
     | FencedInAListItem
     | ListInAQuote
@@ -613,6 +625,20 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "code line reading as a tag of the container around it": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion reads the code line '{line}' as a tag of the {container} around it "
+                "and breaks the rest of the page there",
+                "change that line of the code, or move the code block out of the {container}",
+                in_the_guide="Notion reads a code line that is only a callout, details, column or tab tag "
+                "(`<callout>`, `</callout>`, `<details>`, `</details>`, `<column>`, `</column>`, `<tab>` "
+                "or `</tab>`) as a tag of the callout, toggle, column or tab around the code block, which "
+                "breaks the rest of the page; change that line of the code, or move the code block out of "
+                "the container",
+            )
+        }
+    ),
     "list numbered with letters or roman numerals": _kept_except(
         {
             "adf": Rejection(
@@ -787,6 +813,14 @@ GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
     "callout": "callout inside a grid cell",
     "divider": "divider inside a grid cell",
 }
+
+
+def code_line_reading_as_a_container_tag(content: str, containers: Iterable[str]) -> CodeLine | None:
+    tags = {tag: container for container in containers for tag in (f"<{container}>", f"</{container}>")}
+    return next(
+        (CodeLine(line.strip(), tags[line.strip()]) for line in content.split("\n") if line.strip() in tags),
+        None,
+    )
 
 
 def swaps(feature: Feature, target: ExportTarget) -> bool:

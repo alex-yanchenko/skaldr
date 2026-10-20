@@ -179,6 +179,7 @@ TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "link to a heading of the same document": {"notion": "reject", "adf": "reject", "slack": "reject"},
     "link to another skaldr document": {"notion": "reject", "adf": "reject", "slack": "reject"},
     "inline code holding a backtick": {"notion": "reject"},
+    "code line reading as a tag of the container around it": {"notion": "reject"},
     "inline code holding a closing tag in a table cell": {"notion": "reject"},
     "inline code holding a closing tag in a coloured, highlighted or underlined span": {"notion": "reject"},
     "highlight span inside a toned walkthrough step title": {"notion": "reject"},
