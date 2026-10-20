@@ -269,9 +269,15 @@ def test_placeholder_keys_and_items_are_dropped_at_every_depth() -> None:
     "example", [pytest.param(example, id=f"line-{example.line}") for example in _BUILDABLE]
 )
 def test_a_guide_example_builds_when_copied(example: GuideExample) -> None:
-    html = render_html(parse_report(_as_document(example)))
+    document = _as_document(example)
+    report = parse_report(document)
 
-    assert html.startswith("<!doctype html>")
+    html = render_html(report)
+
+    assert (html.startswith("<!doctype html>"), [block.type for block in report.blocks]) == (
+        True,
+        [block["type"] for block in document.get("blocks", [])],
+    )
 
 
 def _readme_block_list(readme: str) -> str:
