@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Literal
 
 from skaldr.export.slack import CANVAS_ESCAPES, CANVAS_FENCE, LIST_SEPARATOR
@@ -226,6 +226,38 @@ class KeyedCanvas:
     @property
     def archived(self) -> bool:
         return self.title.endswith(ARCHIVED_TITLE_MARKER)
+
+    @property
+    def _keys_holding_only_what_skaldr_published(self) -> frozenset[str]:
+        roles: defaultdict[str | None, set[BlockRole]] = defaultdict(set[BlockRole])
+        for block in self.content:
+            roles[block.key].add(block.role)
+        return frozenset(
+            key
+            for key, held in roles.items()
+            if key is not None and "published" in held and "added" not in held
+        )
+
+    def in_the_markdown_skaldr_wrote(
+        self, rendered: Mapping[str, str], saved: "KeyedCanvas"
+    ) -> "KeyedCanvas":
+        owned = {
+            key for key in saved._keys_holding_only_what_skaldr_published if rendered.get(key, "").strip()
+        }
+        content: list[CanvasBlock] = []
+        written: set[str] = set()
+        for position in range(self.content_start, self.content_end):
+            block, as_saved = self.blocks[position], saved.blocks[position]
+            key = as_saved.key
+            if key is None or as_saved.role != "published" or key not in owned:
+                content.append(block)
+            elif key not in written:
+                written.add(key)
+                texts = canvas_blocks(rendered[key].strip("\n"))
+                content += [CanvasBlock(text, block.key, "published") for text in texts]
+        blocks = (*self.blocks[: self.content_start], *content, *self.blocks[self.content_end :])
+        stamp_at = None if self.stamp_at is None else self.content_start + len(content)
+        return replace(self, blocks=blocks, stamp_at=stamp_at)
 
     def positions_of(self, key: str) -> list[int]:
         return [

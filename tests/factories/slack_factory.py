@@ -17,6 +17,20 @@ MENTION = re.compile(r"!\[\]\(([@#][A-Z0-9]+)\)")
 FENCE = re.compile(r"`{3,}")
 SEPARATOR_CELL = re.compile(r":?-{3,}:?")
 LIST_ITEM = re.compile(r"(?:\*|\d+\.) ")
+ESCAPED_CHARACTER = re.compile(r"\\([\\*_`~\[\]()<>])")
+MASK_BASE = 0xE000
+MASKED_CHARACTER = re.compile(f"[{chr(MASK_BASE)}-{chr(MASK_BASE + 0x7F)}]")
+FORMATTING = (
+    (re.compile(r"\*(?=\S)([^*]*?\S)\*"), r"<i>\1</i>"),
+    (re.compile(r"(?<!\w)_(?=\S)([^_]*?\S)_(?!\w)"), r"<i>\1</i>"),
+    (re.compile(r"~~(.+?)~~"), r"<del>\1</del>"),
+    (re.compile(r"`(.+?)`"), r"<code>\1</code>"),
+)
+LINK_WITH_TARGET = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]*)\)")
+
+
+class LinkWithNoUrlError(Exception):
+    pass
 
 
 class FakeToken:
@@ -53,6 +67,24 @@ def _stored_row(line: str) -> str:
     return "|" + "|".join(cells) + "|"
 
 
+def _masked(line: str) -> str:
+    return ESCAPED_CHARACTER.sub(lambda found: chr(MASK_BASE + ord(found.group(1))), line)
+
+
+def _unmasked(line: str) -> str:
+    return MASKED_CHARACTER.sub(lambda found: chr(ord(found.group(0)) - MASK_BASE), line)
+
+
+def _stored_text(line: str) -> str:
+    masked = _masked(line)
+    for link in LINK_WITH_TARGET.finditer(masked):
+        if not link.group(1).startswith(("http://", "https://", "mailto:")):
+            raise LinkWithNoUrlError(link.group(0))
+    for pattern, replacement in FORMATTING:
+        masked = pattern.sub(replacement, masked)
+    return _unmasked(masked)
+
+
 def _stored_block(lines: list[str]) -> str:
     if "\n".join(lines).strip() == "&nbsp;":
         return " "
@@ -65,9 +97,9 @@ def _stored_block(lines: list[str]) -> str:
         elif in_code:
             stored.append(line)
         elif line.startswith("|"):
-            stored.append(_stored_row(line))
+            stored.append(_stored_text(_stored_row(line)))
         else:
-            stored.append(MENTION.sub(r"<\1>", DASH_BULLET.sub(r"\1* ", line)))
+            stored.append(_stored_text(MENTION.sub(r"<\1>", DASH_BULLET.sub(r"\1* ", line))))
     return "\n".join(stored)
 
 
@@ -222,7 +254,10 @@ class InMemorySlack:
             self.messages.append((form["channel"], form["text"]))
             return _ok(ts="1700000000.000100")
         if method == "canvases.create":
-            return _ok(canvas_id=self.add_canvas(form["title"], form["document_content"]["markdown"]))
+            try:
+                return _ok(canvas_id=self.add_canvas(form["title"], form["document_content"]["markdown"]))
+            except LinkWithNoUrlError:
+                return _refused("canvas_creation_failed")
         canvas = self.canvases.get(form["canvas_id"])
         if canvas is None:
             return _refused("canvas_not_found")
@@ -243,7 +278,10 @@ class InMemorySlack:
         if operation == "replace" and not change["document_content"]["markdown"].strip():
             return _refused("canvas_editing_failed")
         if operation == "replace" and "section_id" not in change:
-            canvas.blocks = as_slack_stores(change["document_content"]["markdown"])
+            try:
+                canvas.blocks = as_slack_stores(change["document_content"]["markdown"])
+            except LinkWithNoUrlError:
+                return _refused("canvas_editing_failed")
         elif operation == "rename":
             canvas.title = change["title_content"]["markdown"]
         else:

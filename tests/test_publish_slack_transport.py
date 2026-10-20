@@ -16,6 +16,7 @@ from skaldr.publish.transport import (
     ItemLink,
     LinksWrite,
     NewItem,
+    PublishedSections,
     Release,
     RemoteItem,
     RemoveSection,
@@ -980,6 +981,147 @@ def test_links_rewrite_the_stamp_block_in_place_with_one_replace() -> None:
         ],
         STORED.replace(STAMP_LINE, linked_stamp),
     )
+
+
+LITERAL = r"Stars \*star\* and snake\_case."
+LITERAL_AS_SLACK_STORES = "Stars *star* and snake_case."
+SECOND = r"Second \_one\_."
+SECOND_AS_SLACK_STORES = "Second _one_."
+LITERAL_CONTENT = ItemContent(
+    title=TITLE_TEXT, sections={"intro": f"{LITERAL}\n\n{SECOND}\n", "tools": "Tools.\n"}
+)
+LINKED_STAMP = f"{STAMP_LINE} · Jira [DEMO-12](https://example.atlassian.net/browse/DEMO-12)"
+SAVED_LITERAL_SECTIONS = {
+    "intro": f"{LITERAL_AS_SLACK_STORES}\n\n{SECOND_AS_SLACK_STORES}\n",
+    "tools": "Tools.\n",
+}
+PUBLISHED_LITERAL = PublishedSections(LITERAL_CONTENT.sections, SAVED_LITERAL_SECTIONS)
+STORED_LITERAL_BODY = f"{LITERAL_AS_SLACK_STORES}\n\n{SECOND_AS_SLACK_STORES}\n\nTools.\n\n{LINKED_STAMP}\n"
+
+
+def _a_canvas_holding_literal_characters(slack: InMemorySlack, transport: SlackTransport) -> RemoteItem:
+    created = transport.create_item(NewItem(UNLINKED, STAMP, LITERAL_CONTENT))
+    slack.forget_requests()
+    return created
+
+
+def test_links_keep_the_sections_as_skaldr_wrote_them() -> None:
+    slack = InMemorySlack()
+    transport = slack.transport()
+    read = _a_canvas_holding_literal_characters(slack, transport)
+
+    transport.write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,), published=PUBLISHED_LITERAL))
+
+    assert (slack.requests, slack.markdown_of(CANVAS), dict(read.raw_sections)) == (
+        [
+            _read_call(),
+            _replace_call(f"{LITERAL}\n\n{SECOND}\n\nTools.\n\n{LINKED_STAMP}\n"),
+            _read_call(),
+        ],
+        f"# {TITLE_TEXT}\n\n{STORED_LITERAL_BODY}",
+        SAVED_LITERAL_SECTIONS,
+    )
+
+
+def test_a_section_edited_by_hand_since_skaldr_saved_it_is_sent_as_slack_stored_it() -> None:
+    slack = InMemorySlack()
+    transport = slack.transport()
+    _a_canvas_holding_literal_characters(slack, transport)
+    slack.edit_by_hand(CANVAS, SECOND_AS_SLACK_STORES, "Second, edited.")
+    slack.forget_requests()
+
+    transport.write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,), published=PUBLISHED_LITERAL))
+
+    assert slack.requests[1] == _replace_call(
+        f"{LITERAL_AS_SLACK_STORES}\n\nSecond, edited.\n\nTools.\n\n{LINKED_STAMP}\n"
+    )
+
+
+def test_a_section_skaldr_has_no_rendered_text_for_is_sent_as_slack_stored_it() -> None:
+    slack = InMemorySlack()
+    transport = slack.transport()
+    _a_canvas_holding_literal_characters(slack, transport)
+    published = PublishedSections({"tools": "Tools.\n"}, SAVED_LITERAL_SECTIONS)
+
+    transport.write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,), published=published))
+
+    assert slack.requests[1] == _replace_call(STORED_LITERAL_BODY)
+
+
+def test_a_section_skaldr_has_blank_rendered_text_for_is_sent_as_slack_stored_it() -> None:
+    slack = InMemorySlack()
+    transport = slack.transport()
+    _a_canvas_holding_literal_characters(slack, transport)
+    published = PublishedSections({"intro": "\n", "tools": "Tools.\n"}, SAVED_LITERAL_SECTIONS)
+
+    transport.write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,), published=published))
+
+    assert slack.requests[1] == _replace_call(STORED_LITERAL_BODY)
+
+
+def test_a_blank_paragraph_inside_a_section_stays_where_slack_has_it() -> None:
+    slack = InMemorySlack()
+    transport = slack.transport()
+    _a_canvas_holding_literal_characters(slack, transport)
+    slack.add_block_by_hand(CANVAS, 1, " ")
+
+    transport.write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,), published=PUBLISHED_LITERAL))
+
+    assert slack.requests[1] == _replace_call(
+        f"{LITERAL}\n\n{SECOND}\n\n&nbsp;\n\nTools.\n\n{LINKED_STAMP}\n"
+    )
+
+
+def test_sections_skaldr_saved_no_copy_of_are_sent_as_slack_stored_them() -> None:
+    slack = InMemorySlack()
+    transport = slack.transport()
+    _a_canvas_holding_literal_characters(slack, transport)
+
+    transport.write_links(CANVAS, LinksWrite(STAMP, (DEMO_12,)))
+
+    assert slack.requests[1] == _replace_call(STORED_LITERAL_BODY)
+
+
+def test_a_section_of_several_blocks_is_sent_whole_in_the_place_of_its_first_block() -> None:
+    slack = InMemorySlack()
+    transport = slack.transport()
+    read = _a_canvas_holding_literal_characters(slack, transport)
+
+    transport.write_section(
+        CANVAS,
+        SectionRequest(
+            RemoveSection("tools", read.raw_sections["tools"]),
+            read.raw_sections,
+            STAMP,
+            PUBLISHED_LITERAL,
+        ),
+    )
+
+    assert slack.requests[1] == _replace_call(f"{LITERAL}\n\n{SECOND}\n\n{STAMP_LINE}\n")
+
+
+def test_a_fields_write_on_an_unstamped_canvas_keeps_the_sections_as_skaldr_wrote_them() -> None:
+    slack = InMemorySlack()
+    canvas_id = slack.add_canvas(TITLE_TEXT, f"{LITERAL}\n")
+    transport = slack.transport()
+    transport.read_item(
+        canvas_id, ItemContent(title=TITLE_TEXT, sections={"intro": f"{LITERAL_AS_SLACK_STORES}\n"})
+    )
+    slack.forget_requests()
+
+    transport.write_fields(
+        canvas_id,
+        FieldsWrite(
+            TITLE_TEXT,
+            {},
+            TITLE_TEXT,
+            {},
+            STAMP,
+            published=PublishedSections({"intro": f"{LITERAL}\n"}, {"intro": f"{LITERAL_AS_SLACK_STORES}\n"}),
+        ),
+    )
+
+    assert slack.requests[1] == _replace_call(f"{LITERAL}\n\n{STAMP_LINE}\n", canvas_id)
 
 
 def test_links_on_an_unstamped_canvas_add_the_stamp_at_the_end() -> None:

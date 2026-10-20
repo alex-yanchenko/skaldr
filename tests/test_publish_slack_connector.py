@@ -376,3 +376,150 @@ def test_publishing_without_a_slack_sign_in_stops_before_anything_is_sent(
         "error: Not signed in to Slack; run `skaldr auth slack`\n",
         [],
     )
+
+
+LITERAL_INTRO = (
+    r"Literal stars \*star\* and \_under\_ and \~\~x\~\~ and snake\_case and 2 \* 3 and \[a\]\(b\)."
+)
+LITERAL_INTRO_AS_STORED = "Literal stars *star* and _under_ and ~~x~~ and snake_case and 2 * 3 and [a](b)."
+LITERAL_INTRO_AS_SENT = (
+    r"Literal stars \*star\* and \_under\_ and \~\~x\~\~ and snake\_case and 2 \* 3 and \[a\](b)."
+)
+
+
+def _literal_document_stored(
+    intro: str = LITERAL_INTRO_AS_STORED, planting: str = "Sow in spring.", stamp: str = DOCUMENT_STAMP
+) -> str:
+    return f"# Garden handbook\n\nFor new members\n\n{intro}\n\n# Planting\n\n{planting}\n\n{stamp}\n"
+
+
+def _literal_document_sent(planting: str = "Sow in spring.") -> str:
+    return f"For new members\n\n{LITERAL_INTRO_AS_SENT}\n\n# Planting\n\n{planting}\n\n{DOCUMENT_STAMP}\n"
+
+
+def _literal_garden(tmp_path: Path, *, split: list[str], planting: str = "Sow in spring.") -> Path:
+    intro, _tools, section = make_garden_blocks(intro=LITERAL_INTRO, planting=planting)
+    return write_garden_report(
+        tmp_path,
+        publish=_slack_publish(split=split),
+        blocks=[intro, _tools, section] if split else [intro, section],
+    )
+
+
+def _literal_garden_published(tmp_path: Path, slack: InMemorySlack, *, split: list[str]) -> Path:
+    save_slack(make_slack_credentials())
+    path = _literal_garden(tmp_path, split=split)
+    assert main(["publish", str(path), "--apply"], registry=_registry(slack)) == 0
+    return path
+
+
+def _sent_bodies(slack: InMemorySlack) -> list[str]:
+    return [
+        form["changes"][0]["document_content"]["markdown"]
+        for method, form in slack.requests
+        if method == "canvases.edit" and form["changes"][0]["operation"] == "replace"
+    ]
+
+
+def test_linking_the_canvases_keeps_literal_characters_in_the_sections_it_does_not_change(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+
+    _literal_garden_published(tmp_path, slack, split=["tools"])
+
+    assert slack.markdown_of(DOCUMENT_CANVAS) == _literal_document_stored(stamp=DOCUMENT_STAMP_LINKING_TOOLS)
+
+
+def test_a_section_write_sends_the_other_sections_as_skaldr_wrote_them_and_not_as_slack_stored_them(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+    path = _literal_garden_published(tmp_path, slack, split=[])
+    _literal_garden(tmp_path, split=[], planting="Sow in late spring.")
+    slack.forget_requests()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (exit_code, _sent_bodies(slack), slack.markdown_of(DOCUMENT_CANVAS)) == (
+        0,
+        [_literal_document_sent("Sow in late spring.")],
+        _literal_document_stored(planting="Sow in late spring."),
+    )
+
+
+def test_an_edit_in_slack_to_a_literal_section_stops_the_publish_and_is_kept(tmp_path: Path) -> None:
+    slack = InMemorySlack()
+    path = _literal_garden_published(tmp_path, slack, split=[])
+    slack.edit_by_hand(DOCUMENT_CANVAS, LITERAL_INTRO_AS_STORED, "Rewritten in Slack.")
+    _literal_garden(tmp_path, split=[], planting="Sow in late spring.")
+    slack.forget_requests()
+
+    refused = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (refused, _sent_bodies(slack), slack.markdown_of(DOCUMENT_CANVAS)) == (
+        1,
+        [],
+        _literal_document_stored(intro="Rewritten in Slack."),
+    )
+
+
+def test_overwriting_an_edit_in_slack_writes_every_section_as_skaldr_wrote_it(tmp_path: Path) -> None:
+    slack = InMemorySlack()
+    path = _literal_garden_published(tmp_path, slack, split=[])
+    slack.edit_by_hand(DOCUMENT_CANVAS, "Sow in spring.", "Sow in June.")
+    slack.edit_by_hand(DOCUMENT_CANVAS, LITERAL_INTRO_AS_STORED, "Rewritten in Slack.")
+    refused = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    slack.forget_requests()
+
+    overwritten = main(["publish", str(path), "--apply", "--overwrite"], registry=_registry(slack))
+
+    assert (refused, overwritten, _sent_bodies(slack), slack.markdown_of(DOCUMENT_CANVAS)) == (
+        1,
+        0,
+        [_literal_document_sent("Sow in June."), _literal_document_sent()],
+        _literal_document_stored(),
+    )
+
+
+def test_a_publish_stopped_before_its_write_landed_sends_the_untouched_sections_as_skaldr_wrote_them(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+    path = _literal_garden_published(tmp_path, slack, split=[])
+    _literal_garden(tmp_path, split=[], planting="Sow in late spring.")
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5)
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    slack.forget_requests()
+
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (stopped, finished, _sent_bodies(slack), slack.markdown_of(DOCUMENT_CANVAS)) == (
+        1,
+        0,
+        [_literal_document_sent("Sow in late spring.")],
+        _literal_document_stored(planting="Sow in late spring."),
+    )
+
+
+def test_a_publish_whose_write_landed_but_was_not_read_back_leaves_the_untouched_sections_alone(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+    path = _literal_garden_published(tmp_path, slack, split=[])
+    _literal_garden(tmp_path, split=[], planting="Sow in late spring.")
+    slack.forget_requests()
+    slack.fail_next("canvases.getContent", "internal_error", after=2)
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    sent_before = _sent_bodies(slack)
+    slack.forget_requests()
+
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (stopped, len(sent_before), finished, _sent_bodies(slack), slack.markdown_of(DOCUMENT_CANVAS)) == (
+        1,
+        1,
+        0,
+        [],
+        _literal_document_stored(planting="Sow in late spring."),
+    )

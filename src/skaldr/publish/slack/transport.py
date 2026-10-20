@@ -28,12 +28,14 @@ from skaldr.publish.slack.canvas_markdown import (
     with_the_stamp_line,
 )
 from skaldr.publish.transport import (
+    NO_PUBLISHED,
     AddSection,
     ContentWrite,
     FieldsWrite,
     ItemLink,
     LinksWrite,
     NewItem,
+    PublishedSections,
     RawSections,
     Release,
     RemoteItem,
@@ -63,6 +65,14 @@ def _canvas_named(canvas_id: str) -> str:
 
 def _named_fields(request: FieldsWrite) -> list[str]:
     return list(dict.fromkeys([*request.changed_fields, *request.cleared_fields]))
+
+
+def _as_skaldr_wrote_it(
+    markdown: str, layout: Mapping[str, str], published: PublishedSections
+) -> KeyedCanvas:
+    return keyed_canvas(markdown, layout).in_the_markdown_skaldr_wrote(
+        published.rendered, keyed_canvas(markdown, published.saved)
+    )
 
 
 def warn_on_stderr(message: str) -> None:
@@ -103,7 +113,7 @@ class SlackTransport:
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         change = request.change
-        keyed = self._unchanged_since_read(item_id, request.raw_sections)
+        keyed = self._unchanged_since_read(item_id, request.raw_sections, request.published)
         current = dict(request.raw_sections)
         if not isinstance(change, AddSection) and current.get(change.key) != change.raw_current:
             raise WriteRejectedError(
@@ -131,7 +141,7 @@ class SlackTransport:
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
         layout = self._read.layouts.get(item_id, {})
-        keyed = keyed_canvas(self._markdown(item_id), layout)
+        keyed = _as_skaldr_wrote_it(self._markdown(item_id), layout, request.published)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
         named = _named_fields(request)
@@ -208,7 +218,7 @@ class SlackTransport:
 
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
         layout = self._read.layouts.get(item_id, {})
-        keyed = keyed_canvas(self._markdown(item_id), layout)
+        keyed = _as_skaldr_wrote_it(self._markdown(item_id), layout, request.published)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
         if request.changes_nothing:
@@ -285,10 +295,13 @@ class SlackTransport:
         self._read.note_written(item_id, layout)
         return self._remote(item_id, self._markdown(item_id), layout)
 
-    def _unchanged_since_read(self, item_id: str, raw_sections: RawSections) -> KeyedCanvas:
-        keyed = keyed_canvas(self._markdown(item_id), raw_sections)
+    def _unchanged_since_read(
+        self, item_id: str, raw_sections: RawSections, published: PublishedSections = NO_PUBLISHED
+    ) -> KeyedCanvas:
+        markdown = self._markdown(item_id)
+        keyed = keyed_canvas(markdown, raw_sections)
         refuse_a_change_since_the_read(_canvas_named(item_id), raw_sections, keyed.raw_sections)
-        return keyed
+        return _as_skaldr_wrote_it(markdown, raw_sections, published)
 
     def _create_into(self, item_id: str, request: NewItem, markdown: str) -> RemoteItem:
         title = request.content.title

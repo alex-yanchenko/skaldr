@@ -12,7 +12,14 @@ from skaldr.publish.jira.transport import global_id_refusal
 from skaldr.publish.plan import ItemRef, published_item
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import PublishedItem, PublishState, save_state
-from skaldr.publish.transport import LinksWrite, RemoteItem, ShownLink, Stamp
+from skaldr.publish.transport import (
+    NO_PUBLISHED,
+    LinksWrite,
+    PublishedSections,
+    RemoteItem,
+    ShownLink,
+    Stamp,
+)
 from skaldr.publish_block import TargetBase
 from skaldr.publish_block.notion import DASHLESS_PAGE_ID_LENGTH
 from skaldr.services import SERVICE_NAMES
@@ -137,7 +144,10 @@ class _LinkPlanner:
         wanted = [(partner, self.paired_link(partner)) for partner in partners]
         links = tuple(link for _, link in wanted if link is not None)
         current = () if held is None else self.current_links(ref, held)
-        write = LinksWrite(self.stamp(ref), links, current)
+        published = (
+            NO_PUBLISHED if held is None else PublishedSections(held.rendered.sections, held.remote.sections)
+        )
+        write = LinksWrite(self.stamp(ref), links, current, published)
         sent = set(write.sent)
         linked = [
             LinkStep(ref, "link", partner.label) for partner, link in wanted if link is None or link in sent
