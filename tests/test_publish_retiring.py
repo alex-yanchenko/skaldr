@@ -27,6 +27,7 @@ from tests.factories.publish_factory import (
     INTO_LABEL,
     INTRO_KEY,
     LOST_WRITE,
+    REFUSED_WRITE,
     TARGET_LABEL,
     FakeTransport,
     fake_registry,
@@ -139,6 +140,29 @@ def test_an_item_a_person_edited_is_refused_before_its_archive_starts(tmp_path: 
         ),
         [],
         False,
+    )
+
+
+def test_an_archive_the_service_rejected_checks_for_edits_again_on_the_next_run(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path)
+    apply_publish(_prepared(path, transport))
+    write_garden_report(tmp_path, publish=RETIRED)
+    transport.fail_on_write(1)
+    with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
+        apply_publish(_prepared(path, transport))
+    transport.stop_failing()
+    transport.edit_section_by_hand("page-2", "tools", PERSONS_TEXT)
+    transport.forget_calls()
+
+    outcome = apply_publish(_prepared(path, transport))
+
+    assert (outcome, transport.writes()) == (
+        Refused(
+            (RemoteEdit(TOOLS, section_part("tools"), None, TOOLS_TEXT, PERSONS_TEXT, None, None),),
+            "edited",
+        ),
+        [],
     )
 
 
