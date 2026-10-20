@@ -45,6 +45,7 @@ from skaldr.errors import AuthError
 from skaldr.services import Service
 from tests.conftest import REPO_ROOT
 from tests.factories.auth_factory import (
+    CREDENTIAL_ENVIRONMENT_VARIABLES,
     HEX_WORKSPACE_ID,
     OTHER_WORKSPACE_ID,
     SITE_ON_ANOTHER_PORT,
@@ -1407,6 +1408,12 @@ def test_a_jira_site_in_the_environment_off_jira_cloud_is_refused(
         load_jira()
 
     assert str(raised.value) == f"JIRA_SITE: {refusal}"
+
+
+def test_the_environment_variables_the_suite_clears_are_the_ones_the_store_reads() -> None:
+    read_by_the_store = (*store.NOTION_ENVIRONMENT, *store.JIRA_ENVIRONMENT, *store.SLACK_ENVIRONMENT)
+
+    assert read_by_the_store == CREDENTIAL_ENVIRONMENT_VARIABLES
 
 
 def test_jira_credentials_hold_only_an_https_origin() -> None:

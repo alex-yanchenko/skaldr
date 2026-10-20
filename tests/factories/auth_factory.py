@@ -33,6 +33,15 @@ OTHER_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
 HEX_WORKSPACE_ID = "abcdef01-2345-4678-89ab-cdef01234567"
 SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
 SITE_ON_ANOTHER_PORT = "https://example.atlassian.net:8443"
+CREDENTIAL_ENVIRONMENT_VARIABLES = (
+    "NOTION_ACCESS_TOKEN",
+    "NOTION_CLIENT_ID",
+    "NOTION_CLIENT_SECRET",
+    "JIRA_SITE",
+    "JIRA_EMAIL",
+    "JIRA_API_TOKEN",
+    "SLACK_USER_TOKEN",
+)
 
 
 def rendered_traceback(error: BaseException) -> str:
