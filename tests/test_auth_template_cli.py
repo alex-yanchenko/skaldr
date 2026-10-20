@@ -68,10 +68,11 @@ def test_the_template_command_checks_the_page_and_stores_it_for_the_workspace(
 
     exit_code = auth_cli.main(["template", "notion", link], transport=notion.mock())
 
-    assert (exit_code, notion_templates(), _paths(notion), capsys.readouterr().out) == (
+    assert (exit_code, notion_templates(), _paths(notion), notion.closes, capsys.readouterr().out) == (
         0,
         {WORKSPACE_ID: TEMPLATE_PAGE},
         [("GET", f"/v1/pages/{TEMPLATE_PAGE}"), ("GET", f"/v1/pages/{TEMPLATE_PAGE}/markdown")],
+        1,
         f"Notion workspace Example Workspace: new pages are created from template page {TEMPLATE_PAGE}.\n"
         f"{FULL_WIDTH_NOTICE}",
     )
@@ -208,6 +209,28 @@ def test_a_sign_in_without_a_workspace_id_cannot_hold_a_template(
         {},
         "error: The Notion sign-in for workspace Example Workspace has no workspace id, so it cannot hold a "
         "template; run `skaldr auth notion` again\n",
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        pytest.param(["template", "notion", TEMPLATE_LINK], id="set"),
+        pytest.param(["template", "notion", "--clear"], id="clear"),
+        pytest.param(["template", "notion"], id="show"),
+    ],
+)
+def test_the_template_command_names_the_entry_it_cannot_read_and_how_to_remove_it(
+    arguments: list[str], keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
+) -> None:
+    keychain.entries[("skaldr", "notion")] = "not json"
+
+    exit_code = auth_cli.main(arguments, transport=_notion().mock())
+
+    assert (exit_code, capsys.readouterr().err) == (
+        1,
+        "error: The keychain entry for notion is unreadable; run `skaldr auth logout notion legacy` to "
+        "remove it, then run `skaldr auth notion` again\n",
     )
 
 

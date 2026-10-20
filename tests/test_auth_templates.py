@@ -41,8 +41,8 @@ def test_a_template_is_stored_by_workspace_id_in_a_plain_json_file() -> None:
     )
 
 
-def test_a_workspace_without_an_id_has_no_template() -> None:
-    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+def test_a_workspace_without_an_id_has_no_template_even_beside_an_entry_named_none() -> None:
+    templates.template_file().write_text(json.dumps({"None": TEMPLATE_PAGE}), encoding="utf-8")
 
     assert notion_template_for(None) is None
 

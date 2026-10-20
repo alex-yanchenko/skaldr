@@ -7,8 +7,8 @@ import pytest
 from skaldr.errors import CreatedButUnfinishedError, WriteRejectedError
 from skaldr.publish.content import ItemContent
 from skaldr.publish.transport import NewItem, Stamp
-from skaldr.publish_block import NotionTarget
-from tests.factories import NOTION_PAGE_ID, make_notion_target
+from skaldr.publish_block import JiraTarget, NotionTarget
+from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target
 from tests.factories.notion_factory import InMemoryNotion, Scripted, numbered_id
 
 PARENT_PAGE_ID = "fedcba9876543210fedcba9876543210"
@@ -335,6 +335,19 @@ def test_a_fill_that_fails_after_the_templated_create_is_not_a_rejected_write_be
         f"content of page {FIRST_PAGE}: refused (validation_error); the next publish records it",
         "",
     )
+
+
+def test_a_page_created_for_a_target_of_another_service_is_never_created_from_a_template() -> None:
+    notion = _notion()
+
+    notion.transport(_workspace_template(TEMPLATE_PAGE)).create_item(
+        NewItem(JiraTarget.model_validate(make_jira_target()), STAMP, CONTENT, parent_id=PARENT_PAGE_ID)
+    )
+
+    assert (
+        "template" in json.dumps(_sent(notion)),
+        [path for _, path, _ in _sent(notion) if TEMPLATE_PAGE in path],
+    ) == (False, [])
 
 
 def test_writing_into_an_existing_page_is_not_created_from_a_template() -> None:
