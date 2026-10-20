@@ -14,7 +14,16 @@ from skaldr.export.notion import render_notion
 from skaldr.export.slack import render_slack
 from skaldr.export.tree import BlockRegion, ListEntry, ListNode, LoweredDocument, Node, Paragraph, TableCell
 from skaldr.export_targets import ExportTarget
-from skaldr.models import BUILT_BY_AN_INDEX, AnyBlock, AuthoredBlock, Part, Report, Text, parse_report
+from skaldr.models import (
+    BUILT_BY_AN_INDEX,
+    AnyBlock,
+    AuthoredBlock,
+    Part,
+    Report,
+    Request,
+    Text,
+    parse_report,
+)
 from skaldr.richtext import Plain, Rich
 from tests.factories.example_factory import EXAMPLE, example_for
 from tests.factories.report_factory import make_index_report, make_report
@@ -107,6 +116,10 @@ def parsed_block(kind: type[BlockT], block: dict[str, Any], **overrides: Any) ->
     if not isinstance(parsed, kind):
         raise TypeError(f"expected a {kind.__name__} block, got {type(parsed).__name__}")
     return parsed
+
+
+def parsed_request(block: dict[str, Any]) -> Request:
+    return parsed_block(Request, block)
 
 
 def dumped_text(body: str) -> dict[str, Any]:

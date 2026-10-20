@@ -1,5 +1,3 @@
-"""Factories building raw (YAML-shaped) report payloads with sensible defaults + overrides."""
-
 from typing import Any
 
 
