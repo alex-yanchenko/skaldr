@@ -13,28 +13,25 @@ from tests.factories import make_report
 
 GUIDE = package_text("skill/GUIDE.md")
 STARTER = package_text("skill/plan-starter.yaml")
-STARTER_PLACEHOLDERS = (
-    "date, decision-one, decision-two, finished-step, first-action, mistake-to-avoid, one-line-summary, "
-    "plan-title, reason-one, reason-two, second-action, step-in-progress, step-not-started, "
-    "step-waiting-on-something, what-done-looks-like-and-why-it-matters"
+STARTER_BLANKS = (
+    ("date", "meta.updated"),
+    ("decision-one", "blocks.3.items.0"),
+    ("decision-two", "blocks.3.items.1"),
+    ("finished-step", "blocks.5.items.0.text"),
+    ("first-action", "blocks.7.items.0"),
+    ("mistake-to-avoid", "blocks.9.items.0"),
+    ("one-line-summary", "meta.subtitle"),
+    ("plan-title", "meta.title"),
+    ("reason-one", "blocks.3.items.0"),
+    ("reason-two", "blocks.3.items.1"),
+    ("second-action", "blocks.7.items.1"),
+    ("step-in-progress", "blocks.5.items.1.text"),
+    ("step-not-started", "blocks.5.items.2.text"),
+    ("step-waiting-on-something", "blocks.5.items.3.text"),
+    ("what-done-looks-like-and-why-it-matters", "blocks.1.body"),
 )
-STARTER_PLACEHOLDER_LOCATIONS = (
-    "      date: meta.updated\n"
-    "      decision-one: blocks.3.list\n"
-    "      decision-two: blocks.3.list\n"
-    "      finished-step: blocks.5.status_list\n"
-    "      first-action: blocks.7.list\n"
-    "      mistake-to-avoid: blocks.9.list\n"
-    "      one-line-summary: meta.subtitle\n"
-    "      plan-title: meta.title\n"
-    "      reason-one: blocks.3.list\n"
-    "      reason-two: blocks.3.list\n"
-    "      second-action: blocks.7.list\n"
-    "      step-in-progress: blocks.5.status_list\n"
-    "      step-not-started: blocks.5.status_list\n"
-    "      step-waiting-on-something: blocks.5.status_list\n"
-    "      what-done-looks-like-and-why-it-matters: blocks.1.callout\n"
-)
+STARTER_PLACEHOLDERS = ", ".join(name for name, _ in STARTER_BLANKS)
+STARTER_PLACEHOLDER_LOCATIONS = "".join(f"      {name}: {place}\n" for name, place in STARTER_BLANKS)
 GUIDE_STARTER_SECTION = re.compile(r"^## Working plan starter\n(.*?)(?=^## |\Z)", re.DOTALL | re.MULTILINE)
 FENCED_YAML = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 

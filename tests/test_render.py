@@ -53,6 +53,7 @@ from tests.factories import (
     make_query_request,
     make_reconciled_table,
     make_report,
+    make_request,
     make_step,
     make_tab,
     make_table,
@@ -60,6 +61,7 @@ from tests.factories import (
     make_toggle,
     markdown_of,
     notion_of,
+    write_index_document,
 )
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
@@ -3614,12 +3616,74 @@ def test_placeholder_locations_name_the_block_or_meta_field_that_holds_each_blan
         )
     )
 
-    assert placeholder_locations(report, find_placeholders(report)) == {
-        "owner": ["blocks.1.section.blocks.0.callout"],
+    assert placeholder_locations(report) == {
+        "owner": ["blocks.1.blocks.0.body"],
         "team": ["meta.title"],
-        "ticket": ["blocks.0.text", "blocks.1.section"],
+        "ticket": ["blocks.0.body"],
         "when": ["meta.date"],
     }
+
+
+def test_a_section_title_is_plain_text_so_only_its_body_holds_a_blank() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[
+                {
+                    "type": "section",
+                    "title": "Open {{ticket}}",
+                    "blocks": [{"type": "text", "body": "About {{ticket}} and {{owner}}."}],
+                }
+            ]
+        )
+    )
+
+    assert placeholder_locations(report) == {
+        "owner": ["blocks.0.blocks.0.body"],
+        "ticket": ["blocks.0.blocks.0.body"],
+    }
+
+
+def test_backticks_in_two_paragraphs_do_not_hide_a_blank_from_its_location() -> None:
+    report = parse_report(
+        make_report(blocks=[{"type": "text", "body": "one ` tick\n\nthen {{tail}} and ` more"}])
+    )
+
+    assert (find_placeholders(report), placeholder_locations(report)) == (
+        ["tail"],
+        {"tail": ["blocks.0.body"]},
+    )
+
+
+def test_a_declared_request_variable_is_not_a_location_of_a_blank_with_its_name() -> None:
+    report = parse_report(
+        make_report(
+            blocks=[make_request(), {"type": "text", "body": "Call {{host}} first."}],
+        )
+    )
+
+    assert (find_placeholders(report), placeholder_locations(report)) == (
+        ["host"],
+        {"host": ["blocks.1.body"]},
+    )
+
+
+def test_an_undeclared_request_variable_is_located_at_its_request_block() -> None:
+    report = parse_report(make_report(blocks=[make_request(variables=[])]))
+
+    assert placeholder_locations(report) == {"host": ["blocks.0.request"]}
+
+
+def test_every_counted_blank_has_a_location_and_nothing_else_does(tmp_path: Path) -> None:
+    first = make_report(meta={"title": "A"}, blocks=[{"type": "text", "body": "A {{x}} and `{{code}}`."}])
+    second = make_report(
+        meta={"title": "B"}, blocks=[{"type": "text", "body": "B {{x}}, {{ y }}, \\{{lit}}."}]
+    )
+    index = write_index_document(tmp_path, {"a.yaml": first, "b.yaml": second})
+
+    report = load_report(index)
+
+    assert (list(placeholder_locations(report)), find_placeholders(report)) == (["x", "y"], ["x", "y"])
+    assert placeholder_locations(report)["x"] == ["blocks.0.blocks.0.body", "blocks.1.blocks.0.body"]
 
 
 def test_report_with_no_placeholders_collects_nothing() -> None:

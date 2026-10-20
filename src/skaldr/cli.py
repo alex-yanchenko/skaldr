@@ -816,7 +816,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
                 f"FAIL  {path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
                 file=sys.stderr,
             )
-            for name, places in placeholder_locations(report, unfilled).items():
+            for name, places in placeholder_locations(report).items():
                 print(f"      {name}: {', '.join(places)}", file=sys.stderr)
         elif unfilled:
             print(f"OK    {path}  ({_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)})")

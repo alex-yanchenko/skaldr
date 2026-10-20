@@ -3154,11 +3154,14 @@ def unresolvable_request_variables(blocks: Sequence[AnyBlock]) -> set[str]:
     still catch."""
     names: set[str] = set()
     for block in iter_requests(blocks):
-        if isinstance(block, RequestFlow):
-            names |= block.unresolved_variables()
-        else:
-            names |= block.referenced_variables() - block.resolvable_variables()
+        names |= unresolved_request_variables(block)
     return names
+
+
+def unresolved_request_variables(block: Request | RequestFlow) -> set[str]:
+    if isinstance(block, RequestFlow):
+        return block.unresolved_variables()
+    return block.referenced_variables() - block.resolvable_variables()
 
 
 def iter_referenced_badge_keys(blocks: Sequence[AnyBlock]) -> Iterator[str]:

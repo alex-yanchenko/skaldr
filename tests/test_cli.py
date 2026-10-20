@@ -822,8 +822,8 @@ def test_check_strict_fails_on_placeholders_inside_a_link_label_and_url(
     assert (exit_code, capsys.readouterr().err) == (
         1,
         f"FAIL  {data_path}: 2 unfilled placeholders: pr, ticket\n"
-        "      pr: blocks.0.text\n"
-        "      ticket: blocks.0.text\n"
+        "      pr: blocks.0.body\n"
+        "      ticket: blocks.0.body\n"
         "\n1 file failed\n",
     )
 
@@ -842,9 +842,9 @@ def test_check_strict_lists_where_each_unfilled_placeholder_sits(
     assert (exit_code, capsys.readouterr().err) == (
         1,
         f"FAIL  {data_path}: 3 unfilled placeholders: url, when, who\n"
-        "      url: blocks.0.text, blocks.1.section.blocks.0.text\n"
+        "      url: blocks.0.body, blocks.1.blocks.0.body\n"
         "      when: meta.date\n"
-        "      who: blocks.1.section.blocks.0.text\n"
+        "      who: blocks.1.blocks.0.body\n"
         "\n1 file failed\n",
     )
 

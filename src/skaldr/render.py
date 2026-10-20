@@ -7,8 +7,7 @@ content file can never smuggle in raw HTML.
 """
 
 import re
-from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date
 from functools import partial
@@ -18,7 +17,7 @@ from typing import Any, Final, NoReturn, cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 from markupsafe import Markup, escape
-from pydantic import JsonValue, NonNegativeInt, TypeAdapter, ValidationError
+from pydantic import NonNegativeInt, TypeAdapter, ValidationError
 
 from skaldr import compute
 from skaldr.charts import chart_legend, chart_svg
@@ -33,15 +32,15 @@ from skaldr.highlight import (
 from skaldr.mathml import mathml
 from skaldr.models import (
     MEDIA_KIND_LABELS,
-    AnyBlock,
     Person,
     Report,
+    Request,
+    RequestFlow,
     SectionFields,
     ToneLiteral,
-    child_blocks,
     iter_requests,
     package_text,
-    unresolvable_request_variables,
+    unresolved_request_variables,
 )
 from skaldr.prose_blocks import prose_blocks
 from skaldr.publish_block import without_publish_block
@@ -450,63 +449,50 @@ def render_html(
 
 
 def find_placeholders(report: Report) -> list[str]:
-    """Names of every unfilled blank in the report, sorted and de-duplicated, from two sources: a
-    `{{placeholder}}` in rich text, and a `{{name}}` a `request` interpolates but cannot fill from its
-    own declarations. A request variable the author did declare is a runtime blank its reader fills, so
-    it is deliberately absent. Renders once into a throwaway to reuse the rich-text traversal; the
-    --check --strict gate uses this to refuse a doc that still has blanks."""
-    seen: set[str] = set()
-    _render(report, "page.html.j2", placeholders=seen)
-    return sorted(seen | _meta_placeholders(report) | unresolvable_request_variables(report.blocks))
+    _render(report, "page.html.j2")
+    return list(placeholder_locations(report))
 
 
 _META_PLACEHOLDER = re.compile(r"\{\{([A-Za-z0-9_-]+)\}\}")
 
 
-def _meta_placeholders(report: Report) -> set[str]:
+def _meta_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
     meta = report.meta
-    plain_texts = [meta.title, *meta.subtitle, meta.date or "", meta.updated or ""]
-    return {name for text in plain_texts for name in _META_PLACEHOLDER.findall(text)}
+    plain_texts = {
+        "title": [meta.title],
+        "subtitle": list(meta.subtitle),
+        "date": [meta.date or ""],
+        "updated": [meta.updated or ""],
+    }
+    for field, texts in plain_texts.items():
+        for text in texts:
+            for name in _META_PLACEHOLDER.findall(text):
+                yield name, f"meta.{field}"
 
 
-_BLANK_IN_TEXT: Final = re.compile(r"(?<!\\)\{\{\s*([A-Za-z0-9_-]+)\s*\}\}")
-_CODE_SPAN: Final = re.compile(r"`[^`]*`")
-_META_FIELDS_WITH_BLANKS: Final = ("title", "subtitle", "date", "updated")
+def _rich_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
+    for path, text in compute.rich_text_strings(report):
+        names: set[str] = set()
+        render_richtext(text, placeholders=names)
+        for name in sorted(names):
+            yield name, ".".join(path)
 
 
-def _blank_counts(value: JsonValue, unfilled: frozenset[str]) -> Counter[str]:
-    if isinstance(value, str):
-        names = _BLANK_IN_TEXT.findall(_CODE_SPAN.sub("", value))
-        return Counter(name for name in names if name in unfilled)
-    if isinstance(value, dict):
-        nested = list(value.values())
-    elif isinstance(value, list):
-        nested = value
-    else:
-        return Counter()
-    total: Counter[str] = Counter()
-    for item in nested:
-        total += _blank_counts(item, unfilled)
-    return total
-
-
-def _blanks_held_by_the_block_itself(block: AnyBlock, unfilled: frozenset[str]) -> list[str]:
-    held = _blank_counts(block.model_dump(mode="json"), unfilled)
-    for child in child_blocks(block):
-        held.subtract(_blank_counts(child.model_dump(mode="json"), unfilled))
-    return sorted(+held)
-
-
-def placeholder_locations(report: Report, names: Sequence[str]) -> dict[str, list[str]]:
-    unfilled = frozenset(names)
-    found: dict[str, list[str]] = {}
-    meta = report.meta.model_dump(mode="json")
-    for field in _META_FIELDS_WITH_BLANKS:
-        for name in sorted(_blank_counts(meta[field], unfilled)):
-            found.setdefault(name, []).append(f"meta.{field}")
+def _request_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
     for path, block in report.located_blocks:
-        for name in _blanks_held_by_the_block_itself(block, unfilled):
-            found.setdefault(name, []).append(path)
+        if isinstance(block, Request | RequestFlow):
+            for name in sorted(unresolved_request_variables(block)):
+                yield name, path
+
+
+def placeholder_locations(report: Report) -> dict[str, list[str]]:
+    found: dict[str, list[str]] = {}
+    sources = (_meta_blank_locations, _rich_blank_locations, _request_blank_locations)
+    for source in sources:
+        for name, place in source(report):
+            places = found.setdefault(name, [])
+            if place not in places:
+                places.append(place)
     return {name: found[name] for name in sorted(found)}
 
 
