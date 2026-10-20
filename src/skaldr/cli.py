@@ -22,6 +22,7 @@ from skaldr.errors import (
     PublishError,
     RegionOutsideFileError,
     ReportError,
+    TargetAlreadyExistsError,
     UnknownAnchorError,
     UnknownGuideTopicError,
 )
@@ -48,7 +49,7 @@ from skaldr.render import (
     render_html,
     render_report,
 )
-from skaldr.replace_file import replace_file, resolved_path
+from skaldr.replace_file import create_file, replace_file, resolved_path
 from skaldr.version import skaldr_version
 
 _FETCH_TIMEOUT_SECONDS = 30
@@ -171,10 +172,10 @@ def _run_new(arguments: list[str]) -> int:
     if kind not in _NEW_KINDS:
         return _fail(f"unknown kind '{kind}' for `skaldr new`; the kinds are {kinds}")
     target = Path(file_name)
-    if target.exists():
-        return _fail(f"{target} already exists; pick another file name or delete it first")
     try:
-        replace_file(target, package_text(_NEW_KINDS[kind]))
+        create_file(target, package_text(_NEW_KINDS[kind]))
+    except TargetAlreadyExistsError:
+        return _fail(f"{target} already exists; pick another file name or delete it first")
     except OSError as err:
         return _fail(f"could not write {target}: {err}")
     print(f"OK  wrote the {kind} starter to {target}")

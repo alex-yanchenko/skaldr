@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from skaldr.errors import ReadOnlyFileError
-from skaldr.replace_file import replace_file
+from skaldr.errors import ReadOnlyFileError, TargetAlreadyExistsError
+from skaldr.replace_file import create_file, replace_file
 
 
 @pytest.fixture
@@ -335,3 +335,42 @@ def test_an_in_place_write_interrupted_partway_gets_the_earlier_bytes_back(
         replace_file(first, "new page")
 
     assert first.read_text(encoding="utf-8") == "earlier page"
+
+
+def test_create_file_writes_a_new_file_and_its_missing_folders(tmp_path: Path) -> None:
+    path = tmp_path / "docs" / "plan.yaml"
+
+    create_file(path, "new plan")
+
+    assert path.read_text(encoding="utf-8") == "new plan"
+
+
+def test_create_file_refuses_an_existing_file_and_leaves_it_alone(tmp_path: Path) -> None:
+    path = tmp_path / "plan.yaml"
+    path.write_text("mine", encoding="utf-8")
+
+    with pytest.raises(TargetAlreadyExistsError) as raised:
+        create_file(path, "new plan")
+
+    assert (str(raised.value), path.read_text(encoding="utf-8")) == (
+        f"[Errno {errno.EEXIST}] File exists: '{os.path.realpath(path)}'",
+        "mine",
+    )
+
+
+def test_create_file_refuses_a_folder_of_that_name(tmp_path: Path) -> None:
+    path = tmp_path / "plan.yaml"
+    path.mkdir()
+
+    with pytest.raises(TargetAlreadyExistsError):
+        create_file(path, "new plan")
+
+
+def test_create_file_writes_through_a_dangling_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "real.yaml"
+    link = tmp_path / "plan.yaml"
+    link.symlink_to(target)
+
+    create_file(link, "new plan")
+
+    assert (link.is_symlink(), target.read_text(encoding="utf-8")) == (True, "new plan")

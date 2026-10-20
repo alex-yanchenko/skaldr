@@ -73,5 +73,9 @@ class ReadOnlyFileError(PermissionError):
     pass
 
 
+class TargetAlreadyExistsError(FileExistsError):
+    pass
+
+
 class PageFetchError(OSError):
     pass

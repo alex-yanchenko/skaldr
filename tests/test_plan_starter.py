@@ -138,6 +138,28 @@ def test_new_plan_refuses_a_file_that_exists_and_leaves_it_alone(
     )
 
 
+def test_new_plan_refuses_a_file_that_appears_after_the_existence_check_and_leaves_it_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "plan.yaml"
+    target.write_text("mine", encoding="utf-8")
+
+    def missing(_path: Path) -> bool:
+        return False
+
+    monkeypatch.setattr(Path, "exists", missing)
+
+    exit_code = main(["new", "plan", str(target)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err, target.read_text(encoding="utf-8")) == (
+        1,
+        "",
+        f"error: {target} already exists; pick another file name or delete it first\n",
+        "mine",
+    )
+
+
 def test_new_with_an_unknown_kind_lists_the_valid_kinds(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
