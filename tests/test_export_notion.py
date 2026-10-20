@@ -11,6 +11,7 @@ from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
+from skaldr.export.inline import ZERO_WIDTH_SPACE
 from skaldr.export.notion import (
     NOTION_DEFAULT_PAGE_WIDTH_PX,
     NOTION_ESCAPES,
@@ -100,7 +101,6 @@ from tests.factories.example_factory import (
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
 NESTING_TOO_DEEP_TO_PARSE = 100_000
-ZERO_WIDTH_SPACE = "\N{ZERO WIDTH SPACE}"
 LINKIFIED_FILE_EXTENSIONS = (
     "rs",
     "pl",
@@ -197,10 +197,27 @@ def _chunked(nodes: Sequence[Node], limit: int, page_width: NotionWidth = "norma
         pytest.param("see my_tool.rs:7-9 now", "see `my_tool.rs:7-9` now", id="rust-file-with-a-line-range"),
         pytest.param("see notes.json5 now", "see notes.json5 now", id="extension-continues-past-a-match"),
         pytest.param("see notes.ini now", "see notes.ini now", id="extension-starting-with-a-match"),
+        pytest.param("visit https://example.io/a now", "visit https://example.io/a now", id="a-bare-url"),
+        pytest.param("mail bob@example.io now", "mail bob@example.io now", id="an-email-address"),
+        pytest.param("see www.site.me now", "see www.site.me now", id="a-www-address"),
+        pytest.param(
+            "open notes.rs at https://example.io/a",
+            "open `notes.rs` at https://example.io/a",
+            id="a-file-name-beside-a-url",
+        ),
+        pytest.param("see NOTES.MD now", "see NOTES.MD now", id="the-extension-match-is-case-sensitive"),
     ],
 )
 def test_a_file_name_notion_would_turn_into_a_web_link_becomes_inline_code(text: str, notion: str) -> None:
     assert notion_inline(parse_rich(text)) == notion
+
+
+def test_an_autolink_in_angle_brackets_is_left_for_the_url_it_holds() -> None:
+    assert notion_inline((Plain("<https://example.io>"),)) == "\\<https://example.io\\>"
+
+
+def test_a_file_name_beside_inline_code_holding_a_table_tag_in_a_cell_becomes_inline_code() -> None:
+    assert notion_inline((Code("<td> notes.rs"),), in_a_table_cell=True) == "\\<td\\> `notes.rs`"
 
 
 @pytest.mark.parametrize(
@@ -226,6 +243,27 @@ def test_inline_code_holding_a_block_attribute_gets_a_zero_width_space_after_the
     assert notion_inline((Code(code),)) == notion
 
 
+@pytest.mark.parametrize(
+    ("node", "expected"),
+    [
+        pytest.param(
+            Heading(2, (Plain("Head "), Code('{toggle="true"}'), Plain(" end"))),
+            f'## Head `{{{ZERO_WIDTH_SPACE}toggle="true"}}` end\n',
+            id="a-heading",
+        ),
+        pytest.param(
+            Toggle((Code('{color="red"}'),), None, (Paragraph((Plain("x"),)),)),
+            f'<details>\n<summary>`{{{ZERO_WIDTH_SPACE}color="red"}}`</summary>\n\tx\n</details>\n',
+            id="a-toggle-summary",
+        ),
+    ],
+)
+def test_a_block_attribute_in_inline_code_is_kept_off_a_heading_and_a_toggle_summary(
+    node: Node, expected: str
+) -> None:
+    assert render_notion([node]) == expected
+
+
 def test_inline_code_holding_a_block_attribute_is_left_alone_in_a_table_cell() -> None:
     assert notion_inline((Code('{color="red"}'),), in_a_table_cell=True) == '`{color="red"}`'
 
@@ -247,6 +285,18 @@ def test_inline_code_holding_a_block_attribute_is_left_alone_in_a_table_cell() -
             {"type": "list", "items": ['Item `{color="red"}` end']},
             f'- Item `{{{ZERO_WIDTH_SPACE}color="red"}}` end\n',
             id="a-list-item",
+        ),
+        pytest.param(
+            {"type": "callout", "tone": "info", "body": 'Mid `{color="red"}` end.'},
+            f'<callout icon="{CALLOUT_ICON["info"]}" color="blue_bg">\n'
+            f'\tMid `{{{ZERO_WIDTH_SPACE}color="red"}}` end.\n'
+            "</callout>\n",
+            id="a-callout-line",
+        ),
+        pytest.param(
+            {"type": "text", "body": 'See [`{color="red"}`](https://example.com/a) now.'},
+            f'See [`{{{ZERO_WIDTH_SPACE}color="red"}}`](https://example.com/a) now.\n',
+            id="a-link-label",
         ),
         pytest.param(
             {"type": "code", "content": '{color="red"}', "lang": "text"},
@@ -345,21 +395,69 @@ def test_the_writer_stops_at_a_code_line_that_reads_as_a_tag_of_a_container_arou
         render_notion([node])
 
 
+INFO_CALLOUT_OPENING = f'<callout icon="{CALLOUT_ICON["info"]}" color="blue_bg">\n'
+
+
 @pytest.mark.parametrize(
-    "node",
+    ("node", "expected"),
     [
-        pytest.param(CODE_HOLDING_THE_CLOSER, id="no-container"),
-        pytest.param(Callout("info", (CodeBlock("</details>", ""),)), id="another-containers-closer"),
-        pytest.param(Callout("info", (CodeBlock("x </callout> y", ""),)), id="tag-inside-a-longer-line"),
+        pytest.param(
+            CODE_HOLDING_THE_CLOSER,
+            "```javascript\nbefore\n</callout>\nafter\n```\n",
+            id="no-container",
+        ),
+        pytest.param(
+            Callout("info", (CodeBlock("</details>", ""),)),
+            INFO_CALLOUT_OPENING + "\t```plain text\n\t</details>\n\t```\n</callout>\n",
+            id="another-containers-closer",
+        ),
+        pytest.param(
+            Callout("info", (CodeBlock("x </callout> y", ""),)),
+            INFO_CALLOUT_OPENING + "\t```plain text\n\tx </callout> y\n\t```\n</callout>\n",
+            id="tag-inside-a-longer-line",
+        ),
         pytest.param(
             Toggle((Plain("More"),), 2, (CODE_HOLDING_THE_CLOSER,)),
+            '## More {toggle="true"}\n\t```javascript\n\tbefore\n\t</callout>\n\tafter\n\t```\n',
             id="a-heading-toggle-is-no-container",
         ),
-        pytest.param(Callout("info", (CodeBlock("</callout >", ""),)), id="a-different-tag"),
+        pytest.param(
+            Callout("info", (CodeBlock("</callout >", ""),)),
+            INFO_CALLOUT_OPENING + "\t```plain text\n\t</callout >\n\t```\n</callout>\n",
+            id="a-different-tag",
+        ),
+        pytest.param(
+            Toggle((Plain("More"),), None, (CodeBlock("<details>", ""),)),
+            "<details>\n<summary>More</summary>\n\t```plain text\n\t<details>\n\t```\n</details>\n",
+            id="a-details-opener-was-not-checked",
+        ),
+        pytest.param(
+            Columns((GridColumn(1, (CodeBlock("<column>", ""),)),)),
+            '<columns>\n\t<column ratio="1">\n\t\t```plain text\n\t\t<column>\n\t\t```\n'
+            "\t</column>\n</columns>\n",
+            id="a-column-opener-was-not-checked",
+        ),
+        pytest.param(
+            Tabs((Tab((Plain("One"),), (CodeBlock("<tab>", ""),)),)),
+            "<tabs>\n\t<tab>\n\t\tOne\n\t\t```plain text\n\t\t<tab>\n\t\t```\n\t</tab>\n</tabs>\n",
+            id="a-tab-opener-was-not-checked",
+        ),
+        pytest.param(
+            Toggle((Plain("More"),), None, (CodeBlock("<callout>", ""),)),
+            "<details>\n<summary>More</summary>\n\t```plain text\n\t<callout>\n\t```\n</details>\n",
+            id="a-callout-opener-outside-a-callout",
+        ),
+        pytest.param(
+            Callout("info", (CodeBlock("\N{NO-BREAK SPACE}</callout>", ""),)),
+            INFO_CALLOUT_OPENING + "\t```plain text\n\t\N{NO-BREAK SPACE}</callout>\n\t```\n</callout>\n",
+            id="only-spaces-and-tabs-are-stripped",
+        ),
     ],
 )
-def test_the_writer_writes_a_code_line_that_is_no_tag_of_a_container_around_it(node: Node) -> None:
-    assert render_notion([node])
+def test_the_writer_writes_a_code_line_that_is_no_tag_of_a_container_around_it(
+    node: Node, expected: str
+) -> None:
+    assert render_notion([node]) == expected
 
 
 def test_notion_special_characters_are_escaped_in_text_but_not_in_code_or_link_urls() -> None:

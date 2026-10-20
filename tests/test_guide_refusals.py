@@ -40,8 +40,8 @@ NOTION_INLINE_CODE_ROW = (
     "including a `code` block's `label`"
 )
 NOTION_CODE_LINE_ROW = (
-    "a `code` block with a line that is only `<callout>`, `</callout>`, `<details>`, `</details>`, "
-    "`<column>`, `</column>`, `<tab>` or `</tab>`"
+    "a `code` block with a line that is only `</callout>`, `</details>`, `</column>` or `</tab>`, "
+    "or only `<callout>`"
 )
 CANVAS_TABLE_ROW = "`table`, `comparison`, `matrix`, `swimlane`"
 

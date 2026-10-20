@@ -1,6 +1,6 @@
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import chain
 from typing import Final
 
@@ -25,6 +25,7 @@ from skaldr.export.capabilities import (
     DeepHeading,
     Details,
     DividerInAStep,
+    EnclosingContainers,
     FencedInAListItem,
     GridCells,
     GridInAGridCell,
@@ -48,7 +49,6 @@ from skaldr.export.capabilities import (
     TextNumbering,
     TonedCell,
     character_without_a_unicode_form,
-    code_line_reading_as_a_container_tag,
 )
 from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import one_line
@@ -168,7 +168,7 @@ class _Place:
     callout_name: str = _NODE_TERMS[Callout]
     toggle_names: tuple[str, ...] = ()
     in_a_column: bool = False
-    notion_containers: tuple[str, ...] = ()
+    enclosing: EnclosingContainers = field(default_factory=EnclosingContainers)
 
     def holder(self) -> str:
         match self.container:
@@ -199,7 +199,7 @@ class _Place:
             self,
             container="callout",
             callout_name=name,
-            notion_containers=(*self.notion_containers, "callout"),
+            enclosing=self.enclosing.inside("callout"),
         )
 
     def in_a_toggle(self, name: str) -> Self:
@@ -211,13 +211,13 @@ class _Place:
         )
 
     def in_a_details_block(self, name: str) -> Self:
-        return replace(self.in_a_toggle(name), notion_containers=(*self.notion_containers, "details"))
+        return replace(self.in_a_toggle(name), enclosing=self.enclosing.inside("details"))
 
     def in_a_tab(self, name: str) -> Self:
-        return replace(self.in_a_toggle(name), notion_containers=(*self.notion_containers, "tab"))
+        return replace(self.in_a_toggle(name), enclosing=self.enclosing.inside("tab"))
 
     def in_a_column_of_the_tree(self) -> Self:
-        return replace(self, in_a_column=True, notion_containers=(*self.notion_containers, "column"))
+        return replace(self, in_a_column=True, enclosing=self.enclosing.inside("column"))
 
 
 def _term(node: GenericNode) -> str:
@@ -544,7 +544,7 @@ class _TreeWalk:
                 yield from self.diagram_hits(node)
                 yield from self.nodes(nested_nodes(node), place)
             case CodeBlock():
-                tag = code_line_reading_as_a_container_tag(node.content, place.notion_containers)
+                tag = place.enclosing.code_line_reading_as_a_tag(node.content)
                 if tag is not None:
                     yield self.hit(tag, node.authored_at)
             case Paragraph() | DisplayMath() | Media() | Quote() | Divider() | TableOfContents():

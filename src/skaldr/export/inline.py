@@ -1,5 +1,6 @@
 import re
 from dataclasses import replace
+from typing import Final
 
 from skaldr.richtext import (
     AnchorLink,
@@ -19,6 +20,7 @@ from skaldr.richtext import (
     parse_rich,
 )
 
+ZERO_WIDTH_SPACE: Final = "\N{ZERO WIDTH SPACE}"
 WHITESPACE_RUN = re.compile(r"\s+")
 LINE_ENDING = re.compile(r"\r\n?|\n")
 

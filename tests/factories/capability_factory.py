@@ -900,7 +900,13 @@ CODE_LINE_WHY = (
 CODE_LINE_INSTEAD = "change that line of the code, or move the code block out of the {container}"
 
 
-def code_line_case(line: str, container: str, held_by: dict[str, Any], held_at: str) -> RefusedCase:
+def code_line_case(
+    line: str,
+    container: str,
+    held_by: dict[str, Any],
+    held_at: str,
+    also_refused_by: tuple[ExportTarget, ...] = (),
+) -> RefusedCase:
     return RefusedCase(
         "notion",
         CODE_LINE_FEATURE,
@@ -908,6 +914,7 @@ def code_line_case(line: str, container: str, held_by: dict[str, Any], held_at: 
         CODE_LINE_WHY.format(line=line, container=container),
         CODE_LINE_INSTEAD.format(container=container),
         f"at {held_at}",
+        also_refused_by=also_refused_by,
     )
 
 
@@ -939,6 +946,41 @@ CODE_LINE_REFUSALS: dict[str, RefusedCase] = {
         "column",
         two_cell_grid(code_holding("</column>")),
         "blocks.0.grid.cells.1.blocks.0.code",
+    ),
+    "notion-code-line-closing-the-callout-two-containers-up": code_line_case(
+        "</callout>",
+        "callout",
+        {
+            "type": "panel",
+            "title": "Plan",
+            "blocks": [make_toggle(code_holding("</callout>"))],
+        },
+        "blocks.0.panel.blocks.0.toggle.blocks.0.code",
+        also_refused_by=("adf", "slack"),
+    ),
+    "notion-code-line-closing-a-toned-grid-cell": code_line_case(
+        "</callout>",
+        "callout",
+        {
+            "type": "grid",
+            "cells": [
+                {"span": 3, "blocks": [{"type": "text", "body": "Left"}]},
+                {"span": 3, "tone": "danger", "blocks": [code_holding("</callout>")]},
+            ],
+        },
+        "blocks.0.grid.cells.1.blocks.0.code",
+        also_refused_by=("slack",),
+    ),
+    "notion-code-line-closing-a-request-case-tab": code_line_case(
+        "</tab>",
+        "tab",
+        make_request(
+            cases=[
+                {"label": "a", "response": {"body": "</tab>"}},
+                {"label": "b", "response": {"body": "2"}},
+            ]
+        ),
+        "blocks.0.request",
     ),
     "notion-code-line-closing-a-tab": code_line_case(
         "</tab>",
@@ -980,6 +1022,8 @@ CLEAN_BLOCKS: list[dict[str, Any]] = [
     },
     code_holding("one\n</callout>\n</details>\n</column>\n</tab>"),
     {"type": "panel", "title": "Snippet", "blocks": [code_holding("</details>\n</callout >\nx </callout>")]},
+    make_toggle(code_holding("<details>\n<column>\n<tab>")),
+    two_cell_grid(code_holding("<column>")),
     make_section("hidden", collapsed=True, blocks=[code_holding("</details>")]),
     one_cell_grid(TABLE),
     two_cell_grid(one_cell_grid({"type": "text", "body": "Inner"})),

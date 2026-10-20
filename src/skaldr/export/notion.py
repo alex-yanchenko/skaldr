@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Final
 
@@ -14,11 +14,12 @@ from skaldr.export.capabilities import (
     BACKTICK,
     CLOSING_TAG_OPENER,
     FIRST_LIST_NUMBER,
-    code_line_reading_as_a_container_tag,
+    EnclosingContainers,
+    NotionContainer,
 )
 from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
-from skaldr.export.inline import bold, one_line, plain
+from skaldr.export.inline import ZERO_WIDTH_SPACE, bold, one_line, plain
 from skaldr.export.markup import (
     DIVIDER_LINE,
     MarkupRuns,
@@ -104,13 +105,38 @@ from skaldr.richtext import Code, Placeholder, ScriptPosition, Styled, Tinted
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
 EXTENSIONS_NOTION_LINKIFIES: Final = (
-    "rs|pl|pm|ml|ai|io|zip|mov|cc|ps|so|tf|cr|nu|is|it|in|me|to|do|ar|java|sh|py|md"
+    "ai",
+    "ar",
+    "cc",
+    "cr",
+    "do",
+    "in",
+    "io",
+    "is",
+    "it",
+    "java",
+    "md",
+    "me",
+    "ml",
+    "mov",
+    "nu",
+    "pl",
+    "pm",
+    "ps",
+    "py",
+    "rs",
+    "sh",
+    "so",
+    "tf",
+    "to",
+    "zip",
 )
 FILE_NAME_NOTION_LINKIFIES = re.compile(
-    rf"(?<![\w/.-])([\w./-]*\w\.(?:{EXTENSIONS_NOTION_LINKIFIES})(?::\d+(?:-\d+)?)?)(?![\w`])"
+    rf"(?<![\w/.-])([\w./-]*\w\.(?:{'|'.join(EXTENSIONS_NOTION_LINKIFIES)})(?::\d+(?:-\d+)?)?)(?![\w`])"
 )
+SPACE_RUN: Final = re.compile(r"(\s+)")
+WEB_ADDRESS_OR_EMAIL_MARKS: Final = ("://", "@", "www.")
 BLOCK_ATTRIBUTE_OPENING: Final = re.compile(r'\{(?=(?:color|toggle)=")')
-ZERO_WIDTH_SPACE: Final = "\N{ZERO WIDTH SPACE}"
 TABLE_TAG_OPENING: Final = re.compile(r"<(?:td|tr|table)(?=[\s/>])")
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
@@ -174,10 +200,10 @@ class TableRoom:
     width: int
     sizes_every_table: bool
     in_a_column: bool = False
-    containers: tuple[str, ...] = ()
+    enclosing: EnclosingContainers = field(default_factory=EnclosingContainers)
 
-    def inside(self, container: str) -> "TableRoom":
-        return replace(self, containers=(*self.containers, container))
+    def inside(self, container: NotionContainer) -> "TableRoom":
+        return replace(self, enclosing=self.enclosing.inside(container))
 
     @classmethod
     def on_page(cls, page_width: NotionWidth) -> "TableRoom":
@@ -187,6 +213,10 @@ class TableRoom:
         if not self.sizes_every_table:
             return replace(self, in_a_column=True)
         return replace(self, width=round(self.width * ratio / COLUMN_RATIO_TOTAL), in_a_column=True)
+
+
+def _with_block_attributes_kept_apart(code: str) -> str:
+    return BLOCK_ATTRIBUTE_OPENING.sub("{" + ZERO_WIDTH_SPACE, code)
 
 
 def latex_text(text: str) -> str:
@@ -203,10 +233,17 @@ class _NotionRuns(MarkupRuns):
         return text.translate(NOTION_ESCAPES)
 
     def text(self, text: str, /) -> str:
+        tokens = SPACE_RUN.split(text)
+        return bang_cannot_open_an_image("".join(map(self._token, tokens)))
+
+    def _token(self, token: str) -> str:
+        if any(mark in token for mark in WEB_ADDRESS_OR_EMAIL_MARKS):
+            return self.escape(token)
+        return self._with_file_names_as_code(token)
+
+    def _with_file_names_as_code(self, text: str) -> str:
         pieces = FILE_NAME_NOTION_LINKIFIES.split(text)
-        return bang_cannot_open_an_image(
-            "".join(self._piece(index, piece) for index, piece in enumerate(pieces))
-        )
+        return "".join(self._piece(index, piece) for index, piece in enumerate(pieces))
 
     def _piece(self, index: int, piece: str) -> str:
         is_file_name = index % 2 == 1
@@ -225,11 +262,11 @@ class _NotionRuns(MarkupRuns):
             )
         if self.in_a_table_cell:
             return self._code_in_a_table_cell(text)
-        return f"`{BLOCK_ATTRIBUTE_OPENING.sub('{' + ZERO_WIDTH_SPACE, text)}`"
+        return f"`{_with_block_attributes_kept_apart(text)}`"
 
     def _code_in_a_table_cell(self, text: str) -> str:
         if TABLE_TAG_OPENING.search(text):
-            return self.escape(text)
+            return self.text(text)
         return f"`{text}`"
 
     def anchor_link(self, _label: str, _anchor: str, /) -> str:
@@ -775,7 +812,7 @@ def _natively_or_folded(node: Node, room: TableRoom) -> tuple[NotionNode, ...]:
 
 
 def _refuse_a_code_line_reading_as_a_container_tag(node: CodeBlock, room: TableRoom) -> None:
-    tag = code_line_reading_as_a_container_tag(node.content, room.containers)
+    tag = room.enclosing.code_line_reading_as_a_tag(node.content)
     if tag is not None:
         raise ExportInvariantError(
             f"Notion reads the code line '{tag.line}' as a tag of the {tag.container} around it; "
