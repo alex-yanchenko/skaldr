@@ -444,6 +444,12 @@ class InMemoryNotion:
             return None
         if any(name in body for name in ("content", "children", "markdown")):
             return _error(400, "validation_error", TEMPLATE_WITH_CONTENT_REFUSAL)
+        if body.get("allow_async"):
+            return _error(
+                400,
+                "validation_error",
+                "The `allow_async` parameter is only supported when `markdown` is provided",
+            )
         template = self._found(body["template"]["template_id"])
         if template is None:
             return _error(404, "object_not_found", "Could not find page.")

@@ -78,6 +78,22 @@ def test_a_create_that_names_a_template_and_children_or_content_is_refused_the_s
     ]
 
 
+def test_a_create_that_names_a_template_and_asks_to_answer_later_is_refused_with_the_live_text() -> None:
+    client = _client(_notion(""))
+
+    refused = _create(client, template=TEMPLATE, allow_async=True)
+
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {
+            "object": "error",
+            "status": 400,
+            "code": "validation_error",
+            "message": "The `allow_async` parameter is only supported when `markdown` is provided",
+        },
+    )
+
+
 def test_a_create_from_a_template_that_does_not_exist_is_not_found() -> None:
     client = _client(_notion(""))
 
