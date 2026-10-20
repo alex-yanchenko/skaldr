@@ -471,9 +471,22 @@ def _meta_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
 
 
 def _rich_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
+    slugs = compute.anchor_slugs(report)
+    ref_numbers = compute.reference_numbers(report)
+    anchor_ids = frozenset(slugs.values())
+    part_anchors = compute.part_anchors(report, slugs)
     for path, text in compute.rich_text_strings(report):
         names: set[str] = set()
-        render_richtext(text, placeholders=names)
+        render_richtext(
+            text,
+            ref_numbers,
+            None,
+            anchor_ids,
+            names,
+            report.meta.people,
+            report.meta.jira_site,
+            part_anchors,
+        )
         for name in sorted(names):
             yield name, ".".join(path)
 
