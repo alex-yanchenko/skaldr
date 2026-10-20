@@ -2513,6 +2513,36 @@ def test_a_heading_mid_section_moves_to_the_part_with_the_block_it_introduces() 
     assert split == NotionChunks(("## S\n" + "a" * 30 + "\n", "### H3\n#### H4\n" + "b" * 60 + "\n"), ())
 
 
+def test_a_carried_heading_counts_toward_the_part_it_starts() -> None:
+    nodes = [
+        Heading(2, (Plain("S"),)),
+        Paragraph((Plain("a" * 40),)),
+        Heading(3, (Plain("H3"),)),
+        Paragraph((Plain("b" * 40),)),
+        Paragraph((Plain("c" * 35),)),
+    ]
+
+    split = _chunked(nodes, 80)
+
+    assert split == NotionChunks(
+        ("## S\n" + "a" * 40 + "\n", "### H3\n" + "b" * 40 + "\n", "c" * 35 + "\n"), ()
+    )
+
+
+def test_a_chunk_that_opens_with_a_second_list_keeps_the_separator_so_the_chunks_join_into_the_page() -> None:
+    nodes = [
+        ListNode("bullet", (ListEntry((Plain("a" * 10),)),)),
+        ListNode("bullet", (ListEntry((Plain("b" * 10),)),)),
+    ]
+
+    split = _chunked(nodes, 30)
+
+    assert (split, "".join(split.chunks)) == (
+        NotionChunks(("- " + "a" * 10 + "\n", "<empty-block/>\n- " + "b" * 10 + "\n"), ()),
+        render_notion(nodes),
+    )
+
+
 def test_blocks_that_fill_the_chunk_exactly_stay_together() -> None:
     nodes = [Heading(2, (Plain("S"),)), Paragraph((Plain("a" * 10),)), Paragraph((Plain("b" * 10),))]
     page = render_notion(nodes)

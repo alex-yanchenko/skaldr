@@ -586,6 +586,32 @@ def test_the_comments_left_out_are_the_ones_next_to_the_block(source: str, embed
     assert without_publish_block(source) == embedded
 
 
+@pytest.mark.parametrize(
+    ("source", "embedded"),
+    [
+        pytest.param(
+            "a: -0.0\nb: 0.0\npublish: {doc_id: x}\n",
+            "a: -0.0\nb: 0.0\n",
+            id="negative-zero-beside-zero",
+        ),
+        pytest.param(
+            "a: &s [1]\nb: *s\npublish: {doc_id: x}\n",
+            "a: &s [1]\nb: *s\n",
+            id="one-list-shared-by-an-alias",
+        ),
+        pytest.param(
+            "a: [1]\nb: [1]\npublish: {doc_id: x}\n",
+            "a: [1]\nb: [1]\n",
+            id="two-equal-lists-written-twice",
+        ),
+    ],
+)
+def test_values_outside_the_publish_block_are_embedded_as_written_whatever_their_equality(
+    source: str, embedded: str
+) -> None:
+    assert without_publish_block(source) == embedded
+
+
 @pytest.mark.timeout(5)
 def test_shared_aliases_are_compared_once_so_an_alias_bomb_stays_fast() -> None:
     levels = ["l0: &l0 [x, x, x, x, x, x, x, x, x]"]
