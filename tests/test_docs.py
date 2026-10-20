@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, cast, get_args
 
 import pytest
 import yaml
@@ -265,13 +265,37 @@ def test_placeholder_keys_and_items_are_dropped_at_every_depth() -> None:
     assert _without_placeholders(skeleton) == {"blocks": [{"type": "grid", "cells": []}]}
 
 
+def _block_types_by_path(value: Any, path: tuple[str | int, ...]) -> list[tuple[tuple[str | int, ...], str]]:
+    if isinstance(value, dict):
+        mapping = cast("dict[str, Any]", value)
+        own = [(path, str(mapping["type"]))] if "type" in mapping else []
+        nested = [
+            found for key, item in mapping.items() for found in _block_types_by_path(item, (*path, key))
+        ]
+        return [*own, *nested]
+    if isinstance(value, list):
+        return [
+            found
+            for index, item in enumerate(cast("list[Any]", value))
+            for found in _block_types_by_path(item, (*path, index))
+        ]
+    return []
+
+
 @pytest.mark.parametrize(
     "example", [pytest.param(example, id=f"line-{example.line}") for example in _BUILDABLE]
 )
 def test_a_guide_example_builds_when_copied(example: GuideExample) -> None:
-    html = render_html(parse_report(_as_document(example)))
+    document = _as_document(example)
+    report = parse_report(document)
 
+    html = render_html(report)
+
+    authored = _block_types_by_path(document.get("blocks", []), ("blocks",))
+    built = _block_types_by_path(report.model_dump(mode="json")["blocks"], ("blocks",))
     assert html.startswith("<!doctype html>")
+    assert authored != []
+    assert built == authored
 
 
 def _readme_block_list(readme: str) -> str:

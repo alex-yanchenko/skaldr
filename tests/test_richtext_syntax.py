@@ -380,6 +380,11 @@ def test_an_attribute_list_that_cannot_color_text_fails_naming_it(text: str, mes
             ),
             id="operator-in-a-script-closed-before-a-space-or-punctuation",
         ),
+        pytest.param(
+            "a~b~c",
+            (("text", "a"), ("subscript", "b"), ("text", "c")),
+            id="a-tilde-pair-around-a-short-word-is-a-subscript",
+        ),
     ],
 )
 def test_underline_and_script_marks_become_tokens(text: str, shape: Shape) -> None:
@@ -414,3 +419,7 @@ def test_pluses_tildes_and_carets_that_form_no_mark_stay_text(text: str) -> None
 
 def test_a_backslash_escaped_marker_opens_no_script() -> None:
     assert _shape("a\\~b~ and c\\^d^") == (("text", "a~b~ and c^d^"),)
+
+
+def test_escaping_both_tildes_keeps_a_word_between_them_as_text() -> None:
+    assert _shape("a\\~b\\~c") == (("text", "a~b~c"),)

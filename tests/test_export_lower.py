@@ -2197,39 +2197,49 @@ def test_a_swimlane_step_with_no_state_has_no_glyph_and_an_explicit_todo_keeps_i
         ],
     }
 
-    table, legend = lowered([swimlane])
-
-    assert isinstance(table, TableNode)
-    assert table.rows[0].cells[1] == TableCell(
-        (
-            *bold("1"),
-            Plain(" "),
-            Plain("Unset"),
-            Break(),
-            SwimlaneMark("todo"),
-            Plain(" "),
-            *bold("2"),
-            Plain(" "),
-            Plain("Planned"),
-            Break(),
-            SwimlaneMark("done"),
-            Plain(" "),
-            *bold("3"),
-            Plain(" "),
-            Plain("Shipped"),
-        )
-    )
-    assert legend == Paragraph(
-        (
-            SwimlaneMark("done"),
-            Plain(" "),
-            Plain("done"),
-            Plain(" · "),
-            SwimlaneMark("todo"),
-            Plain(" "),
-            Plain("todo"),
+    assert lowered([swimlane]) == (
+        TableNode(
+            (TableCell((Plain("Lane"),)), TableCell((Plain("Plan"),))),
+            (
+                TableRow(
+                    (
+                        TableCell((Plain("Ops"),)),
+                        TableCell(
+                            (
+                                *bold("1"),
+                                Plain(" "),
+                                Plain("Unset"),
+                                Break(),
+                                SwimlaneMark("todo"),
+                                Plain(" "),
+                                *bold("2"),
+                                Plain(" "),
+                                Plain("Planned"),
+                                Break(),
+                                SwimlaneMark("done"),
+                                Plain(" "),
+                                *bold("3"),
+                                Plain(" "),
+                                Plain("Shipped"),
+                            )
+                        ),
+                    )
+                ),
+            ),
+            header_column=True,
         ),
-        "muted",
+        Paragraph(
+            (
+                SwimlaneMark("done"),
+                Plain(" "),
+                Plain("done"),
+                Plain(" · "),
+                SwimlaneMark("todo"),
+                Plain(" "),
+                Plain("todo"),
+            ),
+            "muted",
+        ),
     )
 
 

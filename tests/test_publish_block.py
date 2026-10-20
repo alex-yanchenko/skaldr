@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +10,9 @@ from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.models import parse_report
 from skaldr.publish_block import Publish, notion_page_id, without_publish_block
+from skaldr.publish_block.source import CANNOT_CUT as CANNOT_CUT_MESSAGE
 from skaldr.publish_block.source import _document, _same_documents  # pyright: ignore[reportPrivateUsage]
-from skaldr.render import extract_source, render_html
+from skaldr.render import extract_source, render_embed, render_html
 from tests.factories import (
     NOTION_PAGE_ID,
     NOTION_PAGE_URL,
@@ -48,6 +50,11 @@ blocks:
   - { type: text, body: "Hello." }
 """
 CANNOT_CUT = "the publish block could not be left out of the page"
+DOC_ID_NOT_A_SLUG = "publish.doc_id: String should match pattern '^[a-z0-9]+(?:-[a-z0-9]+)*$'"
+NOTION_WHERE_ERROR = "publish.targets.0.notion.where: Value error, "
+JIRA_TARGET_ERROR = "publish.targets.0.jira: Value error, "
+PUBLISH_ERROR = "publish: Value error, "
+SECTION_NAMED_BY_ID = "(a section is named by its `id:`)"
 SET_BY_SKALDR = (
     "skaldr sets summary, description, project, issuetype and parent itself, and Jira changes status only "
     "through a transition"
@@ -59,8 +66,10 @@ def _parse(publish: dict[str, Any]) -> Publish | None:
 
 
 def _rejects(publish: dict[str, Any], message: str) -> None:
-    with pytest.raises(ReportError, match=re.escape(message)):
+    with pytest.raises(ReportError) as raised:
         _parse(publish)
+
+    assert str(raised.value) == f"invalid content data: {message}"
 
 
 def test_a_publish_block_reads_every_key_of_each_target() -> None:
@@ -159,15 +168,19 @@ def test_a_notion_page_id_comes_from_a_notion_url_or_a_bare_id(reference: str, p
 @pytest.mark.parametrize(
     ("where", "message"),
     [
-        pytest.param({}, "a notion target names exactly one of `parent_page` or `page`", id="neither"),
+        pytest.param(
+            {},
+            f"{NOTION_WHERE_ERROR}a notion target names exactly one of `parent_page` or `page`",
+            id="neither",
+        ),
         pytest.param(
             {"parent_page": NOTION_PAGE_URL, "page": NOTION_PAGE_URL},
-            "a notion target names exactly one of `parent_page` or `page`",
+            f"{NOTION_WHERE_ERROR}a notion target names exactly one of `parent_page` or `page`",
             id="both",
         ),
         pytest.param(
             {"page": "https://www.notion.so/no-id-here"},
-            "'https://www.notion.so/no-id-here' is not a Notion page URL "
+            f"{NOTION_WHERE_ERROR}'https://www.notion.so/no-id-here' is not a Notion page URL "
             "(notion.so, notion.site, notion.com) or a page id",
             id="no-page-id",
         ),
@@ -182,12 +195,13 @@ def test_a_notion_target_names_one_page(where: dict[str, Any], message: str) -> 
     [
         pytest.param(
             {"project": "plan", "issue_type": "Task"},
-            "publish.targets.0.jira.where.project: String should match pattern",
+            "publish.targets.0.jira.where.project: String should match pattern '^[A-Z][A-Z0-9_]+$'",
             id="lowercase-project",
         ),
         pytest.param(
             {"project": "PLAN", "issue_type": "Task", "parent": "PLAN-0"},
-            "publish.targets.0.jira.where.parent: String should match pattern",
+            "publish.targets.0.jira.where.parent: String should match pattern "
+            "'^[A-Z][A-Z0-9_]+-[1-9][0-9]*$'",
             id="parent-numbered-zero",
         ),
         pytest.param(
@@ -211,7 +225,7 @@ def test_a_jira_target_checks_its_keys(where: dict[str, Any], message: str) -> N
     [
         pytest.param(
             make_jira_target(where={"project": "PLAN", "issue_type": "Task", "fields": {"summary": "x"}}),
-            f"a jira target cannot set `summary` in `where.fields`; {SET_BY_SKALDR}",
+            f"{JIRA_TARGET_ERROR}a jira target cannot set `summary` in `where.fields`; {SET_BY_SKALDR}",
             id="where",
         ),
         pytest.param(
@@ -221,7 +235,8 @@ def test_a_jira_target_checks_its_keys(where: dict[str, Any], message: str) -> N
                     "st1": {"fields": {"status": {"name": "Done"}, "description": "x", "labels": ["a"]}}
                 },
             ),
-            f"a jira target cannot set `description`, `status` in `overrides.st1.fields`; {SET_BY_SKALDR}",
+            f"{JIRA_TARGET_ERROR}a jira target cannot set `description`, `status` in `overrides.st1.fields`; "
+            f"{SET_BY_SKALDR}",
             id="override",
         ),
     ],
@@ -276,12 +291,13 @@ def test_a_jira_project_key_may_hold_digits_and_underscores() -> None:
         ),
         pytest.param(
             make_jira_target(**{"from": []}),
-            "publish.targets.0.jira.from: List should have at least 1 item",
+            "publish.targets.0.jira.from: List should have at least 1 item after validation, not 0",
             id="empty-from",
         ),
         pytest.param(
             {"to": "confluence", "where": {}},
-            "does not match any of the expected tags: 'notion', 'jira'",
+            "publish.targets.0: Input tag 'confluence' found using 'to' does not match any of the expected "
+            "tags: 'notion', 'jira', 'slack'",
             id="unknown-service",
         ),
     ],
@@ -295,7 +311,7 @@ def test_a_target_takes_only_its_documented_keys(target: dict[str, Any], message
     [
         pytest.param(
             [make_notion_target(), make_notion_target(where={"page": NOTION_PAGE_ID})],
-            f"publish targets 1 and 2 both write to notion page {NOTION_PAGE_ID}",
+            f"{PUBLISH_ERROR}publish targets 1 and 2 both write to notion page {NOTION_PAGE_ID}",
             id="one-notion-page-named-two-ways",
         ),
         pytest.param(
@@ -303,7 +319,7 @@ def test_a_target_takes_only_its_documented_keys(target: dict[str, Any], message
                 make_jira_target(),
                 make_jira_target(where={"project": "PLAN", "issue_type": "Bug", "fields": {"labels": ["x"]}}),
             ],
-            "publish targets 1 and 2 both write to jira project PLAN under no parent issue",
+            f"{PUBLISH_ERROR}publish targets 1 and 2 both write to jira project PLAN under no parent issue",
             id="one-jira-place-with-other-fields",
         ),
     ],
@@ -390,33 +406,34 @@ def test_targets_in_different_places_are_accepted_and_each_has_its_own_label(
     [
         pytest.param(
             make_notion_target(split=["st1", "nope"]),
-            "publish target 1 (notion) splits on 'nope', which is not the id of a top-level section "
-            "(a section is named by its `id:`)",
+            "Value error, publish target 1 (notion) splits on 'nope', which is not the id of a top-level "
+            f"section {SECTION_NAMED_BY_ID}",
             id="unknown-split-id",
         ),
         pytest.param(
             make_jira_target(**{"from": ["ghost"]}),
-            "publish target 1 (jira) is built from 'ghost', which is not the id of a top-level section",
+            "Value error, publish target 1 (jira) is built from 'ghost', which is not the id of a top-level "
+            f"section {SECTION_NAMED_BY_ID}",
             id="unknown-from-id",
         ),
         pytest.param(
             make_jira_target(**{"from": ["st1", "st1"]}),
-            "publish target 1 (jira) lists 'st1' more than once in `from`",
+            "Value error, publish target 1 (jira) lists 'st1' more than once in `from`",
             id="repeated-from-id",
         ),
         pytest.param(
             make_jira_target(**{"from": ["st1"], "split": ["st2"]}),
-            "publish target 1 (jira) splits on 'st2', which its `from` list leaves out",
+            "Value error, publish target 1 (jira) splits on 'st2', which its `from` list leaves out",
             id="split-outside-from",
         ),
         pytest.param(
             make_jira_target(split=["st1"], overrides={"st2": {"fields": {"priority": "High"}}}),
-            "publish target 1 (jira) overrides 'st2', which is not one of its split sections",
+            "Value error, publish target 1 (jira) overrides 'st2', which is not one of its split sections",
             id="override-outside-split",
         ),
         pytest.param(
             make_notion_target(split=["st1", "st1"]),
-            "publish target 1 (notion) lists 'st1' more than once in `split`",
+            "Value error, publish target 1 (notion) lists 'st1' more than once in `split`",
             id="repeated-split-id",
         ),
     ],
@@ -471,11 +488,11 @@ def test_a_section_id_used_twice_cannot_name_a_publish_item() -> None:
     ("doc_id", "message"),
     [
         pytest.param("p", "publish.doc_id: String should have at least 2 characters", id="one-character"),
-        pytest.param("Plan", "publish.doc_id: String should match pattern", id="uppercase"),
-        pytest.param("-plan", "publish.doc_id: String should match pattern", id="leading-hyphen"),
-        pytest.param("plan-", "publish.doc_id: String should match pattern", id="trailing-hyphen"),
-        pytest.param("a--b", "publish.doc_id: String should match pattern", id="double-hyphen"),
-        pytest.param("plan doc", "publish.doc_id: String should match pattern", id="space"),
+        pytest.param("Plan", DOC_ID_NOT_A_SLUG, id="uppercase"),
+        pytest.param("-plan", DOC_ID_NOT_A_SLUG, id="leading-hyphen"),
+        pytest.param("plan-", DOC_ID_NOT_A_SLUG, id="trailing-hyphen"),
+        pytest.param("a--b", DOC_ID_NOT_A_SLUG, id="double-hyphen"),
+        pytest.param("plan doc", DOC_ID_NOT_A_SLUG, id="space"),
     ],
 )
 def test_a_doc_id_is_a_slug_of_at_least_two_characters(doc_id: str, message: str) -> None:
@@ -606,6 +623,22 @@ def test_a_rendered_page_carries_its_source_without_the_publish_block() -> None:
     html = render_html(parse_report(yaml.safe_load(SOURCE_WITH_PUBLISH)), source=SOURCE_WITH_PUBLISH)
 
     assert (extract_source(html), NOTION_PAGE_ID in html) == (SOURCE_WITHOUT_PUBLISH, False)
+
+
+def test_an_embedded_fragment_carries_its_source_without_the_publish_block() -> None:
+    html = render_embed(parse_report(yaml.safe_load(SOURCE_WITH_PUBLISH)), source=SOURCE_WITH_PUBLISH)
+
+    assert (extract_source(html), NOTION_PAGE_ID in html) == (SOURCE_WITHOUT_PUBLISH, False)
+
+
+@pytest.mark.parametrize("renderer", [render_html, render_embed])
+def test_a_source_holding_only_a_publish_block_stops_the_render(
+    renderer: Callable[..., str],
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        renderer(parse_report(make_report()), source="publish:\n  doc_id: plan\n")
+
+    assert str(raised.value) == CANNOT_CUT_MESSAGE
 
 
 def test_a_render_stops_rather_than_embed_a_block_it_cannot_cut() -> None:

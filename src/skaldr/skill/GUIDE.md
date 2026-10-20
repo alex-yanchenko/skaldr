@@ -18,8 +18,8 @@ index: { ... }      # optional: build one page from other documents (see Index d
 publish: { ... }    # optional: where the document publishes (see below)
 ```
 
-Top level is `version`, `meta`, `blocks`, and optional `badges`, `index` and `publish` (see *Index
-documents* and *Where it publishes* below), nothing else. `blocks` is required unless the document is an
+Top level is `version`, `meta`, `blocks`, and optional `badges`, `index` (see *Index documents* below)
+and `publish` (see *Where it publishes* below), nothing else. `blocks` is required unless the document is an
 index, where it is the optional intro: leave it out for no intro, since an empty `blocks: []` fails the build. Every block is a mapping with a `type` discriminator.
 **Validation is strict:** an unknown block type, a field that doesn't belong to that block, an
 unknown top-level key, or a value of the wrong shape each fails the build with a precise path,

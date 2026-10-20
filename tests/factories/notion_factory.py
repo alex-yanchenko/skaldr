@@ -176,6 +176,8 @@ class InMemoryNotion:
     other_blocks: dict[str, str] = field(default_factory=dict[str, str])
     users: dict[str, str] = field(default_factory=dict[str, str])
     seconds_per_edit: int = 60
+    polls_before_a_task_finishes: int = 0
+    _unfinished_polls: dict[str, int] = field(default_factory=dict[str, int])
     _failing_task: dict[str, Any] | None = None
     _clock: datetime = FIRST_EDIT
     _made: int = 0
@@ -452,6 +454,10 @@ class InMemoryNotion:
         )
 
     def _task(self, _method: str, task_id: str, _body: dict[str, Any]) -> httpx2.Response:
+        unfinished = self._unfinished_polls.pop(task_id, 0)
+        if unfinished > 0:
+            self._unfinished_polls[task_id] = unfinished - 1
+            return httpx2.Response(200, json={**_task_json(task_id, "running"), "poll_after_seconds": 1})
         result = self.tasks.pop(task_id)
         if isinstance(result, _FailedTask):
             return httpx2.Response(200, json={**_task_json(task_id, "failed"), "error": result.error})
@@ -465,6 +471,7 @@ class InMemoryNotion:
     def _later(self, result: dict[str, Any] | _FailedTask) -> httpx2.Response:
         task_id = f"task-{len(self.tasks) + len(self.requests)}"
         self.tasks[task_id] = result
+        self._unfinished_polls[task_id] = self.polls_before_a_task_finishes
         return httpx2.Response(202, json={**_task_json(task_id, "queued"), "poll_after_seconds": 1})
 
     def _edit_time(self) -> datetime:

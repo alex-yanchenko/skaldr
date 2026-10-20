@@ -1522,6 +1522,19 @@ def test_a_section_with_a_comment_over_two_lines_is_replaced_quoting_both_marker
     )
 
 
+def test_a_write_whose_task_is_still_running_after_two_polls_is_polled_until_it_finishes() -> None:
+    notion = _notion()
+    notion.polls_before_a_task_finishes = 2
+    transport = notion.transport()
+
+    created = transport.create_item(NewItem(PAGE_TARGET, STAMP, CONTENT))
+
+    polled = [request.url.path for request in notion.requests if "async_tasks" in request.url.path]
+    assert notion.markdown_of(created.item_id) == f"{WELCOME}{PLANTING}{STAMP_LINE}"
+    assert polled == [polled[0]] * 3
+    assert polled[0].startswith("/v1/async_tasks/task-")
+
+
 def test_an_edit_in_the_same_minute_as_skaldrs_write_still_reads_as_an_edit() -> None:
     notion = _notion()
     notion.seconds_per_edit = 10

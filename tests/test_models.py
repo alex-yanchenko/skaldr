@@ -1100,13 +1100,40 @@ def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location
         pytest.param(
             make_flow(steps=[make_step(label=" ")]), "blocks.0.request_flow.steps.0.label", id="flow-step"
         ),
+        pytest.param(make_tabs(make_tab(" ")), "blocks.0.tabs.tabs.0.label", id="tab"),
+        pytest.param(
+            {
+                "type": "comparison",
+                "options": ["A", "B"],
+                "rows": [{"feature": " ", "values": [True, False]}],
+            },
+            "blocks.0.comparison.rows.0.feature",
+            id="comparison-feature",
+        ),
     ],
 )
-def test_a_request_label_that_is_blank_is_rejected(block: dict[str, Any], location: str) -> None:
+def test_a_label_that_is_blank_is_rejected(block: dict[str, Any], location: str) -> None:
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
     assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
+
+
+def test_a_comparison_cell_with_blank_text_is_rejected() -> None:
+    block = {
+        "type": "comparison",
+        "options": ["A", "B"],
+        "rows": [{"feature": "f", "values": [{"value": " "}, False]}],
+    }
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(make_report(blocks=[block]))
+
+    assert str(raised.value) == (
+        "invalid content data: blocks.0.comparison.rows.0.values.0.bool: Input should be a valid boolean; "
+        "blocks.0.comparison.rows.0.values.0.str: Input should be a valid string; "
+        "blocks.0.comparison.rows.0.values.0.ComparisonCell.value: String should match pattern '\\S'"
+    )
 
 
 @pytest.mark.parametrize(
