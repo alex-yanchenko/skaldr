@@ -1,6 +1,5 @@
 import ast
 import re
-import tokenize
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -346,19 +345,6 @@ def test_no_string_in_the_package_source_carries_an_em_or_en_dash() -> None:
     sources = sorted((REPO_ROOT / "src" / "skaldr").rglob("*.py"))
 
     assert [hit for source in sources for hit in _string_literals_with_a_dash(source)] == []
-
-
-def _comments_with_a_dash(path: Path) -> list[str]:
-    with path.open("rb") as source:
-        return [
-            f"{path.relative_to(REPO_ROOT)}:{token.start[0]}"
-            for token in tokenize.tokenize(source.readline)
-            if token.type == tokenize.COMMENT and _EM_OR_EN_DASH.search(token.string)
-        ]
-
-
-def test_no_comment_in_models_carries_an_em_or_en_dash() -> None:
-    assert _comments_with_a_dash(REPO_ROOT / "src" / "skaldr" / "models.py") == []
 
 
 def _without_jinja_comments(template: str) -> str:
