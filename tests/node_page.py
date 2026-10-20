@@ -3,7 +3,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TypedDict
 
 import pytest
 
@@ -123,11 +123,22 @@ def script_containing(html: str, marker: str) -> str:
 
 @dataclass(frozen=True)
 class PrintCycle:
+    during: tuple[bool, ...]
+    after: tuple[bool, ...]
+
+
+class _PrintedStates(TypedDict):
     during: list[bool]
     after: list[bool]
 
 
-def _drive_page(scripts: list[str], run: PageRun, disclosures: list[bool]) -> dict[str, Any]:
+class _DrivenPage(TypedDict):
+    attributes: dict[str, str]
+    storage: dict[str, str]
+    printed: _PrintedStates
+
+
+def _drive_page(scripts: list[str], run: PageRun, disclosures: list[bool]) -> _DrivenPage:
     assert NODE is not None
     payload = {
         "scripts": scripts,
@@ -155,7 +166,7 @@ def run_page_scripts(scripts: list[str], run: PageRun) -> PageOutcome:
 
 def run_print_cycle(scripts: list[str], disclosures: list[bool]) -> PrintCycle:
     printed = _drive_page(scripts, PageRun(), disclosures)["printed"]
-    return PrintCycle(printed["during"], printed["after"])
+    return PrintCycle(tuple(printed["during"]), tuple(printed["after"]))
 
 
 def call_script_function(script: str, name: str, argument: str) -> object:

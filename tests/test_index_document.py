@@ -665,7 +665,7 @@ def test_printing_a_page_opens_every_collapsed_part_and_then_restores_how_the_re
 
     assert (parts_on_the_page, printed) == (
         2,
-        PrintCycle(during=[True, True, True], after=[False, False, True]),
+        PrintCycle(during=(True, True, True), after=(False, False, True)),
     )
 
 
