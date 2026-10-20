@@ -453,6 +453,21 @@ def test_a_heading_id_is_not_a_section_a_target_can_split_on() -> None:
         parse_report(report)
 
 
+def test_a_heading_id_inside_a_section_is_not_a_section_a_target_can_split_on() -> None:
+    report = make_report(
+        blocks=[make_section("outer", blocks=[{"type": "heading", "text": "Inner", "id": "inner"}])],
+        publish=SPLIT_ON_INNER,
+    )
+
+    with pytest.raises(ReportError) as raised:
+        parse_report(report)
+
+    assert str(raised.value) == (
+        "invalid content data: Value error, publish target 1 (notion) splits on 'inner', which is not "
+        "the id of a top-level section (a section is named by its `id:`)"
+    )
+
+
 def test_a_section_id_used_twice_cannot_name_a_publish_item() -> None:
     report = make_report(
         blocks=[make_section("inner"), make_section("inner", title="Other")], publish=SPLIT_ON_INNER
