@@ -790,20 +790,18 @@ def test_a_converter_failure_that_is_not_a_latex2mathml_error_still_fails_the_bu
 
 
 def _resources_a_page_loads(html: str) -> list[str]:
-    return re.findall(r"@font-face|<link[^>]*>|\bsrc=|url\(", html)
+    return re.findall(r"@font-face|<link[^>]*>|<img\b|<object\b|\bsrc=|url\(", html)
 
 
-def test_a_page_holding_math_adds_no_script_and_loads_no_font_file() -> None:
+def test_a_page_holding_math_adds_no_script_image_object_or_font_file() -> None:
     plain = render_html(parse_report(make_report(blocks=[{"type": "text", "body": "a b"}])))
     blocks = [{"type": "text", "body": "a $`x`$ b"}, {"type": "math", "expression": "x^2"}]
 
     page = render_html(parse_report(make_report(blocks=blocks)))
 
-    assert (
-        "<math" in page,
-        page.count("<script") - plain.count("<script"),
-        _resources_a_page_loads(page),
-    ) == (True, 0, _resources_a_page_loads(plain))
+    assert "<math" in page
+    assert page.count("<script") == plain.count("<script")
+    assert _resources_a_page_loads(page) == _resources_a_page_loads(plain)
 
 
 def test_a_converter_failure_keeps_the_exception_latex2mathml_raised_as_its_cause() -> None:
