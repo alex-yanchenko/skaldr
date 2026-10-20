@@ -61,8 +61,6 @@ from skaldr.patterns import SLUG_PATTERN
 from skaldr.publish_block import Publish, section_choice_errors
 
 _RECONCILIATION_ERROR_TYPE = "reconciliation"
-# URL schemes safe to emit into an href — the one gate for every author-supplied link (markdown
-# links in render.py and reference `url`s here), so a `javascript:`/`data:text/html:` link can't ship.
 ALLOWED_URL_SCHEMES = ("http://", "https://", "mailto:")
 _LINK_URL: TypeAdapter[AnyUrl] = TypeAdapter(AnyUrl)
 
@@ -166,11 +164,6 @@ CodeLanguage = Annotated[
     str, StringConstraints(max_length=40, pattern=r"^[A-Za-z0-9#+._-]+( [A-Za-z0-9#+._-]+)*$")
 ]
 
-# One palette, two vocabularies. Semantic tones (info/success/…) and badge colours (blue/green/…) name
-# the SAME eight colours — the six overlapping pairs share their tokens exactly, plus teal/sky which have
-# a palette name only. An author may write either name wherever a tone or a badge colour is taken; these
-# maps normalise each input to its field's canonical spelling before the Literal validates, so a `tone:
-# green` (or a badge `tone: success`) just works instead of failing. teal/sky pass through unchanged.
 ToneLiteral = Literal["neutral", "info", "success", "warning", "danger", "accent", "teal", "sky"]
 BadgeColorLiteral = Literal["slate", "blue", "green", "amber", "red", "violet", "teal", "sky"]
 TONE_BADGE_COLOR: Final[Mapping[ToneLiteral, BadgeColorLiteral]] = {
@@ -206,8 +199,6 @@ def _to_badge_color(value: Any) -> Any:
     return _TONE_TO_PALETTE.get(value, value) if isinstance(value, str) else value
 
 
-# Design-system primitives (fixed — referenced by name, never authored as values). Tone is the eight
-# colours by their semantic name (+ teal/sky, palette-only); BadgeColor is the same eight by palette name.
 Tone = Annotated[ToneLiteral, BeforeValidator(_to_tone)]
 RowTone = Literal["muted", "danger"]
 # Row-dict keys with a reserved meaning (not column values). A column may not use one as its key.
@@ -741,7 +732,6 @@ class BadgeRow(_Block):
 
     @model_validator(mode="after")
     def _one_source(self) -> "BadgeRow":
-        # items/groups default to [] (never None), so truthiness — not `is None` — distinguishes them.
         if bool(self.items) == bool(self.groups):
             raise ValueError("a badge row needs exactly one of 'items' or 'groups'")
         if self.groups and self.label is not None:
@@ -1114,8 +1104,6 @@ class Chart(_Block):
                         f"series '{entry.label}' has {len(entry.values)} values but there are "
                         f"{len(self.categories)} categories; they must match"
                     )
-                # Bars/lines measure up from a zero baseline (no negative axis) — a negative value
-                # would draw an invalid or below-axis mark. Mirror the donut/meter positivity guard.
                 if any(value < 0 for value in entry.values):
                     raise ValueError(
                         f"series '{entry.label}' has a negative value; bar/line values must be >= 0"
@@ -1362,9 +1350,6 @@ class Group(FrozenModel):
 
     @model_validator(mode="after")
     def _rows_are_mappings(self) -> "Group":
-        # `Table._expand_positional_rows` turns positional list rows into mappings before a Group is
-        # built. Assert it so a Group constructed some other way fails loud here, not with an opaque
-        # AttributeError deep in the render — the `list[dict]` casts on the rows rely on this holding.
         if not all(isinstance(row, dict) for row in self.rows):
             raise ValueError("group rows must be mappings (positional list rows are expanded by the table)")
         return self
@@ -1412,13 +1397,13 @@ class Table(_Block):
         fields = cast("dict[str, Any]", data)
         raw_columns = fields.get("columns")
         if not isinstance(raw_columns, list):
-            return fields  # malformed columns — let field validation report it
+            return fields
         keys: list[str] = []
         indicator_keys: set[str] = set()
         for col in cast("list[Any]", raw_columns):
             key = cast("dict[str, Any]", col).get("key") if isinstance(col, dict) else None
             if not isinstance(key, str):
-                return fields  # a column missing a string key — let Column validation report it precisely
+                return fields
             keys.append(key)
             if cast("dict[str, Any]", col).get("kind") == "indicator":
                 indicator_keys.add(key)
@@ -1617,9 +1602,6 @@ class Table(_Block):
         total = col_sum(self.body_rows, column)
         handled = self.reconcile.handled.value if self.reconcile.handled else 0
         grand = total + handled
-        # Exact when the column is integer-valued (the norm) — the "off by even one" guarantee must
-        # hold at any magnitude. A fixed abs_tol absorbs IEEE-754 noise only when floats are present;
-        # a rel_tol would widen the slack with the total and silently pass real discrepancies at scale.
         matches = (
             grand == self.reconcile.total
             if isinstance(total, int)
@@ -2952,13 +2934,6 @@ SectionBlock = Annotated[_Simple | Toggle | Tabs | Request | RequestFlow | Panel
 Toggle.model_rebuild()
 Section.model_rebuild()
 Panel.model_rebuild()
-
-
-# Grid: a bounded side-by-side layout over a 6-column base.
-# Nesting is capped at depth 2 by the type graph: a top-level GridCell may hold nested InnerGrids,
-# whose cells hold only leaf blocks — so a depth-3 grid is unrepresentable. `span` is required
-# (not auto-distributed) and cell spans in a grid sum to at most 6 (trailing space allowed).
-# A grid nests only within a grid; `section` stays a leaf-only container and the two do not mix.
 
 
 class InnerGridCell(FrozenModel):
