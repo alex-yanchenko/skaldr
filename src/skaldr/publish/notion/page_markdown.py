@@ -273,6 +273,21 @@ class _Child(NamedTuple):
     raw: str
 
 
+def child_links_of_a_page_with_no_content(markdown: str) -> str | None:
+    lines = _page_lines(markdown)
+    if any(line.aligns for line in lines):
+        return None
+    return "".join(line.raw for line in lines if line.child_url is not None)
+
+
+def without_child_links(raw_sections: Mapping[str, str]) -> dict[str, str]:
+    kept = {
+        key: "".join(line.raw for line in _page_lines(raw) if line.child_url is None)
+        for key, raw in raw_sections.items()
+    }
+    return {key: raw for key, raw in kept.items() if raw}
+
+
 def carried_into(raw: str, text: str) -> str:
     children: list[_Child] = []
     lines_before = 0

@@ -258,15 +258,47 @@ def test_a_page_left_empty_by_a_fill_that_failed_is_adopted_and_filled_by_the_ne
     interrupted = main(["publish", str(path), "--apply"], registry=_registry(notion))
     left_behind = notion.markdown_of(DOCUMENT_PAGE)
     capsys.readouterr()
-    reruns = [main(["publish", str(path), "--apply"], registry=_registry(notion)) for _ in range(2)]
+    rerun = main(["publish", str(path), "--apply"], registry=_registry(notion))
+    capsys.readouterr()
 
     plain = _notion()
     main(["publish", str(write_garden_report(tmp_path / "plain")), "--apply"], registry=_registry(plain))
-    assert (interrupted, left_behind, reruns[-1]) == (1, "", 0)
-    assert sorted(notion.markdown_of(DOCUMENT_PAGE).splitlines()) == sorted(
-        plain.markdown_of(DOCUMENT_PAGE).splitlines()
-    )
+    assert (interrupted, left_behind, rerun) == (1, "", 0)
+    plain_lines = plain.markdown_of(DOCUMENT_PAGE).splitlines()
+    child_link = plain_lines.pop()
+    plain_lines.insert(plain_lines.index("<table_of_contents/>") + 1, child_link)
+    assert notion.markdown_of(DOCUMENT_PAGE) == "\n".join(plain_lines)
     assert notion.markdown_of(TOOLS_PAGE) == plain.markdown_of(TOOLS_PAGE)
+
+
+def test_a_page_with_no_children_left_empty_by_a_fill_that_failed_is_filled_exactly_by_the_next_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    whole = {"publish": make_notion_publish()}
+    interrupted = main(
+        ["publish", str(write_garden_report(tmp_path, **whole)), "--apply"], registry=_registry(notion)
+    )
+    capsys.readouterr()
+    rerun = main(
+        ["publish", str(write_garden_report(tmp_path, **whole)), "--apply"], registry=_registry(notion)
+    )
+
+    plain = _notion()
+    main(
+        ["publish", str(write_garden_report(tmp_path / "plain", **whole)), "--apply"],
+        registry=_registry(plain),
+    )
+    assert (interrupted, rerun, notion.markdown_of(DOCUMENT_PAGE)) == (
+        1,
+        0,
+        plain.markdown_of(DOCUMENT_PAGE),
+    )
 
 
 def test_a_run_that_creates_nothing_never_reads_the_template_and_leaves_existing_pages_alone(

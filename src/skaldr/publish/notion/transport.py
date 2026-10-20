@@ -28,6 +28,7 @@ from skaldr.publish.notion.icon_and_cover import (
 )
 from skaldr.publish.notion.page_markdown import (
     KeyedPage,
+    child_links_of_a_page_with_no_content,
     Replacement,
     SectionPairs,
     carried_into,
@@ -38,6 +39,7 @@ from skaldr.publish.notion.page_markdown import (
     release_replacements,
     section_replacement,
     stamp_line,
+    without_child_links,
 )
 from skaldr.publish.notion.properties import (
     TITLE_PROPERTY_ID,
@@ -147,6 +149,13 @@ def _with_children_of_removed_sections(
     return [(key, texts[key]) for key, _ in after]
 
 
+def _filling_a_page_with_no_content(markdown: str, after: SectionPairs) -> Replacement | None:
+    child_links = child_links_of_a_page_with_no_content(markdown)
+    if child_links is None:
+        return None
+    return Replacement(markdown, joined([*(text for _, text in after), child_links]))
+
+
 def _quoted_sections(replacement: Replacement) -> str:
     return ", ".join(replacement.quoted) or "none"
 
@@ -208,6 +217,7 @@ class NotionTransport:
         self._workspace_template = workspace_template
         self._read = ReadLayouts()
         self._editor_names: dict[str, str] = {}
+        self._parents_given_a_child: set[str] = set()
         self._templates_found_empty: set[str] = set()
         self._parents_that_are_databases: dict[str, bool] = {}
 
@@ -234,6 +244,8 @@ class NotionTransport:
         templated = _is_templated(body)
         page = refused_when_not_found(lambda: self._api.create_page(body, asynchronous=not templated))
         item_id = _page_key(page.id)
+        if request.parent_id is not None:
+            self._parents_given_a_child.add(_page_key(request.parent_id))
         first_write = joined([*batches[0], stamp]) if templated else None
         return finished_after_a_create(
             _page_named(item_id),
@@ -257,7 +269,9 @@ class NotionTransport:
             kept = carried_into(current.get(change.key, ""), change.text)
         after = list(placed_section(current, change.key, kept, follows).items())
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
-        replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
+        replacement = section_replacement(
+            list(current.items()), after, markdown, keyed.stamp_line
+        ) or _filling_a_page_with_no_content(markdown, after)
         if replacement is None:
             raise WriteRejectedError(
                 f"Notion page {item_id} holds nothing skaldr can place the section next to"
@@ -272,7 +286,9 @@ class NotionTransport:
             current,
             [(key, carried_into(current.get(key, ""), text)) for key, text in request.sections.items()],
         )
-        replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
+        replacement = section_replacement(
+            list(current.items()), after, markdown, keyed.stamp_line
+        ) or _filling_a_page_with_no_content(markdown, after)
         if replacement is None:
             raise WriteRejectedError(
                 f"Notion page {item_id} holds nothing skaldr can place its content next to"
@@ -408,6 +424,8 @@ class NotionTransport:
     def _send(self, item_id: str, sections: Mapping[str, str], replacement: Replacement) -> str:
         _refuse_unknown_blocks(item_id, sections, replacement)
         _refuse_what_one_request_cannot_carry(item_id, replacement)
+        if not replacement.old_str:
+            return self._api.update_markdown(item_id, _replace_content(replacement.new_str)).markdown
         return self._api.update_markdown(item_id, _update_content(replacement)).markdown
 
     def _written_with(
@@ -448,7 +466,11 @@ class NotionTransport:
     def _unchanged_since_read(self, item_id: str, raw_sections: RawSections) -> tuple[KeyedPage, str]:
         markdown = self._api.page_markdown(item_id).markdown
         keyed = keyed_page(markdown, raw_sections)
-        refuse_a_change_since_the_read(_page_named(item_id), raw_sections, keyed.raw_sections)
+        if _page_key(item_id) in self._parents_given_a_child:
+            read, now = without_child_links(raw_sections), without_child_links(keyed.raw_sections)
+        else:
+            read, now = raw_sections, keyed.raw_sections
+        refuse_a_change_since_the_read(_page_named(item_id), read, now)
         return keyed, markdown
 
     def _property_requests(self, page: Page, values: Mapping[str, JsonValue]) -> JsonFields:
