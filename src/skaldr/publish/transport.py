@@ -7,6 +7,7 @@ from skaldr.frozen_model import FrozenModel
 from skaldr.publish.content import ItemContent, Part, is_unset, same_value
 
 __all__ = [
+    "NO_PUBLISHED",
     "NO_SECTIONS",
     "AddSection",
     "ContentWrite",
@@ -15,6 +16,7 @@ __all__ = [
     "LinkedItem",
     "LinksWrite",
     "NewItem",
+    "PublishedSections",
     "RawSections",
     "Release",
     "RemoteItem",
@@ -32,6 +34,15 @@ from skaldr.services import Service
 
 RawSections = Mapping[str, str]
 NO_SECTIONS: RawSections = MappingProxyType({})
+
+
+@dataclass(frozen=True)
+class PublishedSections:
+    rendered: RawSections
+    saved_remote: RawSections
+
+
+NO_PUBLISHED = PublishedSections(NO_SECTIONS, NO_SECTIONS)
 
 
 @dataclass(frozen=True)
@@ -70,6 +81,7 @@ class LinksWrite:
     stamp: Stamp
     links: tuple[ShownLink, ...]
     current: tuple[ShownLink, ...] = ()
+    published: PublishedSections = NO_PUBLISHED
 
     @property
     def sent(self) -> tuple[ShownLink, ...]:
@@ -149,6 +161,7 @@ class SectionRequest:
     change: SectionWrite
     raw_sections: RawSections
     stamp: Stamp
+    published: PublishedSections = NO_PUBLISHED
 
 
 @dataclass(frozen=True)
@@ -177,6 +190,7 @@ class FieldsWrite:
     cover: str | None = None
     previous_icon: str | None = None
     previous_cover: str | None = None
+    published: PublishedSections = NO_PUBLISHED
 
     @property
     def changes_the_icon(self) -> bool:

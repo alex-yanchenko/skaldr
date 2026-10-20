@@ -28,12 +28,14 @@ from skaldr.publish.slack.canvas_markdown import (
     with_the_stamp_line,
 )
 from skaldr.publish.transport import (
+    NO_PUBLISHED,
     AddSection,
     ContentWrite,
     FieldsWrite,
     ItemLink,
     LinksWrite,
     NewItem,
+    PublishedSections,
     RawSections,
     Release,
     RemoteItem,
@@ -63,6 +65,14 @@ def _canvas_named(canvas_id: str) -> str:
 
 def _named_fields(request: FieldsWrite) -> list[str]:
     return list(dict.fromkeys([*request.changed_fields, *request.cleared_fields]))
+
+
+def _as_skaldr_wrote_it(
+    markdown: str, layout: Mapping[str, str], published: PublishedSections
+) -> KeyedCanvas:
+    return keyed_canvas(markdown, layout).in_the_markdown_skaldr_wrote(
+        published.rendered, published.saved_remote
+    )
 
 
 def warn_on_stderr(message: str) -> None:
@@ -103,7 +113,7 @@ class SlackTransport:
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         change = request.change
-        keyed = self._unchanged_since_read(item_id, request.raw_sections)
+        keyed = self._unchanged_since_read(item_id, request.raw_sections, request.published)
         current = dict(request.raw_sections)
         if not isinstance(change, AddSection) and current.get(change.key) != change.raw_current:
             raise WriteRejectedError(
@@ -122,7 +132,7 @@ class SlackTransport:
         return self._written_with(item_id, after)
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
-        keyed = self._unchanged_since_read(item_id, request.raw_sections)
+        keyed = self._unchanged_since_read(item_id, request.raw_sections, NO_PUBLISHED)
         old = range(keyed.content_start, keyed.content_end)
         markdown = canvas_markdown_of(list(request.sections.values()))
         body = body_with_content_swapped(keyed, old, keyed.content_start, markdown)
@@ -131,7 +141,7 @@ class SlackTransport:
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
         layout = self._read.layouts.get(item_id, {})
-        keyed = keyed_canvas(self._markdown(item_id), layout)
+        keyed = _as_skaldr_wrote_it(self._markdown(item_id), layout, request.published)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
         named = _named_fields(request)
@@ -177,7 +187,7 @@ class SlackTransport:
             ) from exc
 
     def release_item(self, item_id: str, request: Release, /) -> None:
-        self._unchanged_since_read(item_id, request.raw_sections)
+        self._unchanged_since_read(item_id, request.raw_sections, NO_PUBLISHED)
         keyed = keyed_canvas(self._markdown(item_id), self._read.published.get(item_id, request.raw_sections))
         kept = [
             block.raw for block in keyed.blocks[keyed.content_start :] if block.role not in RELEASED_ROLES
@@ -208,7 +218,7 @@ class SlackTransport:
 
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
         layout = self._read.layouts.get(item_id, {})
-        keyed = keyed_canvas(self._markdown(item_id), layout)
+        keyed = _as_skaldr_wrote_it(self._markdown(item_id), layout, request.published)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
         if request.changes_nothing:
@@ -285,14 +295,19 @@ class SlackTransport:
         self._read.note_written(item_id, layout)
         return self._remote(item_id, self._markdown(item_id), layout)
 
-    def _unchanged_since_read(self, item_id: str, raw_sections: RawSections) -> KeyedCanvas:
-        keyed = keyed_canvas(self._markdown(item_id), raw_sections)
+    def _unchanged_since_read(
+        self, item_id: str, raw_sections: RawSections, published: PublishedSections
+    ) -> KeyedCanvas:
+        markdown = self._markdown(item_id)
+        keyed = keyed_canvas(markdown, raw_sections)
         refuse_a_change_since_the_read(_canvas_named(item_id), raw_sections, keyed.raw_sections)
-        return keyed
+        return _as_skaldr_wrote_it(markdown, raw_sections, published)
 
     def _create_into(self, item_id: str, request: NewItem, markdown: str) -> RemoteItem:
         title = request.content.title
-        keyed = refused_when_not_found(lambda: self._unchanged_since_read(item_id, request.into_raw_sections))
+        keyed = refused_when_not_found(
+            lambda: self._unchanged_since_read(item_id, request.into_raw_sections, NO_PUBLISHED)
+        )
         replace: JsonFields = {"operation": "replace", "document_content": markdown_content(markdown)}
         refused_when_not_found(lambda: self._api.edit_canvas(item_id, replace))
 

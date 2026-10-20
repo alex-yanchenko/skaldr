@@ -194,7 +194,7 @@ class Applier:
                 self.state, ref, target_plan.target, item.model_copy(update={"rendered": rendered})
             )
         transport = self.transports.for_target(ref.target)
-        request = SectionRequest(write, raw_sections, self._stamp(ref))
+        request = SectionRequest(write, raw_sections, self._stamp(ref), item.published_sections)
         return self._written(
             target_plan,
             ref,
@@ -231,6 +231,7 @@ class Applier:
             cover=step.content.cover,
             previous_icon=now.icon,
             previous_cover=now.cover,
+            published=item.published_sections,
         )
         rendered = item.rendered.model_copy(
             update={

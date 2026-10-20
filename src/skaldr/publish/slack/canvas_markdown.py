@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Literal
 
 from skaldr.export.slack import CANVAS_ESCAPES, CANVAS_FENCE, LIST_SEPARATOR
@@ -226,6 +226,46 @@ class KeyedCanvas:
     @property
     def archived(self) -> bool:
         return self.title.endswith(ARCHIVED_TITLE_MARKER)
+
+    def _owned_spans(
+        self, rendered: Mapping[str, str], saved_remote: Mapping[str, str]
+    ) -> dict[int, tuple[int, str]]:
+        keying = _Keying(SectionLayout.of(saved_remote, _comparable_blocks))
+        keying.content([block.raw for block in self.content])
+        held: defaultdict[str, list[int]] = defaultdict(list[int])
+        for index, as_saved in enumerate(keying.blocks):
+            if as_saved.key is not None and as_saved.role == "published":
+                held[as_saved.key].append(index)
+        spans: dict[int, tuple[int, str]] = {}
+        for key, indexes in held.items():
+            first, last = indexes[0], indexes[-1]
+            whole = len(indexes) == len(_comparable_blocks(saved_remote[key]))
+            between = all(
+                keying.blocks[index].role in ("published", "blank") for index in range(first, last + 1)
+            )
+            if whole and between and rendered.get(key, "").strip():
+                spans[first] = (last, key)
+        return spans
+
+    def in_the_markdown_skaldr_wrote(
+        self, rendered: Mapping[str, str], saved_remote: Mapping[str, str]
+    ) -> "KeyedCanvas":
+        spans = self._owned_spans(rendered, saved_remote)
+        content: list[CanvasBlock] = []
+        index = 0
+        while index < len(self.content):
+            block = self.content[index]
+            if index not in spans:
+                content.append(block)
+                index += 1
+                continue
+            last, key = spans[index]
+            texts = canvas_blocks(rendered[key].strip("\n"))
+            content += [CanvasBlock(text, block.key, "published") for text in texts]
+            index = last + 1
+        blocks = (*self.blocks[: self.content_start], *content, *self.blocks[self.content_end :])
+        stamp_at = None if self.stamp_at is None else self.content_start + len(content)
+        return replace(self, blocks=blocks, stamp_at=stamp_at)
 
     def positions_of(self, key: str) -> list[int]:
         return [
