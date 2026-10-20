@@ -55,6 +55,9 @@ PIE_TEXT_VARIABLES: Final[Mapping[str, str]] = {
 }
 
 
+TONE_NAMES: Final[tuple[ToneName, ...]] = get_args(ToneName)
+
+
 class NodeColors(NamedTuple):
     fill: str
     stroke: str
@@ -179,7 +182,7 @@ def _graph_lines(graph: Graph, *, with_details: bool) -> list[str]:
     ]
     lines += [f"    {edge.source} {'-.->' if edge.dashed else '-->'} {edge.target}" for edge in graph.edges]
     used = {node.tone for node in graph.nodes}
-    return [*lines, *(_class_line(tone) for tone in sorted(get_args(ToneName)) if tone in used)]
+    return [*lines, *(_class_line(tone) for tone in sorted(TONE_NAMES) if tone in used)]
 
 
 def _xy_lines(chart: XYChart) -> list[str]:
