@@ -1100,19 +1100,7 @@ def test_a_toggle_with_a_blank_title_is_rejected(block: dict[str, Any], location
         pytest.param(
             make_flow(steps=[make_step(label=" ")]), "blocks.0.request_flow.steps.0.label", id="flow-step"
         ),
-    ],
-)
-def test_a_request_label_that_is_blank_is_rejected(block: dict[str, Any], location: str) -> None:
-    with pytest.raises(ReportError) as raised:
-        parse_report(make_report(blocks=[block]))
-
-    assert str(raised.value) == f"invalid content data: {location}: String should match pattern '\\S'"
-
-
-@pytest.mark.parametrize(
-    ("block", "location"),
-    [
-        pytest.param(make_tabs(make_tab(" ")), "blocks.0.tabs.tabs.0.label", id="tab-label"),
+        pytest.param(make_tabs(make_tab(" ")), "blocks.0.tabs.tabs.0.label", id="tab"),
         pytest.param(
             {
                 "type": "comparison",
@@ -1124,9 +1112,7 @@ def test_a_request_label_that_is_blank_is_rejected(block: dict[str, Any], locati
         ),
     ],
 )
-def test_a_tab_label_and_a_comparison_feature_that_are_blank_are_rejected(
-    block: dict[str, Any], location: str
-) -> None:
+def test_a_label_that_is_blank_is_rejected(block: dict[str, Any], location: str) -> None:
     with pytest.raises(ReportError) as raised:
         parse_report(make_report(blocks=[block]))
 
