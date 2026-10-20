@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import cache
@@ -18,6 +19,9 @@ from skaldr.mathml import (
     MathDisplay,
     mathml,
 )
+from skaldr.models import parse_report
+from skaldr.render import render_html
+from tests.factories.report_factory import make_report
 
 MATH_OPEN = '<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline">'
 CONVERTER_PREFIX = "latex2mathml cannot convert it ("
@@ -783,6 +787,23 @@ def test_a_converter_failure_that_is_not_a_latex2mathml_error_still_fails_the_bu
         f"invalid math expression '{expression}': latex2mathml cannot convert it (StopIteration)",
         StopIteration,
     )
+
+
+def _resources_a_page_loads(html: str) -> list[str]:
+    return re.findall(r"@font-face|<link[^>]*>|\bsrc=|url\(", html)
+
+
+def test_a_page_holding_math_adds_no_script_and_loads_no_font_file() -> None:
+    plain = render_html(parse_report(make_report(blocks=[{"type": "text", "body": "a b"}])))
+    blocks = [{"type": "text", "body": "a $`x`$ b"}, {"type": "math", "expression": "x^2"}]
+
+    page = render_html(parse_report(make_report(blocks=blocks)))
+
+    assert (
+        "<math" in page,
+        page.count("<script") - plain.count("<script"),
+        _resources_a_page_loads(page),
+    ) == (True, 0, _resources_a_page_loads(plain))
 
 
 def test_a_converter_failure_keeps_the_exception_latex2mathml_raised_as_its_cause() -> None:
