@@ -403,6 +403,43 @@ def test_a_refused_write_is_a_rejected_write(status: int, code: str) -> None:
         harness.api.create_page({"parent": {"page_id": PAGE_ID}})
 
 
+def test_a_413_with_no_message_is_a_rejected_write_that_says_the_request_was_too_large() -> None:
+    harness = _harness(Answer(413, {"isNotionError": False, "name": "PayloadTooLargeError", "code": 413}))
+
+    with pytest.raises(WriteRejectedError) as caught:
+        harness.api.update_markdown(PAGE_ID, {"type": "replace_content", "replace_content": {"new_str": ""}})
+
+    assert str(caught.value) == (
+        f"Notion refused to change the content of page {PAGE_ID}: the request was too large (HTTP 413); "
+        "give a large section its own page with `split`"
+    )
+
+
+def test_a_413_that_carries_notions_own_message_keeps_it() -> None:
+    harness = _harness(Answer(413, _error(413, "payload_too_large", "Body exceeds 1 MB.")))
+
+    with pytest.raises(ConnectorError) as caught:
+        harness.api.update_markdown(PAGE_ID, {"type": "replace_content", "replace_content": {"new_str": ""}})
+
+    assert (type(caught.value), str(caught.value)) == (
+        ConnectorError,
+        f"Notion could not change the content of page {PAGE_ID}: "
+        "HTTP 413 payload_too_large: Body exceeds 1 MB.",
+    )
+
+
+def test_a_413_on_a_read_says_the_request_was_too_large() -> None:
+    harness = _harness(Answer(413, {"isNotionError": False, "name": "PayloadTooLargeError", "code": 413}))
+
+    with pytest.raises(ConnectorError) as caught:
+        harness.api.page(PAGE_ID)
+
+    assert (type(caught.value), str(caught.value)) == (
+        ConnectorError,
+        f"Notion could not read page {PAGE_ID}: the request was too large (HTTP 413)",
+    )
+
+
 def test_a_missing_page_is_an_item_not_found_error() -> None:
     harness = _harness(Answer(404, _error(404, "object_not_found", "Could not find page")))
 

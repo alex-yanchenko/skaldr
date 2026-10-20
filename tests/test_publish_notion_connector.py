@@ -15,6 +15,7 @@ from skaldr.publish.content import ItemContent
 from skaldr.publish.drafts import authored_from, draft_targets
 from skaldr.publish.jira import JiraConnector
 from skaldr.publish.notion.connector import NotionConnector
+from skaldr.publish.notion.transport import SECTION_BLOCKS, SECTION_JSON_BYTES
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target, make_report
 from tests.factories.auth_factory import (
@@ -82,8 +83,8 @@ def test_the_notion_connector_writes_sections_within_one_creates_budget_and_carr
         NotionTarget,
         "section",
         (
-            ContentLimit("section", 4_999, "Notion blocks", notion_block_count),
-            ContentLimit("section", 200_000, "bytes of JSON", json_string_bytes),
+            ContentLimit("section", SECTION_BLOCKS, "Notion blocks", notion_block_count),
+            ContentLimit("section", SECTION_JSON_BYTES, "bytes of JSON", json_string_bytes),
         ),
         True,
     )
@@ -101,12 +102,14 @@ def _report_with_a_tools_section(blocks: list[dict[str, Any]]) -> dict[str, Any]
     ("blocks", "measured"),
     [
         pytest.param(
-            [{"type": "list", "items": [f"Tool {number}." for number in range(5_000)]}],
-            "5,001 Notion blocks, over the 4,999",
+            [{"type": "list", "items": [f"Tool {number}." for number in range(SECTION_BLOCKS + 1)]}],
+            f"{SECTION_BLOCKS + 2:,} Notion blocks, over the {SECTION_BLOCKS:,}",
             id="blocks",
         ),
         pytest.param(
-            [{"type": "text", "body": "a" * 200_000}], "200,012 bytes of JSON, over the 200,000", id="bytes"
+            [{"type": "text", "body": "a" * SECTION_JSON_BYTES}],
+            f"{SECTION_JSON_BYTES + 12:,} bytes of JSON, over the {SECTION_JSON_BYTES:,}",
+            id="bytes",
         ),
     ],
 )

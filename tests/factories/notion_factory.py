@@ -287,8 +287,12 @@ class InMemoryNotion:
     def _over_the_limits(self, request: httpx2.Request, body: dict[str, Any]) -> httpx2.Response | None:
         if self.limits is None or request.method == "GET":
             return None
+        if len(request.content) > self.limits.json_bytes and body.get("allow_async"):
+            return _error(400, "validation_error", "Request is too large to process asynchronously.")
         if len(request.content) > self.limits.json_bytes:
-            return _error(400, "validation_error", "Request body too large.")
+            return httpx2.Response(
+                413, json={"isNotionError": False, "name": "PayloadTooLargeError", "code": 413}
+            )
         if sum(map(notion_block_count, _written_markdown(body))) > self.limits.blocks:
             return _error(400, "validation_error", "Too many blocks in one request.")
         return None

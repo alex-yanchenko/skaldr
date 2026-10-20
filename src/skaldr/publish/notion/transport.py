@@ -66,11 +66,13 @@ from skaldr.publish.transport import (
 from skaldr.publish_block import NotionTarget, notion_page_id
 from skaldr.publish_block.target import JsonFields
 
-CREATE_BLOCKS: Final = 5000
-REQUEST_JSON_BYTES: Final = 450_000
+REQUEST_BLOCKS: Final = 2_500
+REQUEST_JSON_BYTES: Final = 300_000
+REQUEST_WRAPPER_BYTES: Final = 20_000
+MARKDOWN_JSON_BYTES: Final = REQUEST_JSON_BYTES - REQUEST_WRAPPER_BYTES
 STAMP_BLOCKS: Final = 1
-SECTION_BLOCKS: Final = CREATE_BLOCKS - STAMP_BLOCKS
-SECTION_JSON_BYTES: Final = 200_000
+SECTION_BLOCKS: Final = REQUEST_BLOCKS - STAMP_BLOCKS
+SECTION_JSON_BYTES: Final = MARKDOWN_JSON_BYTES // 2
 DATABASE_BLOCK: Final = "child_database"
 PAGE_BLOCK: Final = "child_page"
 STAMP_KEY: Final = "skaldr stamp"
@@ -97,13 +99,13 @@ def _replace_content(markdown: str) -> JsonFields:
 def _create_batches(texts: Sequence[str], stamp: str) -> list[list[str]]:
     stamp_blocks, stamp_bytes = notion_block_count(stamp), json_string_bytes(stamp)
     batches: list[list[str]] = [[]]
-    blocks, size = stamp_blocks, stamp_bytes
+    blocks, size = stamp_blocks, 2 * stamp_bytes
     for text in texts:
         text_blocks, text_bytes = notion_block_count(text), json_string_bytes(text)
-        too_big = blocks + text_blocks > CREATE_BLOCKS or size + text_bytes > REQUEST_JSON_BYTES
+        too_big = blocks + text_blocks > REQUEST_BLOCKS or size + text_bytes > MARKDOWN_JSON_BYTES
         if batches[-1] and too_big:
             batches.append([])
-            blocks, size = stamp_blocks, stamp_bytes
+            blocks, size = stamp_blocks, 2 * stamp_bytes
         batches[-1].append(text)
         blocks += text_blocks
         size += text_bytes
@@ -148,12 +150,12 @@ def _quoted_sections(replacement: Replacement) -> str:
 def _refuse_what_one_request_cannot_carry(item_id: str, replacement: Replacement) -> None:
     size = json_string_bytes(replacement.old_str) + json_string_bytes(replacement.new_str)
     blocks = notion_block_count(replacement.new_str)
-    if size <= REQUEST_JSON_BYTES and blocks <= CREATE_BLOCKS:
+    if size <= MARKDOWN_JSON_BYTES and blocks <= REQUEST_BLOCKS:
         return
     measured = (
-        f"{size:,} bytes of JSON in one request, over the {REQUEST_JSON_BYTES:,}"
-        if size > REQUEST_JSON_BYTES
-        else f"{blocks:,} Notion blocks in one request, over the {CREATE_BLOCKS:,}"
+        f"{size:,} bytes of JSON in one request, over the {MARKDOWN_JSON_BYTES:,}"
+        if size > MARKDOWN_JSON_BYTES
+        else f"{blocks:,} Notion blocks in one request, over the {REQUEST_BLOCKS:,}"
     )
     raise WriteRejectedError(
         f"the write to Notion page {item_id} quotes sections {_quoted_sections(replacement)} and would send "
@@ -290,7 +292,7 @@ class NotionTransport:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
         key = _page_key(item_id)
         layout = self._read.published.get(key, request.raw_sections)
-        for replacement in release_replacements(markdown, layout, REQUEST_JSON_BYTES):
+        for replacement in release_replacements(markdown, layout, MARKDOWN_JSON_BYTES // 2):
             self._send(item_id, keyed.raw_sections, replacement)
         self._read.note_released(key)
         page = self._live_page(item_id)

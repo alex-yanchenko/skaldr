@@ -13,6 +13,7 @@ from skaldr.errors import (
     ItemNotFoundError,
     WriteRejectedError,
 )
+from skaldr.export.budget import json_string_bytes
 from skaldr.publish.content import (
     COVER,
     FIELDS,
@@ -25,7 +26,12 @@ from skaldr.publish.content import (
 )
 from skaldr.publish.notion.api import NotionApi
 from skaldr.publish.notion.page_markdown import UNKEYED_SECTION
-from skaldr.publish.notion.transport import NotionTransport
+from skaldr.publish.notion.transport import (
+    REQUEST_BLOCKS,
+    REQUEST_JSON_BYTES,
+    SECTION_JSON_BYTES,
+    NotionTransport,
+)
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
@@ -71,6 +77,8 @@ CUSTOM_EMOJI_ID = "c0ffee00-0000-4000-8000-0000000000e1"
 SEEDLING_ICON = {"type": "emoji", "emoji": SEEDLING}
 GARDEN_COVER = {"type": "external", "external": {"url": COVER_URL}}
 LOOKING = CONTENT.model_copy(update={"icon": SEEDLING, "cover": COVER_URL})
+NOTION_LIMITS_SEEN_LIVE = RequestLimits(json_bytes=355_893, blocks=3_000)
+NOTION_LIMITS_SKALDR_SENDS_WITHIN = RequestLimits(json_bytes=REQUEST_JSON_BYTES, blocks=REQUEST_BLOCKS)
 
 
 def _notion() -> InMemoryNotion:
@@ -240,7 +248,7 @@ def _long_section(title: str, items: int) -> str:
 def test_a_page_over_one_create_is_finished_by_appends_before_the_stamp_and_no_section_is_split() -> None:
     notion = _notion()
     transport = notion.transport()
-    sections = {key: _long_section(key, 1_999) for key in ("beds", "paths", "sheds")}
+    sections = {key: _long_section(key, 1_000) for key in ("beds", "paths", "sheds")}
 
     created = transport.create_item(NewItem(PAGE_TARGET, STAMP, ItemContent(title="Big", sections=sections)))
 
@@ -772,7 +780,7 @@ def test_a_move_that_would_not_fit_one_request_is_refused_before_anything_is_sen
     with pytest.raises(
         WriteRejectedError,
         match=f"^the write to Notion page {created.item_id} quotes sections a, b and would send 600,032 "
-        "bytes of JSON in one request, over the 450,000 one request may carry; give one of those sections "
+        "bytes of JSON in one request, over the 280,000 one request may carry; give one of those sections "
         "its own page with `split`$",
     ):
         transport.write_section(
@@ -813,14 +821,19 @@ def test_a_release_keeps_a_block_notion_cannot_show_as_markdown_without_quoting_
 
 def test_a_page_larger_than_one_request_is_released_in_several() -> None:
     notion = _notion()
-    sections = {key: f"## {key.upper()}\n{'a' * 150_000}\n" for key in ("a", "b", "c", "d")}
+    sections = {key: f"## {key.upper()}\n{'a' * 100_000}\n" for key in ("a", "b", "c", "d")}
     transport, created = _created(notion, ItemContent(title="Big", sections=sections))
 
     transport.release_item(created.item_id, Release(created.raw_sections, ()))
 
     a, b, c, d = sections.values()
     assert (_patches(notion), notion.markdown_of(created.item_id)) == (
-        [_update(f"{a}{b}## C\n", ""), _update(f"{c[len('## C') + 1 :]}{d}{STAMP_LINE}", "")],
+        [
+            _update(f"{a}## B\n", ""),
+            _update(f"{b[len('## B') + 1 :]}## C\n", ""),
+            _update(f"{c[len('## C') + 1 :]}## D\n", ""),
+            _update(f"{d[len('## D') + 1 :]}{STAMP_LINE}", ""),
+        ],
         "",
     )
 
@@ -1404,7 +1417,7 @@ def test_a_fields_write_to_a_page_emptied_by_hand_puts_the_stamp_back_as_its_who
 def test_a_section_over_the_blocks_one_request_carries_is_refused_before_anything_is_sent() -> None:
     notion = _notion()
     transport, created = _created(notion)
-    planting = "## Planting\n" + "- a\n" * 5_000
+    planting = "## Planting\n" + "- a\n" * 2_500
 
     with pytest.raises(WriteRejectedError) as caught:
         transport.write_section(
@@ -1417,8 +1430,8 @@ def test_a_section_over_the_blocks_one_request_carries_is_refused_before_anythin
         )
 
     assert (str(caught.value), notion.writes()) == (
-        f"the write to Notion page {created.item_id} quotes sections planting and would send 5,001 Notion "
-        "blocks in one request, over the 5,000 one request may carry; give one of those sections its own "
+        f"the write to Notion page {created.item_id} quotes sections planting and would send 2,501 Notion "
+        "blocks in one request, over the 2,500 one request may carry; give one of those sections its own "
         "page with `split`",
         [],
     )
@@ -1426,9 +1439,9 @@ def test_a_section_over_the_blocks_one_request_carries_is_refused_before_anythin
 
 def test_a_page_over_the_bytes_of_one_create_is_finished_by_appends_that_stay_within_notions_limits() -> None:
     notion = _notion()
-    notion.limits = RequestLimits(json_bytes=500_000, blocks=5_000)
+    notion.limits = NOTION_LIMITS_SEEN_LIVE
     transport = notion.transport()
-    sections = {key: f"## {key.upper()}\n{'a' * 150_000}\n" for key in ("a", "b", "c", "d")}
+    sections = {key: f"## {key.upper()}\n{'a' * 100_000}\n" for key in ("a", "b", "c", "d")}
 
     created = transport.create_item(NewItem(PAGE_TARGET, STAMP, ItemContent(title="Big", sections=sections)))
 
@@ -1440,6 +1453,94 @@ def test_a_page_over_the_bytes_of_one_create_is_finished_by_appends_that_stay_wi
     )
 
 
+def test_a_page_over_the_bytes_notion_accepted_live_is_created_by_requests_that_each_stay_under_them() -> (
+    None
+):
+    notion = _notion()
+    notion.limits = NOTION_LIMITS_SEEN_LIVE
+    transport = notion.transport()
+    sections = {key: f"## {key.upper()}\n{'a' * 120_000}\n" for key in ("a", "b", "c", "d", "e", "f")}
+
+    created = transport.create_item(NewItem(PAGE_TARGET, STAMP, ItemContent(title="Big", sections=sections)))
+
+    a, b, c, d, e, f = sections.values()
+    assert (_sent(notion)[1][2]["markdown"], _patches(notion), notion.markdown_of(created.item_id)) == (
+        f"{a}{b}{STAMP_LINE}\n",
+        [_update(STAMP_LINE, f"{c}{d}{STAMP_LINE}"), _update(STAMP_LINE, f"{e}{f}{STAMP_LINE}")],
+        f"{a}{b}{c}{d}{e}{f}{STAMP_LINE}",
+    )
+
+
+def test_a_page_over_the_blocks_notion_accepted_live_is_created_by_requests_that_each_stay_under_them() -> (
+    None
+):
+    notion = _notion()
+    notion.limits = NOTION_LIMITS_SEEN_LIVE
+    transport = notion.transport()
+    sections = {key: f"## {key.upper()}\n" + "- a\n" * 1_400 for key in ("a", "b", "c")}
+
+    created = transport.create_item(NewItem(PAGE_TARGET, STAMP, ItemContent(title="Long", sections=sections)))
+
+    a, b, c = sections.values()
+    assert (_sent(notion)[1][2]["markdown"], _patches(notion), notion.markdown_of(created.item_id)) == (
+        f"{a}{STAMP_LINE}\n",
+        [_update(STAMP_LINE, f"{b}{STAMP_LINE}"), _update(STAMP_LINE, f"{c}{STAMP_LINE}")],
+        f"{a}{b}{c}{STAMP_LINE}",
+    )
+
+
+def _section_of_exactly(key: str, letter: str, json_bytes: int) -> str:
+    frame = f"## {key.upper()}\n\n"
+    return f"## {key.upper()}\n{letter * (json_bytes - json_string_bytes(frame))}\n"
+
+
+def test_a_section_of_the_largest_size_the_plan_accepts_is_created_and_then_edited_within_one_request() -> (
+    None
+):
+    notion = _notion()
+    notion.limits = NOTION_LIMITS_SKALDR_SENDS_WITHIN
+    biggest = _section_of_exactly("a", "a", SECTION_JSON_BYTES)
+    edited = _section_of_exactly("a", "b", SECTION_JSON_BYTES)
+    transport, created = _created(notion, ItemContent(title="Big", sections={"a": biggest}), PAGE_TARGET)
+
+    written = transport.write_section(
+        created.item_id,
+        SectionRequest(ReplaceSection("a", biggest, edited, None), created.raw_sections, STAMP),
+    )
+
+    assert (json_string_bytes(biggest), written.raw_sections, notion.markdown_of(created.item_id)) == (
+        SECTION_JSON_BYTES,
+        {"a": edited},
+        f"{edited}{STAMP_LINE}",
+    )
+
+
+def test_a_create_with_long_property_values_stays_within_the_request_limit() -> None:
+    notion = _notion()
+    notion.limits = NOTION_LIMITS_SKALDR_SENDS_WITHIN
+    sections = {key: _section_of_exactly(key, "a", 95_000) for key in ("a", "b", "c")}
+    content = ItemContent(title="Big", sections=sections, fields={"Area": "x" * 15_000})
+
+    created = notion.transport().create_item(NewItem(DATABASE_TARGET, STAMP, content))
+
+    a, b, c = sections.values()
+    assert (_patches(notion), notion.markdown_of(created.item_id)) == (
+        [_update(STAMP_LINE, f"{c}{STAMP_LINE}")],
+        f"{a}{b}{c}{STAMP_LINE}",
+    )
+
+
+def test_releasing_a_page_sends_requests_that_each_stay_within_the_request_limit() -> None:
+    notion = _notion()
+    sections = {key: _section_of_exactly(key, "a", 130_000) for key in ("a", "b", "c", "d")}
+    transport, created = _created(notion, ItemContent(title="Big", sections=sections), PAGE_TARGET)
+    notion.limits = NOTION_LIMITS_SKALDR_SENDS_WITHIN
+
+    transport.release_item(created.item_id, Release(created.raw_sections, ()))
+
+    assert (len(_patches(notion)), notion.markdown_of(created.item_id)) == (4, "")
+
+
 def test_a_create_notion_finds_too_large_is_a_rejected_write() -> None:
     notion = _notion()
     notion.limits = RequestLimits(json_bytes=100, blocks=5_000)
@@ -1447,7 +1548,9 @@ def test_a_create_notion_finds_too_large_is_a_rejected_write() -> None:
     with pytest.raises(WriteRejectedError) as caught:
         notion.transport().create_item(NewItem(PAGE_TARGET, STAMP, CONTENT))
 
-    assert str(caught.value) == "Notion refused to create a page: Request body too large. (validation_error)"
+    assert str(caught.value) == (
+        "Notion refused to create a page: Request is too large to process asynchronously. (validation_error)"
+    )
 
 
 def test_a_create_whose_task_fails_is_a_rejected_write_and_makes_no_page() -> None:
