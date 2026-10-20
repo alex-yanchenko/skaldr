@@ -83,12 +83,18 @@ def create_file(path: Path, text: str) -> None:
     path = resolved_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with path.open("xb") as created:
+        created = path.open("xb")
+    except FileExistsError as exists:
+        raise TargetAlreadyExistsError(exists.errno, exists.strerror, str(path)) from exists
+    try:
+        with created:
             created.write(text.encode("utf-8"))
             created.flush()
             os.fsync(created.fileno())
-    except FileExistsError as exists:
-        raise TargetAlreadyExistsError(exists.errno, exists.strerror, str(path)) from exists
+    except BaseException:
+        with contextlib.suppress(OSError):
+            path.unlink()
+        raise
     _flush_directory(path.parent)
 
 

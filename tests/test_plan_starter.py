@@ -157,12 +157,12 @@ def test_new_plan_refuses_a_file_that_appears_after_the_existence_check_and_leav
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     target = tmp_path / "plan.yaml"
-    target.write_text("mine", encoding="utf-8")
 
-    def missing(_path: Path) -> bool:
-        return False
+    def starter_after_someone_creates_the_target(name: str) -> str:
+        target.write_text("mine", encoding="utf-8")
+        return package_text(name)
 
-    monkeypatch.setattr(Path, "exists", missing)
+    monkeypatch.setattr("skaldr.cli.package_text", starter_after_someone_creates_the_target)
 
     exit_code = main(["new", "plan", str(target)])
 

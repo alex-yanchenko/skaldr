@@ -358,6 +358,38 @@ def test_create_file_refuses_an_existing_file_and_leaves_it_alone(tmp_path: Path
     )
 
 
+@pytest.mark.parametrize("failure", [OSError(errno.ENOSPC, "no space left"), KeyboardInterrupt()], ids=str)
+def test_create_file_leaves_no_file_behind_when_the_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: BaseException
+) -> None:
+    path = tmp_path / "plan.yaml"
+
+    def failing_fsync(_descriptor: int) -> None:
+        raise failure
+
+    monkeypatch.setattr(os, "fsync", failing_fsync)
+
+    with pytest.raises(type(failure)):
+        create_file(path, "new plan")
+
+    assert path.exists() is False
+
+
+def test_create_file_under_a_parent_that_is_a_file_raises_the_plain_error_not_the_exists_refusal(
+    tmp_path: Path,
+) -> None:
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a file, not a folder", encoding="utf-8")
+
+    with pytest.raises(FileExistsError) as raised:
+        create_file(blocker / "plan.yaml", "new plan")
+
+    assert (type(raised.value), str(raised.value)) == (
+        FileExistsError,
+        f"[Errno {errno.EEXIST}] File exists: '{os.path.realpath(blocker)}'",
+    )
+
+
 def test_create_file_refuses_a_folder_of_that_name(tmp_path: Path) -> None:
     path = tmp_path / "plan.yaml"
     path.mkdir()
