@@ -1271,7 +1271,7 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
         [FAN],
         '```mermaid\nflowchart LR\n    hub["Count"]:::accent\n    s1["Scans"]\n'
         '    s2["Recounts<br>overflow only"]\n    s1 --> hub\n    s2 --> hub\n'
-        "    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328\n```\n",
+        "    classDef accent fill:#f3e8ff,stroke:#7c3aed,color:#1f2328\n```\n",
     ),
     "markdown-flow-with-a-styled-note": AcceptedCase("markdown", flow_with_a_note("by **aisle** and `bin`")),
     "notion-flow-with-a-styled-note": AcceptedCase("notion", flow_with_a_note("by *aisle* [now]{tone=info}")),
