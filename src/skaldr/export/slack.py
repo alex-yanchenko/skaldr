@@ -17,7 +17,7 @@ from skaldr.export.capabilities import (
 )
 from skaldr.export.folds import card_text, folded, link_card_detail, quote_lines
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
-from skaldr.export.inline import bold, plain
+from skaldr.export.inline import ZERO_WIDTH_SPACE, bold, plain
 from skaldr.export.lower.context import spaced as spaced_runs
 from skaldr.export.lower.context import with_bold_label
 from skaldr.export.markup import (
@@ -78,7 +78,6 @@ from skaldr.typed_links import date_target_text
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
 SLACK_CANVAS_CHARACTER_LIMIT: Final = 1_048_576
 CANVAS_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_`[]<>~"})
-ZERO_WIDTH_SPACE: Final = "\N{ZERO WIDTH SPACE}"
 EMOJI_SHORTCODE_COLON: Final = re.compile(r"(?<!\w):(?=[\w+-]+:)")
 CHARACTERS_A_BARE_URL_PARAGRAPH_RENDERS: Final = re.compile(r"[&*~\\<>\[\]()`]")
 BARE_URL_SCHEME: Final = "https://"

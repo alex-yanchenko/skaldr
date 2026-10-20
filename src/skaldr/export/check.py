@@ -1,6 +1,6 @@
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import chain
 from typing import Final
 
@@ -25,6 +25,7 @@ from skaldr.export.capabilities import (
     DeepHeading,
     Details,
     DividerInAStep,
+    EnclosingContainers,
     FencedInAListItem,
     GridCells,
     GridInAGridCell,
@@ -167,6 +168,7 @@ class _Place:
     callout_name: str = _NODE_TERMS[Callout]
     toggle_names: tuple[str, ...] = ()
     in_a_column: bool = False
+    enclosing: EnclosingContainers = field(default_factory=EnclosingContainers)
 
     def holder(self) -> str:
         match self.container:
@@ -193,7 +195,12 @@ class _Place:
                 assert_never(self.container)
 
     def in_a_callout(self, name: str) -> Self:
-        return replace(self, container="callout", callout_name=name)
+        return replace(
+            self,
+            container="callout",
+            callout_name=name,
+            enclosing=self.enclosing.inside("callout"),
+        )
 
     def in_a_toggle(self, name: str) -> Self:
         nested = self.container in ("toggle", "toggle inside a toggle")
@@ -203,8 +210,14 @@ class _Place:
             toggle_names=(*self.toggle_names, name),
         )
 
+    def in_a_details_block(self, name: str) -> Self:
+        return replace(self.in_a_toggle(name), enclosing=self.enclosing.inside("details"))
+
+    def in_a_tab(self, name: str) -> Self:
+        return replace(self.in_a_toggle(name), enclosing=self.enclosing.inside("tab"))
+
     def in_a_column_of_the_tree(self) -> Self:
-        return replace(self, in_a_column=True)
+        return replace(self, in_a_column=True, enclosing=self.enclosing.inside("column"))
 
 
 def _term(node: GenericNode) -> str:
@@ -511,11 +524,16 @@ class _TreeWalk:
                 if node.heading_level is not None:
                     yield from self.deep_heading_hits(node, node.heading_level, node.title)
                     self.note_heading(node.title)
-                yield from self.nodes(node.children, place.in_a_toggle(_term(node)))
+                inside = (
+                    place.in_a_toggle(_term(node))
+                    if node.heading_level is not None
+                    else place.in_a_details_block(_term(node))
+                )
+                yield from self.nodes(node.children, inside)
             case Tabs():
                 if node.tabs:
                     yield self.hit(Panes(PANES_FEATURES[node.kind]), node.authored_at)
-                inside = place.in_a_toggle(_term(node))
+                inside = place.in_a_tab(_term(node))
                 for tab in node.tabs:
                     yield from self.nodes(tab.children, inside)
             case Columns():
@@ -525,9 +543,11 @@ class _TreeWalk:
             case Diagram():
                 yield from self.diagram_hits(node)
                 yield from self.nodes(nested_nodes(node), place)
-            case (
-                Paragraph() | CodeBlock() | DisplayMath() | Media() | Quote() | Divider() | TableOfContents()
-            ):
+            case CodeBlock():
+                tag = place.enclosing.code_line_reading_as_a_tag(node.content)
+                if tag is not None:
+                    yield self.hit(tag, node.authored_at)
+            case Paragraph() | DisplayMath() | Media() | Quote() | Divider() | TableOfContents():
                 pass
             case _:
                 assert_never(node)

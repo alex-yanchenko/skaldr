@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Final
 
@@ -10,10 +10,16 @@ from skaldr import compute
 from skaldr.errors import ExportInvariantError
 from skaldr.export.apportion import apportioned, apportioned_at_least
 from skaldr.export.budget import Budget, Cost, RenderedBlock
-from skaldr.export.capabilities import BACKTICK, CLOSING_TAG_OPENER, FIRST_LIST_NUMBER
+from skaldr.export.capabilities import (
+    BACKTICK,
+    CLOSING_TAG_OPENER,
+    FIRST_LIST_NUMBER,
+    EnclosingContainers,
+    NotionContainer,
+)
 from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
-from skaldr.export.inline import bold, one_line, plain
+from skaldr.export.inline import ZERO_WIDTH_SPACE, bold, one_line, plain
 from skaldr.export.markup import (
     DIVIDER_LINE,
     MarkupRuns,
@@ -98,7 +104,40 @@ from skaldr.models import (
 from skaldr.richtext import Code, Placeholder, ScriptPosition, Styled, Tinted
 
 NOTION_ESCAPES: Final = str.maketrans({character: "\\" + character for character in "\\*_~`$[]<>{}|^="})
-FILE_NAME_NOTION_LINKIFIES = re.compile(r"(?<![\w/.-])([\w./-]*\w\.(?:md|py|sh)(?::\d+(?:-\d+)?)?)(?![\w`])")
+EXTENSIONS_NOTION_LINKIFIES: Final = (
+    "ai",
+    "ar",
+    "cc",
+    "cr",
+    "do",
+    "in",
+    "io",
+    "is",
+    "it",
+    "java",
+    "md",
+    "me",
+    "ml",
+    "mov",
+    "nu",
+    "pl",
+    "pm",
+    "ps",
+    "py",
+    "rs",
+    "sh",
+    "so",
+    "tf",
+    "to",
+    "zip",
+)
+FILE_NAME_NOTION_LINKIFIES = re.compile(
+    rf"(?<![\w/.-])([\w./-]*\w\.(?:{'|'.join(EXTENSIONS_NOTION_LINKIFIES)})(?::\d+(?:-\d+)?)?)(?![\w`])"
+)
+SPACE_RUN: Final = re.compile(r"(\s+)")
+WEB_ADDRESS_OR_EMAIL_MARKS: Final = ("://", "@", "www.")
+BLOCK_ATTRIBUTE_OPENING: Final = re.compile(r'\{(?=(?:color|toggle)=")')
+TABLE_TAG_OPENING: Final = re.compile(r"<(?:td|tr|table)(?=[\s/>])")
 SPACED_PLUS_AFTER_CODE: Final = re.compile(r"` \+ ")
 FULL_WIDTH_PLUS: Final = "\N{FULLWIDTH PLUS SIGN}"
 CHUNK_BOUNDARY_LEVEL: Final = 2
@@ -161,6 +200,10 @@ class TableRoom:
     width: int
     sizes_every_table: bool
     in_a_column: bool = False
+    enclosing: EnclosingContainers = field(default_factory=EnclosingContainers)
+
+    def inside(self, container: NotionContainer) -> "TableRoom":
+        return replace(self, enclosing=self.enclosing.inside(container))
 
     @classmethod
     def on_page(cls, page_width: NotionWidth) -> "TableRoom":
@@ -170,6 +213,10 @@ class TableRoom:
         if not self.sizes_every_table:
             return replace(self, in_a_column=True)
         return replace(self, width=round(self.width * ratio / COLUMN_RATIO_TOTAL), in_a_column=True)
+
+
+def _with_block_attributes_kept_apart(code: str) -> str:
+    return BLOCK_ATTRIBUTE_OPENING.sub("{" + ZERO_WIDTH_SPACE, code)
 
 
 def latex_text(text: str) -> str:
@@ -186,10 +233,17 @@ class _NotionRuns(MarkupRuns):
         return text.translate(NOTION_ESCAPES)
 
     def text(self, text: str, /) -> str:
+        tokens = SPACE_RUN.split(text)
+        return bang_cannot_open_an_image("".join(map(self._token, tokens)))
+
+    def _token(self, token: str) -> str:
+        if any(mark in token for mark in WEB_ADDRESS_OR_EMAIL_MARKS):
+            return self.escape(token)
+        return self._with_file_names_as_code(token)
+
+    def _with_file_names_as_code(self, text: str) -> str:
         pieces = FILE_NAME_NOTION_LINKIFIES.split(text)
-        return bang_cannot_open_an_image(
-            "".join(self._piece(index, piece) for index, piece in enumerate(pieces))
-        )
+        return "".join(self._piece(index, piece) for index, piece in enumerate(pieces))
 
     def _piece(self, index: int, piece: str) -> str:
         is_file_name = index % 2 == 1
@@ -206,6 +260,13 @@ class _NotionRuns(MarkupRuns):
                 f"Notion loses a table cell whose inline code holds '</', '{text}'; "
                 "the export check should have refused it"
             )
+        if self.in_a_table_cell:
+            return self._code_in_a_table_cell(text)
+        return f"`{_with_block_attributes_kept_apart(text)}`"
+
+    def _code_in_a_table_cell(self, text: str) -> str:
+        if TABLE_TAG_OPENING.search(text):
+            return self.text(text)
         return f"`{text}`"
 
     def anchor_link(self, _label: str, _anchor: str, /) -> str:
@@ -611,19 +672,19 @@ def _heading_marks(level: HeadingLevel) -> str:
 
 
 def _toggle_lines(node: Toggle, room: TableRoom) -> list[str]:
-    children = _indent(_notion_blocks(node.children, room))
     if node.heading_level is not None:
         return [
             f'{_heading_marks(node.heading_level)} {notion_inline(node.title)} {{toggle="true"}}',
-            *children,
+            *_indent(_notion_blocks(node.children, room)),
         ]
+    children = _indent(_notion_blocks(node.children, room.inside("details")))
     return ["<details>", f"<summary>{notion_inline(node.title)}</summary>", *children, "</details>"]
 
 
 def _columns_lines(node: Columns, room: TableRoom) -> list[str]:
     lines: list[str] = []
     for column in node.columns:
-        children = _notion_blocks(column.children, room.within(column.ratio))
+        children = _notion_blocks(column.children, room.within(column.ratio).inside("column"))
         lines += [f'<column ratio="{column.ratio}">', *_indent(children), "</column>"]
     return ["<columns>", *_indent(lines), "</columns>"]
 
@@ -636,7 +697,8 @@ def _tab_lines(tab: Tab, room: TableRoom) -> list[str]:
         )
     icon = tab_icon(tab.tone)
     opening = "<tab>" if icon is None else f'<tab icon="{icon}">'
-    return [opening, *_indent([_block_text(tab.title), *_notion_blocks(tab.children, room)]), "</tab>"]
+    children = _notion_blocks(tab.children, room.inside("tab"))
+    return [opening, *_indent([_block_text(tab.title), *children]), "</tab>"]
 
 
 def _tabs_lines(node: Tabs, room: TableRoom) -> list[str]:
@@ -749,6 +811,15 @@ def _natively_or_folded(node: Node, room: TableRoom) -> tuple[NotionNode, ...]:
             return folded((node,))
 
 
+def _refuse_a_code_line_reading_as_a_container_tag(node: CodeBlock, room: TableRoom) -> None:
+    tag = room.enclosing.code_line_reading_as_a_tag(node.content)
+    if tag is not None:
+        raise ExportInvariantError(
+            f"Notion reads the code line '{tag.line}' as a tag of the {tag.container} around it; "
+            "the export check should have refused it"
+        )
+
+
 def _notion_lines(node: NotionNode, room: TableRoom) -> list[str]:
     match node:
         case FactStrip():
@@ -769,6 +840,7 @@ def _notion_lines(node: NotionNode, room: TableRoom) -> list[str]:
         case TableNode():
             return _table_lines(node, room)
         case CodeBlock():
+            _refuse_a_code_line_reading_as_a_container_tag(node, room)
             return code_block_lines(replace(node, language=node.language or NOTION_PLAIN_TEXT_LANGUAGE))
         case DisplayMath():
             return [EQUATION_FENCE, *node.expression.split("\n"), EQUATION_FENCE]
@@ -777,7 +849,7 @@ def _notion_lines(node: NotionNode, room: TableRoom) -> list[str]:
         case Callout():
             icon = node.icon or CALLOUT_ICON[node.tone]
             opening = f'<callout icon="{icon}"{_color_attribute(node.tone, BACKGROUND_SUFFIX)}>'
-            return [opening, *_indent(_notion_blocks(node.children, room)), "</callout>"]
+            return [opening, *_indent(_notion_blocks(node.children, room.inside("callout"))), "</callout>"]
         case Quote():
             return _quote_with_its_lists_lines(node, room)
         case Divider():

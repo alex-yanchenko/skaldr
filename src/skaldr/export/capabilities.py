@@ -1,6 +1,8 @@
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Literal
+
+from typing_extensions import Self
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.tree import PanesKind, ToneName
@@ -34,6 +36,8 @@ InlineCodeFeature = Literal[
     "inline code holding a closing tag in a table cell",
     "inline code holding a closing tag in a coloured, highlighted or underlined span",
 ]
+NotionContainer = Literal["callout", "details", "column", "tab"]
+CodeLineFeature = Literal["code line reading as a tag of the container around it"]
 TextNumberingFeature = Literal["list numbered with letters or roman numerals"]
 FencedInAListItemFeature = Literal[
     "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step"
@@ -72,6 +76,7 @@ Feature = Literal[
     SameDocumentLinkFeature,
     OtherDocumentLinkFeature,
     InlineCodeFeature,
+    CodeLineFeature,
     TextNumberingFeature,
     FencedInAListItemFeature,
     ListInAQuoteFeature,
@@ -94,6 +99,8 @@ Held = Literal["table", "callout", "quote", "link card", "toggle", "divider"]
 FIRST_LIST_NUMBER: Final = 1
 BACKTICK: Final = "`"
 CLOSING_TAG_OPENER: Final = "</"
+SPACES_AND_TABS: Final = " \t"
+CALLOUT_OPENER: Final = "<callout>"
 CANVAS_TABLE_CELL_LIMIT: Final = 300
 CANVAS_LAYOUT_COLUMN_LIMIT: Final = 3
 CANVAS_HEADING_LEVEL_LIMIT: Final = 3
@@ -174,6 +181,15 @@ class OtherDocumentLink:
 class InlineCode:
     feature: InlineCodeFeature
     code: str
+
+
+@dataclass(frozen=True)
+class CodeLine:
+    line: str
+    container: NotionContainer
+    feature: CodeLineFeature = field(
+        default="code line reading as a tag of the container around it", init=False
+    )
 
 
 @dataclass(frozen=True)
@@ -265,6 +281,7 @@ Details = (
     | SameDocumentLink
     | OtherDocumentLink
     | InlineCode
+    | CodeLine
     | TextNumbering
     | FencedInAListItem
     | ListInAQuote
@@ -613,6 +630,19 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
             )
         }
     ),
+    "code line reading as a tag of the container around it": _kept_except(
+        {
+            "notion": Rejection(
+                "Notion reads the code line '{line}' as a tag of the {container} around it "
+                "and breaks the rest of the page there",
+                "change that line of the code, or move the code block out of the {container}",
+                in_the_guide="Notion reads a code line that is only a closing tag (`</callout>`, "
+                "`</details>`, `</column>` or `</tab>`) of a callout, toggle, column or tab around the code "
+                "block, or only `<callout>` inside a callout, as that tag, which breaks the rest of the "
+                "page; change that line of the code, or move the code block out of the container",
+            )
+        }
+    ),
     "list numbered with letters or roman numerals": _kept_except(
         {
             "adf": Rejection(
@@ -787,6 +817,24 @@ GRID_CELL_FEATURES: Final[Mapping[Held, GridCellFeature]] = {
     "callout": "callout inside a grid cell",
     "divider": "divider inside a grid cell",
 }
+
+
+@dataclass(frozen=True)
+class EnclosingContainers:
+    names: tuple[NotionContainer, ...] = ()
+
+    def inside(self, name: NotionContainer) -> Self:
+        return replace(self, names=(*self.names, name))
+
+    def tags_a_code_line_must_not_equal(self) -> dict[str, NotionContainer]:
+        closers: dict[str, NotionContainer] = {f"</{name}>": name for name in self.names}
+        opener: dict[str, NotionContainer] = {CALLOUT_OPENER: "callout"} if "callout" in self.names else {}
+        return {**closers, **opener}
+
+    def code_line_reading_as_a_tag(self, content: str) -> CodeLine | None:
+        tags = self.tags_a_code_line_must_not_equal()
+        lines = (line.strip(SPACES_AND_TABS) for line in content.split("\n"))
+        return next((CodeLine(line, tags[line]) for line in lines if line in tags), None)
 
 
 def swaps(feature: Feature, target: ExportTarget) -> bool:

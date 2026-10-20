@@ -39,6 +39,10 @@ NOTION_INLINE_CODE_ROW = (
     "an inline `` `code` `` span holding a closing tag (`</`) or a backtick, "
     "including a `code` block's `label`"
 )
+NOTION_CODE_LINE_ROW = (
+    "a `code` block with a line that is only `</callout>`, `</details>`, `</column>` or `</tab>`, "
+    "or only `<callout>`"
+)
 CANVAS_TABLE_ROW = "`table`, `comparison`, `matrix`, `swimlane`"
 
 PROSE_CELLS_THAT_REFUSE: dict[tuple[ExportTarget, str], tuple[Feature, ...]] = {
@@ -58,6 +62,7 @@ PROSE_CELLS_THAT_REFUSE: dict[tuple[ExportTarget, str], tuple[Feature, ...]] = {
         "inline code holding a closing tag in a table cell",
         "inline code holding a closing tag in a coloured, highlighted or underlined span",
     ),
+    ("notion", NOTION_CODE_LINE_ROW): ("code line reading as a tag of the container around it",),
     ("adf", "a list"): ("list numbered with letters or roman numerals",),
     ("adf", "`link` card or embed"): (
         "quote inside a callout",
