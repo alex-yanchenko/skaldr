@@ -414,7 +414,7 @@ def test_a_stacked_bar_chart_with_one_series_is_drawn_as_the_same_mermaid_chart_
 def test_the_check_names_the_yaml_path_of_each_swapped_feature(
     monkeypatch: pytest.MonkeyPatch, feature: Feature, blocks: list[dict[str, Any]], where: str
 ) -> None:
-    refusing = Rejection("refused", "instead")
+    refusing = Rejection("refused", "instead", in_the_guide="refused here")
     monkeypatch.setattr(check_module, "CAPABILITIES", {**CAPABILITIES, feature: {"adf": refusing}})
 
     with pytest.raises(ExportRejectedError) as raised:

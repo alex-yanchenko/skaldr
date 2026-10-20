@@ -494,7 +494,11 @@ def test_a_writer_swaps_the_panes_whose_own_cell_says_swap(
 def test_a_panes_cell_made_a_rejection_refuses_the_block(
     monkeypatch: pytest.MonkeyPatch, feature: Feature, block: dict[str, Any]
 ) -> None:
-    monkeypatch.setitem(CAPABILITIES[feature], "markdown", Rejection("Markdown cannot show it", "drop it"))
+    monkeypatch.setitem(
+        CAPABILITIES[feature],
+        "markdown",
+        Rejection("Markdown cannot show it", "drop it", in_the_guide="Markdown cannot show it"),
+    )
 
     with pytest.raises(ExportRejectedError) as raised:
         _check([block], "markdown")
