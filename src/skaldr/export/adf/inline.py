@@ -54,7 +54,7 @@ from skaldr.models import ALLOWED_URL_SCHEMES, Person, StatusState, SwimlaneStep
 from skaldr.richtext import Citation, ScriptPosition, StyleName
 from skaldr.typed_links import issue_url
 
-AdfInlines = tuple[AdfInline, ...]
+AdfInlineNodes = tuple[AdfInline, ...]
 
 PROJECT_KEY: Final = re.compile(r"[A-Z][A-Z0-9_]+")
 MARK_RANK: Final[Mapping[str, int]] = {
@@ -164,7 +164,7 @@ def _marked(node: AdfInline, mark: AdfMark) -> AdfInline:
     return AdfText(type="text", text=node["text"], marks=ordered)
 
 
-def with_mark(nodes: AdfInlines, mark: AdfMark) -> AdfInlines:
+def with_mark(nodes: AdfInlineNodes, mark: AdfMark) -> AdfInlineNodes:
     return tuple(_marked(node, mark) for node in nodes)
 
 
@@ -175,7 +175,7 @@ def _retexted(node: AdfText, text: str) -> AdfText:
     return retexted
 
 
-def _merged(nodes: Sequence[AdfInline]) -> AdfInlines:
+def _merged(nodes: Sequence[AdfInline]) -> AdfInlineNodes:
     merged: list[AdfInline] = []
     for node in nodes:
         previous = merged[-1] if merged else None
@@ -202,21 +202,21 @@ def _date_node(day: date) -> AdfDate:
     return AdfDate(type="date", attrs=AdfDateAttrs(timestamp=str(int(midnight_utc.timestamp()) * 1000)))
 
 
-def _shows_nothing(nodes: AdfInlines) -> bool:
+def _shows_nothing(nodes: AdfInlineNodes) -> bool:
     return all(node["type"] == "text" and not node["text"].strip() for node in nodes)
 
 
-def _text_of(nodes: AdfInlines) -> str:
+def _text_of(nodes: AdfInlineNodes) -> str:
     return "".join(node["text"] for node in nodes if node["type"] == "text")
 
 
-def _status(text: str, color: LozengeColor) -> AdfInlines:
+def _status(text: str, color: LozengeColor) -> AdfInlineNodes:
     if not text:
         return ()
     return (AdfStatus(type="status", attrs=AdfStatusAttrs(text=text, color=color)),)
 
 
-def _lozenge(mark: Mark) -> AdfInlines | None:
+def _lozenge(mark: Mark) -> AdfInlineNodes | None:
     match mark:
         case StatusMark():
             return _status(mark_name(mark), STATUS_LOZENGE[mark.state])
@@ -231,13 +231,13 @@ class AdfRuns:
         self.issue_links = issue_links
         self.issue_key = _issue_key_pattern(issue_links) if issue_links and issue_links.project_keys else None
 
-    def write(self, runs: ExportRich) -> AdfInlines:
+    def write(self, runs: ExportRich) -> AdfInlineNodes:
         return write_export_runs(runs, self)
 
-    def concat(self, parts: Sequence[AdfInlines], /) -> AdfInlines:
+    def concat(self, parts: Sequence[AdfInlineNodes], /) -> AdfInlineNodes:
         return _merged([node for part in parts for node in part])
 
-    def text(self, text: str, /) -> AdfInlines:
+    def text(self, text: str, /) -> AdfInlineNodes:
         if not text:
             return ()
         if self.issue_links is None or self.issue_key is None:
@@ -254,26 +254,26 @@ class AdfRuns:
             nodes.append(_plain_text(text[written_up_to:]))
         return tuple(nodes)
 
-    def code(self, text: str, /) -> AdfInlines:
+    def code(self, text: str, /) -> AdfInlineNodes:
         if not text:
             return ()
         return (AdfText(type="text", text=text, marks=[AdfCode(type="code")]),)
 
-    def link(self, label: AdfInlines, url: str, /) -> AdfInlines:
+    def link(self, label: AdfInlineNodes, url: str, /) -> AdfInlineNodes:
         if not url.startswith(ALLOWED_URL_SCHEMES):
             return label
         mark = AdfLink(type="link", attrs=AdfLinkAttrs(href=url))
         return with_mark(tuple(map(_as_text_in_a_link, label)), mark)
 
-    def anchor_link(self, _label: AdfInlines, _anchor: str, /) -> AdfInlines:
+    def anchor_link(self, _label: AdfInlineNodes, _anchor: str, /) -> AdfInlineNodes:
         raise ExportInvariantError(
             "a Jira description cannot link to its own headings; the export check should have refused it"
         )
 
-    def section_link(self, label: AdfInlines, _anchor: str, /) -> AdfInlines:
+    def section_link(self, label: AdfInlineNodes, _anchor: str, /) -> AdfInlineNodes:
         return label
 
-    def date_mention(self, label: AdfInlines, start: date, end: date | None, /) -> AdfInlines:
+    def date_mention(self, label: AdfInlineNodes, start: date, end: date | None, /) -> AdfInlineNodes:
         dates = (
             (_date_node(start),) if end is None else (_date_node(start), _plain_text(" to "), _date_node(end))
         )
@@ -281,65 +281,61 @@ class AdfRuns:
             return dates
         return (*label, _plain_text(" "), *dates)
 
-    def person_mention(self, label: AdfInlines, _key: str, person: Person, /) -> AdfInlines:
+    def person_mention(self, label: AdfInlineNodes, _key: str, person: Person, /) -> AdfInlineNodes:
         if person.jira is None:
             return label
         attrs = AdfMentionAttrs(id=person.jira, text="@" + _text_of(label))
         return (AdfMention(type="mention", attrs=attrs),)
 
-    def issue_link(self, label: AdfInlines, _key: str, url: str | None, /) -> AdfInlines:
+    def issue_link(self, label: AdfInlineNodes, _key: str, url: str | None, /) -> AdfInlineNodes:
         if url is None:
             return label
         return (AdfInlineCard(type="inlineCard", attrs=AdfInlineCardAttrs(url=url)),)
 
-    def document_link(self, _label: AdfInlines, _doc_id: str, _section: str | None, /) -> AdfInlines:
+    def document_link(self, _label: AdfInlineNodes, _doc_id: str, _section: str | None, /) -> AdfInlineNodes:
         raise ExportInvariantError(
             "a Jira description cannot link to another skaldr document; "
             "the export check should have refused it"
         )
 
-    def citation(self, run: Citation, /) -> AdfInlines:
+    def citation(self, run: Citation, /) -> AdfInlineNodes:
         label = (_plain_text(f"[{run.number}]"),)
         linked = self.link(label, run.url) if run.url else label
         return with_mark(linked, _script_mark("superscript"))
 
-    def placeholder(self, name: str, /) -> AdfInlines:
+    def placeholder(self, name: str, /) -> AdfInlineNodes:
         return with_mark((_plain_text("{{" + name + "}}"),), background_color_mark(PLACEHOLDER_TONE))
 
-    def styled(self, style: StyleName, inner: AdfInlines, /) -> AdfInlines:
+    def styled(self, style: StyleName, inner: AdfInlineNodes, /) -> AdfInlineNodes:
         return with_mark(inner, _style_mark(style))
 
-    def script(self, position: ScriptPosition, text: str, /) -> AdfInlines:
+    def script(self, position: ScriptPosition, text: str, /) -> AdfInlineNodes:
         if not text:
             return ()
         return with_mark((_plain_text(text),), _script_mark(position))
 
     def tinted(
-        self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: AdfInlines, /
-    ) -> AdfInlines:
+        self, tone: ToneLiteral | None, background: ToneLiteral | None, inner: AdfInlineNodes, /
+    ) -> AdfInlineNodes:
         coloured = inner if tone is None else with_mark(inner, text_color_mark(tone))
         return coloured if background is None else with_mark(coloured, background_color_mark(background))
 
-    def toned_label(self, tone: ToneLiteral, inner: AdfInlines, /) -> AdfInlines:
+    def toned_label(self, tone: ToneLiteral, inner: AdfInlineNodes, /) -> AdfInlineNodes:
         return with_mark(inner, text_color_mark(tone))
 
-    def math(self, expression: str, /) -> AdfInlines:
+    def math(self, expression: str, /) -> AdfInlineNodes:
         require_the_swap("inline math", "adf")
         return self.code(expression)
 
-    def chip(self, run: Chip, /) -> AdfInlines:
+    def chip(self, run: Chip, /) -> AdfInlineNodes:
         return _status(run.label, BADGE_LOZENGE[run.tone])
 
-    def line_break(self) -> AdfInlines:
+    def line_break(self) -> AdfInlineNodes:
         return (AdfHardBreak(type="hardBreak"),)
 
-    def mark(self, run: Mark, /) -> AdfInlines:
+    def mark(self, run: Mark, /) -> AdfInlineNodes:
         lozenge = _lozenge(run)
         return lozenge if lozenge is not None else (_plain_text(mark_glyph(run)),)
 
-    def gauge(self, run: Gauge, /) -> AdfInlines:
+    def gauge(self, run: Gauge, /) -> AdfInlineNodes:
         return (_plain_text(gauge_bar(run.value, run.maximum)),)
-
-
-def write_adf_runs(runs: ExportRich, issue_links: IssueLinks | None = None) -> AdfInlines:
-    return AdfRuns(issue_links).write(runs)

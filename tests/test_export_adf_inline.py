@@ -7,7 +7,7 @@ from typing import get_args
 import pytest
 
 from skaldr.errors import ConnectorError, ExportInvariantError
-from skaldr.export.adf import IssueLinks, write_adf_runs
+from skaldr.export.adf import AdfRuns, IssueLinks
 from skaldr.export.adf.colors import BADGE_LOZENGE
 from skaldr.export.runs import (
     Break,
@@ -67,7 +67,7 @@ def _link(href: str) -> dict[str, object]:
 
 
 def _written(runs: ExportRich, links: IssueLinks | None = None) -> list[dict[str, object]]:
-    return [dict(node) for node in write_adf_runs(runs, links)]
+    return [dict(node) for node in AdfRuns(links).write(runs)]
 
 
 def test_plain_text_is_one_text_node() -> None:
@@ -362,7 +362,7 @@ HOSTILE_TEXT = [
 
 @pytest.mark.parametrize("text", HOSTILE_TEXT)
 def test_text_is_carried_verbatim_and_survives_a_json_round_trip(text: str) -> None:
-    nodes = write_adf_runs((Plain(text),), None)
+    nodes = AdfRuns(None).write((Plain(text),))
 
     assert json.loads(json.dumps(list(nodes))) == [{"type": "text", "text": text}]
 

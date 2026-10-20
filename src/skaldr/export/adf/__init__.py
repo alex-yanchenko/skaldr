@@ -6,7 +6,7 @@ from skaldr.export.adf.blocks import (
     render_adf_document,
     render_adf_regions,
 )
-from skaldr.export.adf.inline import AdfRuns, IssueLinks, write_adf_runs
+from skaldr.export.adf.inline import AdfRuns, IssueLinks
 from skaldr.export.adf.nodes import AdfBlock, AdfDoc, AdfInline
 
 __all__ = [
@@ -21,5 +21,4 @@ __all__ = [
     "render_adf",
     "render_adf_document",
     "render_adf_regions",
-    "write_adf_runs",
 ]
