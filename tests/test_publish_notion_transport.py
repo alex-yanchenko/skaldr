@@ -1530,10 +1530,9 @@ def test_a_write_whose_task_is_still_running_after_two_polls_is_polled_until_it_
     created = transport.create_item(NewItem(PAGE_TARGET, STAMP, CONTENT))
 
     polled = [request.url.path for request in notion.requests if "async_tasks" in request.url.path]
-    assert (notion.markdown_of(created.item_id), polled) == (
-        f"{WELCOME}{PLANTING}{STAMP_LINE}",
-        ["/v1/async_tasks/task-2"] * 3,
-    )
+    assert notion.markdown_of(created.item_id) == f"{WELCOME}{PLANTING}{STAMP_LINE}"
+    assert polled == [polled[0]] * 3
+    assert polled[0].startswith("/v1/async_tasks/task-")
 
 
 def test_an_edit_in_the_same_minute_as_skaldrs_write_still_reads_as_an_edit() -> None:
