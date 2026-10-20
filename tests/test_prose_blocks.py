@@ -110,9 +110,9 @@ def test_prose_splits_into_paragraphs_and_lists(text: str, blocks: list[ProseBlo
         ),
         pytest.param("a\x00b", ["a�b"], id="a-nul-in-a-paragraph-becomes-the-replacement-character"),
         pytest.param(
-            "- a\x00b\n- c",
-            [bullets("a�b", "c")],
-            id="a-nul-in-a-list-item-becomes-the-replacement-character",
+            "- a\n- b\n\nx\x00y",
+            [bullets("a", "b"), "x�y"],
+            id="a-nul-in-text-after-a-list-becomes-the-replacement-character",
         ),
         pytest.param(
             "```\n- a\n- b\n```",
@@ -125,9 +125,14 @@ def test_prose_splits_into_paragraphs_and_lists(text: str, blocks: list[ProseBlo
             id="a-list-inside-a-tilde-fence-stays-text-and-a-list-after-it-is-read",
         ),
         pytest.param(
-            "- a\n  ```\n  - x\n  ```\n- b",
-            [ProseList((ProseItem("a", ("```\n- x\n```",)), ProseItem("b")))],
-            id="a-fence-inside-an-item-is-kept-whole",
+            "- a\n  ````\n  - x\n  ```\n  ````\n- b",
+            [ProseList((ProseItem("a", ("  ````\n  - x\n  ```\n  ````",)), ProseItem("b")))],
+            id="an-indented-four-backtick-fence-in-an-item-is-kept-as-written",
+        ),
+        pytest.param(
+            "- a\n  ```\n  - x\n- b",
+            [ProseList((ProseItem("a", ("  ```\n  - x",)), ProseItem("b")))],
+            id="an-unclosed-fence-in-an-item-gets-no-closing-fence",
         ),
     ],
 )
