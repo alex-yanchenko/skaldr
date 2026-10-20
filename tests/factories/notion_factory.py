@@ -454,8 +454,9 @@ class InMemoryNotion:
         )
 
     def _task(self, _method: str, task_id: str, _body: dict[str, Any]) -> httpx2.Response:
-        if self._unfinished_polls[task_id] > 0:
-            self._unfinished_polls[task_id] -= 1
+        unfinished = self._unfinished_polls.pop(task_id, 0)
+        if unfinished > 0:
+            self._unfinished_polls[task_id] = unfinished - 1
             return httpx2.Response(200, json={**_task_json(task_id, "running"), "poll_after_seconds": 1})
         result = self.tasks.pop(task_id)
         if isinstance(result, _FailedTask):
