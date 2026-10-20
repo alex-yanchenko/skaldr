@@ -5,6 +5,7 @@ import httpx2
 
 from skaldr.auth.notion import NotionSession
 from skaldr.auth.store import require_notion_for_a_target
+from skaldr.auth.templates import notion_template_for
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count, render_notion_regions
 from skaldr.export.tree import LoweredDocument
@@ -39,6 +40,9 @@ class _SignedInOnFirstUse:
     def renew(self) -> None:
         self._signed_in().renew()
 
+    def workspace_template(self) -> str | None:
+        return notion_template_for(self._signed_in().workspace_id)
+
 
 @dataclass(frozen=True)
 class NotionConnector:
@@ -66,4 +70,6 @@ class NotionConnector:
     def open_transport(self, target: TargetBase, /) -> NotionTransport:
         workspace = target.where.workspace if isinstance(target, NotionTarget) else None
         tokens = _SignedInOnFirstUse(self.http, workspace)
-        return NotionTransport(NotionApi(tokens, transport=self.http, sleep=self.sleep))
+        return NotionTransport(
+            NotionApi(tokens, transport=self.http, sleep=self.sleep), tokens.workspace_template
+        )

@@ -9,7 +9,7 @@ from pathlib import Path
 import keyring
 import pytest
 
-from skaldr.auth import store
+from skaldr.auth import store, templates
 from skaldr.auth.notion import CALLBACK_THREAD_PREFIX
 from tests.factories.auth_factory import CREDENTIAL_ENVIRONMENT_VARIABLES, InMemoryKeyring, PlaintextKeyring
 
@@ -49,6 +49,11 @@ def keychain(monkeypatch: pytest.MonkeyPatch) -> Iterator[InMemoryKeyring]:
 @pytest.fixture(autouse=True)
 def auth_lock_in_the_test_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(store, "lock_file", lambda: tmp_path / "auth.lock")
+
+
+@pytest.fixture(autouse=True)
+def notion_templates_in_the_test_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(templates, "template_file", lambda: tmp_path / "notion-templates.json")
 
 
 @pytest.fixture

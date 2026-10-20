@@ -1,9 +1,10 @@
 import argparse
 import sys
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from getpass import getpass
 from typing import NamedTuple, get_args
+from uuid import UUID
 
 import httpx2
 
@@ -12,6 +13,7 @@ from skaldr.auth.jira import API_TOKENS_PAGE, verify_jira_token
 from skaldr.auth.notion import (
     DEFAULT_CALLBACK_PORT,
     INTEGRATIONS_PAGE,
+    NotionSession,
     redirect_uri_for,
     revoke_notion_token,
     save_notion_replacing_the_old_sign_in,
@@ -23,6 +25,7 @@ from skaldr.auth.store import (
     SLACK_USER_TOKEN_VARIABLE,
     JiraCredentials,
     NotionCredentials,
+    SignIn,
     SlackCredentials,
     StoredEntry,
     find_jira,
@@ -41,15 +44,38 @@ from skaldr.auth.store import (
     stored_notion_sign_ins,
     stored_slack_sign_ins,
 )
-from skaldr.errors import AuthError
-from skaldr.services import Service
+from skaldr.auth.templates import (
+    clear_notion_template,
+    notion_templates,
+    save_notion_template,
+)
+from skaldr.errors import AuthError, ConnectorError, SeveralSignInsError
+from skaldr.publish.notion.api import NotionApi
+from skaldr.publish.notion.template import check_the_template_is_empty
+from skaldr.publish_block.notion import required_page_id
+from skaldr.services import NotionService, Service
 
 _UNNAMED_WORKSPACE = "(unnamed workspace)"
+_TEMPLATE_EXPLANATION = (
+    "A page template makes the pages skaldr creates keep the template page's Full width or Small text. "
+    "It must be an empty page shared with your connection."
+)
+_TEMPLATE_PROMPT = "Notion page template link (Enter to skip): "
+_FULL_WIDTH_NOTICE = (
+    "Turn on Full width or Small text on the template page in Notion yourself: skaldr cannot set or read "
+    "them, and pages created from the template keep them."
+)
+_SET_THE_TEMPLATE_LATER = "Set it later with `skaldr auth template notion <link>`."
 
 
 class _StatusLine(NamedTuple):
     text: str
     failed: bool = False
+
+
+class _TemplateHolder(NamedTuple):
+    credentials: NotionCredentials
+    workspace_id: UUID
 
 
 def main(
@@ -68,6 +94,8 @@ def main(
             _sign_in_to_slack(transport)
         elif args.command == "status":
             return _print_status()
+        elif args.command == "template":
+            _manage_the_notion_template(args.link, args.clear, args.workspace, transport)
         elif args.command == "logout" and args.service == "notion":
             _log_out_of_notion(args.selector, transport)
         elif args.command == "logout" and args.service == "jira":
@@ -102,6 +130,20 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("jira", help="sign in to Jira Cloud with your account email and an API token")
     commands.add_parser("slack", help="sign in to Slack with the user token of your own Slack app")
     commands.add_parser("status", help="list every sign-in, who it is as, and where the credentials live")
+    template = commands.add_parser(
+        "template",
+        help="set, show or clear the empty Notion page whose page settings new pages are created from",
+    )
+    template.add_argument("service", choices=get_args(NotionService))
+    one_action = template.add_mutually_exclusive_group()
+    one_action.add_argument(
+        "link", nargs="?", help="the Notion page URL or id to set as the template; left out, show it"
+    )
+    one_action.add_argument("--clear", action="store_true", help="remove the template")
+    template.add_argument(
+        "--workspace",
+        help="the Notion workspace id or name; needed only when several are signed in",
+    )
     logout = commands.add_parser(
         "logout", help="remove one sign-in from the keychain, revoking the Notion token first"
     )
@@ -158,6 +200,112 @@ def _sign_in_to_notion(
     print(f"Signed in to Notion workspace {workspace}. Saved to the keychain.")
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
+    _offer_a_template(credentials, transport)
+
+
+def _offer_a_template(credentials: NotionCredentials, transport: httpx2.BaseTransport | None) -> None:
+    if not sys.stdin.isatty():
+        return
+    print(_TEMPLATE_EXPLANATION)
+    try:
+        answer = input(_TEMPLATE_PROMPT).strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if not answer:
+        return
+    try:
+        _set_the_template(_template_holder(credentials), answer, transport)
+    except AuthError as exc:
+        print(f"warning: the page template was not set: {exc}. {_SET_THE_TEMPLATE_LATER}", file=sys.stderr)
+
+
+def _manage_the_notion_template(
+    link: str | None, clear: bool, workspace: str | None, transport: httpx2.BaseTransport | None
+) -> None:
+    if clear:
+        _clear_the_template(_template_holder(_the_notion_sign_in(workspace)))
+    elif link is not None:
+        _set_the_template(_template_holder(_the_notion_sign_in(workspace)), link, transport)
+    else:
+        _show_the_templates(workspace)
+
+
+def _find_the_notion_entry(workspace: str | None) -> StoredEntry[NotionCredentials] | None:
+    try:
+        return find_notion(workspace)
+    except SeveralSignInsError as several:
+        raise AuthError(f"{several} with --workspace") from None
+
+
+def _the_notion_sign_in(workspace: str | None) -> NotionCredentials:
+    entry = _find_the_notion_entry(workspace)
+    if entry is None:
+        where = "" if workspace is None else f" workspace {printable_only(workspace)}"
+        raise AuthError(f"Not signed in to Notion{where}; run `skaldr auth notion`")
+    if entry.credentials is None:
+        raise AuthError(entry.unreadable_message)
+    return entry.credentials
+
+
+def _template_holder(credentials: NotionCredentials) -> _TemplateHolder:
+    if credentials.workspace_id is None:
+        raise AuthError(
+            f"The Notion sign-in for workspace {_workspace_named(credentials.workspace_name)} has no "
+            "workspace id, so it cannot hold a template; run `skaldr auth notion` again"
+        )
+    return _TemplateHolder(credentials, credentials.workspace_id)
+
+
+def _set_the_template(holder: _TemplateHolder, link: str, transport: httpx2.BaseTransport | None) -> None:
+    try:
+        page_id = required_page_id(link)
+    except ValueError as invalid:
+        raise AuthError(str(invalid)) from None
+    session = NotionSession(SignIn(holder.credentials, "keychain"), transport=transport)
+    api = NotionApi(session, transport=transport)
+    try:
+        check_the_template_is_empty(api, page_id)
+    except ConnectorError as refused:
+        raise AuthError(str(refused)) from refused
+    finally:
+        api.close()
+    save_notion_template(holder.workspace_id, page_id)
+    workspace = _workspace_named(holder.credentials.workspace_name)
+    print(f"Notion workspace {workspace}: new pages are created from template page {page_id}.")
+    print(_FULL_WIDTH_NOTICE)
+
+
+def _clear_the_template(holder: _TemplateHolder) -> None:
+    workspace = _workspace_named(holder.credentials.workspace_name)
+    if clear_notion_template(holder.workspace_id):
+        print(f"Cleared the page template of Notion workspace {workspace}.")
+    else:
+        print(f"Notion workspace {workspace} has no page template.")
+
+
+def _entries_to_show(workspace: str | None) -> list[StoredEntry[NotionCredentials]]:
+    if workspace is None:
+        return stored_notion_sign_ins()
+    entry = _find_the_notion_entry(workspace)
+    return [] if entry is None else [entry]
+
+
+def _show_the_templates(workspace: str | None) -> None:
+    entries = _entries_to_show(workspace)
+    if not entries:
+        where = "" if workspace is None else f" workspace {printable_only(workspace)}"
+        print(f"Not signed in to Notion{where}.")
+        return
+    templates = notion_templates()
+    for entry in entries:
+        if entry.credentials is None:
+            raise AuthError(entry.unreadable_message)
+        holder = _template_holder(entry.credentials)
+        template = templates.get(str(holder.workspace_id))
+        shown = "no page template" if template is None else f"page template {template}"
+        name = _workspace_named(entry.credentials.workspace_name)
+        print(f"Notion workspace {name} (id {holder.workspace_id}): {shown}")
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
@@ -322,9 +470,21 @@ def _notion_status_lines() -> list[_StatusLine]:
 
     return _status_lines(
         environment,
-        lambda: [_describe_stored_notion(entry) for entry in stored_notion_sign_ins()],
+        _stored_notion_lines,
         "not signed in (run `skaldr auth notion`)",
     )
+
+
+def _stored_notion_lines() -> list[_StatusLine]:
+    entries = stored_notion_sign_ins()
+    try:
+        templates = notion_templates()
+    except AuthError as unreadable:
+        return [
+            *(_describe_stored_notion(entry, {}) for entry in entries),
+            _StatusLine(f"error: {unreadable}", failed=True),
+        ]
+    return [_describe_stored_notion(entry, templates) for entry in entries]
 
 
 def _jira_status_lines() -> list[_StatusLine]:
@@ -371,15 +531,20 @@ def _as_user(name: str | None) -> str:
     return f" as {shown}" if shown else ""
 
 
-def _describe_stored_notion(entry: StoredEntry[NotionCredentials]) -> _StatusLine:
+def _describe_stored_notion(
+    entry: StoredEntry[NotionCredentials], templates: Mapping[str, str]
+) -> _StatusLine:
     if entry.credentials is None:
         return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
     workspace = _workspace_named(entry.credentials.workspace_name)
+    template = ""
     if entry.credentials.workspace_id is None:
         identified = f" (no workspace id; name it as {entry.identifier})"
     else:
         identified = f" (id {entry.credentials.workspace_id})"
-    return _StatusLine(f"signed in to workspace {workspace}{identified} (keychain)")
+        if str(entry.credentials.workspace_id) in templates:
+            template = f", page template {templates[str(entry.credentials.workspace_id)]}"
+    return _StatusLine(f"signed in to workspace {workspace}{identified} (keychain){template}")
 
 
 def _describe_stored_jira(entry: StoredEntry[JiraCredentials]) -> _StatusLine:

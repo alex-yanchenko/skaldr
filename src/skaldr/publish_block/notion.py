@@ -44,7 +44,7 @@ def notion_page_id(reference: str) -> str | None:
     return titled.group(1) if titled else None
 
 
-def _required_page_id(reference: str) -> str:
+def required_page_id(reference: str) -> str:
     page_id = notion_page_id(reference)
     if page_id is None:
         raise ValueError(
@@ -86,7 +86,7 @@ class NotionWhere(FrozenModel):
         names_both_or_neither = (self.parent_page is None) == (self.page is None)
         if names_both_or_neither:
             raise ValueError("a notion target names exactly one of `parent_page` or `page`")
-        _required_page_id(self._page_reference)
+        required_page_id(self._page_reference)
         self._validate_template()
         return self
 
@@ -107,7 +107,7 @@ class NotionWhere(FrozenModel):
     def template_page_id(self) -> str | None:
         if self.template is None or self.template == NO_TEMPLATE:
             return None
-        return _required_page_id(self.template)
+        return required_page_id(self.template)
 
     @property
     def _page_reference(self) -> str:
@@ -117,7 +117,7 @@ class NotionWhere(FrozenModel):
 
     @property
     def page_id(self) -> str:
-        return _required_page_id(self._page_reference)
+        return required_page_id(self._page_reference)
 
 
 class NotionTarget(TargetBase):
