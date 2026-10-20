@@ -15,6 +15,7 @@ from markupsafe import Markup, escape
 from typing_extensions import assert_never
 
 from skaldr import compute
+from skaldr.errors import ExportInvariantError
 from skaldr.models import Chart, Tone, package_text
 
 
@@ -51,19 +52,28 @@ def _fill(tone: Tone | None, index: int) -> str:
 
 
 @cache
-def _light_palette(role: Literal["fg", "bg"]) -> dict[str, str]:
+def light_palette(role: Literal["fg", "bg"]) -> dict[str, str]:
     declarations = re.findall(
         rf"--(\w+)-{role}:\s*light-dark\((#[0-9a-fA-F]{{6}}),", package_text("styles.css")
     )
     return dict(declarations)
 
 
+def _light_colour(role: Literal["fg", "bg"], tone: Tone) -> str:
+    found = light_palette(role).get(tone)
+    if found is None:
+        raise ExportInvariantError(
+            f"styles.css declares no light-theme '{role}' colour for the tone '{tone}'"
+        )
+    return found
+
+
 def chart_light_colour(tone: Tone | None, index: int) -> str:
-    return _light_palette("fg")[chart_tone(tone, index)]
+    return _light_colour("fg", chart_tone(tone, index))
 
 
 def tone_light_colours(tone: Tone) -> tuple[str, str]:
-    return _light_palette("bg")[tone], _light_palette("fg")[tone]
+    return _light_colour("bg", tone), _light_colour("fg", tone)
 
 
 def _nice_max(value: float) -> float:
