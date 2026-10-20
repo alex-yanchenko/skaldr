@@ -7,7 +7,7 @@ content file can never smuggle in raw HTML.
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date
 from functools import partial
@@ -34,11 +34,13 @@ from skaldr.models import (
     MEDIA_KIND_LABELS,
     Person,
     Report,
+    Request,
+    RequestFlow,
     SectionFields,
     ToneLiteral,
     iter_requests,
     package_text,
-    unresolvable_request_variables,
+    unresolved_request_variables,
 )
 from skaldr.prose_blocks import prose_blocks
 from skaldr.publish_block import without_publish_block
@@ -447,23 +449,64 @@ def render_html(
 
 
 def find_placeholders(report: Report) -> list[str]:
-    """Names of every unfilled blank in the report, sorted and de-duplicated, from two sources: a
-    `{{placeholder}}` in rich text, and a `{{name}}` a `request` interpolates but cannot fill from its
-    own declarations. A request variable the author did declare is a runtime blank its reader fills, so
-    it is deliberately absent. Renders once into a throwaway to reuse the rich-text traversal; the
-    --check --strict gate uses this to refuse a doc that still has blanks."""
-    seen: set[str] = set()
-    _render(report, "page.html.j2", placeholders=seen)
-    return sorted(seen | _meta_placeholders(report) | unresolvable_request_variables(report.blocks))
+    _render(report, "page.html.j2")
+    return list(placeholder_locations(report))
 
 
 _META_PLACEHOLDER = re.compile(r"\{\{([A-Za-z0-9_-]+)\}\}")
 
 
-def _meta_placeholders(report: Report) -> set[str]:
+def _meta_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
     meta = report.meta
-    plain_texts = [meta.title, *meta.subtitle, meta.date or "", meta.updated or ""]
-    return {name for text in plain_texts for name in _META_PLACEHOLDER.findall(text)}
+    plain_texts = {
+        "title": [meta.title],
+        "subtitle": list(meta.subtitle),
+        "date": [meta.date or ""],
+        "updated": [meta.updated or ""],
+    }
+    for field, texts in plain_texts.items():
+        for text in texts:
+            for name in _META_PLACEHOLDER.findall(text):
+                yield name, f"meta.{field}"
+
+
+def _rich_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
+    slugs = compute.anchor_slugs(report)
+    ref_numbers = compute.reference_numbers(report)
+    anchor_ids = frozenset(slugs.values())
+    part_anchors = compute.part_anchors(report, slugs)
+    for path, text in compute.rich_text_strings(report):
+        names: set[str] = set()
+        render_richtext(
+            text,
+            ref_numbers,
+            None,
+            anchor_ids,
+            names,
+            report.meta.people,
+            report.meta.jira_site,
+            part_anchors,
+        )
+        for name in sorted(names):
+            yield name, ".".join(path)
+
+
+def _request_blank_locations(report: Report) -> Iterator[tuple[str, str]]:
+    for path, block in report.located_blocks:
+        if isinstance(block, Request | RequestFlow):
+            for name in sorted(unresolved_request_variables(block)):
+                yield name, path
+
+
+def placeholder_locations(report: Report) -> dict[str, list[str]]:
+    found: dict[str, list[str]] = {}
+    sources = (_meta_blank_locations, _rich_blank_locations, _request_blank_locations)
+    for source in sources:
+        for name, place in source(report):
+            places = found.setdefault(name, [])
+            if place not in places:
+                places.append(place)
+    return {name: found[name] for name in sorted(found)}
 
 
 def render_embed(report: Report, *, source: str | None = None) -> str:

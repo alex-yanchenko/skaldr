@@ -175,7 +175,7 @@ Everything else is escaped and shown literally: there is no raw HTML.
 table cells. Every other prose field (`key_value` values, `list` items, `status_list`/`timeline`
 text, headings, labels) is single-line: a blank line there is just collapsed whitespace.
 
-**Lists inside a body.** In those same set-apart bodies, lines that start with `- `, `* `, `+ ` or a number and `. ` or `) ` (`1. `, `2) `) are a list, read with CommonMark's list rules (the same as GitHub): bulleted for `-`, `*` and `+`, numbered from the first item's number otherwise, and an item indented under another item is a nested list, up to 20 levels deep (deeper fails the build naming the field). A bulleted list, or a numbered one that starts at 1, can follow a line of text directly (`Two checks:` on the line above needs no blank line); a numbered list that starts at another number needs a blank line above it. A line right after an item continues that item, so leave a blank line before text that follows a list. A change of marker (`-` to `*`, `.` to `)`) starts a new list, and `\-` at the start of a line is a literal dash. skaldr adds one rule of its own: a list needs at least two items at the top level, so a single marked line stays text exactly as written, and `2024. was the year` or a lone `- note` is never a list.
+**Lists inside a body.** In those same set-apart bodies, lines that start with `- `, `* `, `+ ` or a number and `. ` or `) ` (`1. `, `2) `) are a list, read with CommonMark's list rules (the same as GitHub): bulleted for `-`, `*` and `+`, numbered from the first item's number otherwise, and an item indented under another item is a nested list, up to 20 levels deep (deeper fails the build naming the field). A bulleted list, or a numbered one that starts at 1, can follow a line of text directly (`Two checks:` on the line above needs no blank line); a numbered list that starts at another number needs a blank line above it. A line right after an item continues that item, so leave a blank line before text that follows a list. A change of marker (`-` to `*`, `.` to `)`) starts a new list, and `\-` at the start of a line is a literal dash. A fenced block (``` or ~~~, of any length) is never read as a list: its lines stay text exactly as written, indentation included, and a fence left unclosed gets no closing fence added. skaldr adds one rule of its own: a list needs at least two items at the top level, so a single marked line stays text exactly as written, and `2024. was the year` or a lone `- note` is never a list.
 
 > **YAML gotcha:** a folded `>` block scalar turns blank lines into spaces *before skaldr sees them*,
 > so paragraphs are lost. Use a literal `|` block scalar for any multi-paragraph body:
@@ -207,7 +207,13 @@ A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts t
 
 - `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
-  you run before "final".
+  you run before "final". Under the failing line it lists each blank with the fields that hold it:
+
+  ```
+  FAIL  plan.yaml: 2 unfilled placeholders: owner, ticket
+        owner: blocks.1.items.0.text
+        ticket: meta.title, blocks.0.body
+  ```
 
 > **Self-checking a rendered page?** Every render, full page and `--embed` fragment alike, **embeds its
 > own YAML source** (so `--extract-source` can recover it), which means any `{{…}}` or `[^ref]` in the

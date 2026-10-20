@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from skaldr.errors import ReadOnlyFileError
+from skaldr.errors import ReadOnlyFileError, TargetAlreadyExistsError
 
 
 def resolved_path(path: Path) -> Path:
@@ -76,6 +76,25 @@ def replace_bytes(path: Path, encoded: bytes) -> None:
         if path.is_file():
             shutil.copymode(path, staged)
         staged.replace(path)
+    _flush_directory(path.parent)
+
+
+def create_file(path: Path, text: str) -> None:
+    path = resolved_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        created = path.open("xb")
+    except FileExistsError as exists:
+        raise TargetAlreadyExistsError(exists.errno, exists.strerror, str(path)) from exists
+    try:
+        with created:
+            created.write(text.encode("utf-8"))
+            created.flush()
+            os.fsync(created.fileno())
+    except BaseException:
+        with contextlib.suppress(OSError):
+            path.unlink()
+        raise
     _flush_directory(path.parent)
 
 

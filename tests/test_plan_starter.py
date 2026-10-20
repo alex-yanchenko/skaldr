@@ -13,11 +13,25 @@ from tests.factories import make_report
 
 GUIDE = package_text("skill/GUIDE.md")
 STARTER = package_text("skill/plan-starter.yaml")
-STARTER_PLACEHOLDERS = (
-    "date, decision-one, decision-two, finished-step, first-action, mistake-to-avoid, one-line-summary, "
-    "plan-title, reason-one, reason-two, second-action, step-in-progress, step-not-started, "
-    "step-waiting-on-something, what-done-looks-like-and-why-it-matters"
+STARTER_BLANKS = (
+    ("date", "meta.updated"),
+    ("decision-one", "blocks.3.items.0"),
+    ("decision-two", "blocks.3.items.1"),
+    ("finished-step", "blocks.5.items.0.text"),
+    ("first-action", "blocks.7.items.0"),
+    ("mistake-to-avoid", "blocks.9.items.0"),
+    ("one-line-summary", "meta.subtitle"),
+    ("plan-title", "meta.title"),
+    ("reason-one", "blocks.3.items.0"),
+    ("reason-two", "blocks.3.items.1"),
+    ("second-action", "blocks.7.items.1"),
+    ("step-in-progress", "blocks.5.items.1.text"),
+    ("step-not-started", "blocks.5.items.2.text"),
+    ("step-waiting-on-something", "blocks.5.items.3.text"),
+    ("what-done-looks-like-and-why-it-matters", "blocks.1.body"),
 )
+STARTER_PLACEHOLDERS = ", ".join(name for name, _ in STARTER_BLANKS)
+STARTER_PLACEHOLDER_LOCATIONS = "".join(f"      {name}: {place}\n" for name, place in STARTER_BLANKS)
 GUIDE_STARTER_SECTION = re.compile(r"^## Working plan starter\n(.*?)(?=^## |\Z)", re.DOTALL | re.MULTILINE)
 FENCED_YAML = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 
@@ -50,7 +64,8 @@ def test_the_starter_fails_the_strict_check_naming_every_placeholder(
     assert (exit_code, captured.out, captured.err) == (
         1,
         "",
-        f"FAIL  {path}: 15 unfilled placeholders: {STARTER_PLACEHOLDERS}\n\n1 file failed\n",
+        f"FAIL  {path}: 15 unfilled placeholders: {STARTER_PLACEHOLDERS}\n{STARTER_PLACEHOLDER_LOCATIONS}"
+        "\n1 file failed\n",
     )
 
 
@@ -126,6 +141,28 @@ def test_new_plan_refuses_a_file_that_exists_and_leaves_it_alone(
 ) -> None:
     target = tmp_path / "plan.yaml"
     target.write_text("mine", encoding="utf-8")
+
+    exit_code = main(["new", "plan", str(target)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err, target.read_text(encoding="utf-8")) == (
+        1,
+        "",
+        f"error: {target} already exists; pick another file name or delete it first\n",
+        "mine",
+    )
+
+
+def test_new_plan_refuses_a_file_that_appears_after_the_existence_check_and_leaves_it_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "plan.yaml"
+
+    def starter_after_someone_creates_the_target(name: str) -> str:
+        target.write_text("mine", encoding="utf-8")
+        return package_text(name)
+
+    monkeypatch.setattr("skaldr.cli.package_text", starter_after_someone_creates_the_target)
 
     exit_code = main(["new", "plan", str(target)])
 

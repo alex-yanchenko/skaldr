@@ -22,6 +22,7 @@ from skaldr.errors import (
     PublishError,
     RegionOutsideFileError,
     ReportError,
+    TargetAlreadyExistsError,
     UnknownAnchorError,
     UnknownGuideTopicError,
 )
@@ -44,11 +45,12 @@ from skaldr.render import (
     RenderOptions,
     extract_source,
     find_placeholders,
+    placeholder_locations,
     recorded_render,
     render_html,
     render_report,
 )
-from skaldr.replace_file import replace_file, resolved_path
+from skaldr.replace_file import create_file, replace_file, resolved_path
 from skaldr.version import skaldr_version
 
 _FETCH_TIMEOUT_SECONDS = 30
@@ -171,10 +173,10 @@ def _run_new(arguments: list[str]) -> int:
     if kind not in _NEW_KINDS:
         return _fail(f"unknown kind '{kind}' for `skaldr new`; the kinds are {kinds}")
     target = Path(file_name)
-    if target.exists():
-        return _fail(f"{target} already exists; pick another file name or delete it first")
     try:
-        replace_file(target, package_text(_NEW_KINDS[kind]))
+        create_file(target, package_text(_NEW_KINDS[kind]))
+    except TargetAlreadyExistsError:
+        return _fail(f"{target} already exists; pick another file name or delete it first")
     except OSError as err:
         return _fail(f"could not write {target}: {err}")
     print(f"OK  wrote the {kind} starter to {target}")
@@ -814,6 +816,8 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
                 f"FAIL  {path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
                 file=sys.stderr,
             )
+            for name, places in placeholder_locations(report).items():
+                print(f"      {name}: {', '.join(places)}", file=sys.stderr)
         elif unfilled:
             print(f"OK    {path}  ({_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)})")
         else:

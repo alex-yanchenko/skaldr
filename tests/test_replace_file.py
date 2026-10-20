@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from skaldr.errors import ReadOnlyFileError
-from skaldr.replace_file import replace_file
+from skaldr.errors import ReadOnlyFileError, TargetAlreadyExistsError
+from skaldr.replace_file import create_file, replace_file
 
 
 @pytest.fixture
@@ -335,3 +335,74 @@ def test_an_in_place_write_interrupted_partway_gets_the_earlier_bytes_back(
         replace_file(first, "new page")
 
     assert first.read_text(encoding="utf-8") == "earlier page"
+
+
+def test_create_file_writes_a_new_file_and_its_missing_folders(tmp_path: Path) -> None:
+    path = tmp_path / "docs" / "plan.yaml"
+
+    create_file(path, "new plan")
+
+    assert path.read_text(encoding="utf-8") == "new plan"
+
+
+def test_create_file_refuses_an_existing_file_and_leaves_it_alone(tmp_path: Path) -> None:
+    path = tmp_path / "plan.yaml"
+    path.write_text("mine", encoding="utf-8")
+
+    with pytest.raises(TargetAlreadyExistsError) as raised:
+        create_file(path, "new plan")
+
+    assert (str(raised.value), path.read_text(encoding="utf-8")) == (
+        f"[Errno {errno.EEXIST}] File exists: '{os.path.realpath(path)}'",
+        "mine",
+    )
+
+
+@pytest.mark.parametrize("failure", [OSError(errno.ENOSPC, "no space left"), KeyboardInterrupt()], ids=str)
+def test_create_file_leaves_no_file_behind_when_the_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: BaseException
+) -> None:
+    path = tmp_path / "plan.yaml"
+
+    def failing_fsync(_descriptor: int) -> None:
+        raise failure
+
+    monkeypatch.setattr(os, "fsync", failing_fsync)
+
+    with pytest.raises(type(failure)):
+        create_file(path, "new plan")
+
+    assert path.exists() is False
+
+
+def test_create_file_under_a_parent_that_is_a_file_raises_the_plain_error_not_the_exists_refusal(
+    tmp_path: Path,
+) -> None:
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a file, not a folder", encoding="utf-8")
+
+    with pytest.raises(FileExistsError) as raised:
+        create_file(blocker / "plan.yaml", "new plan")
+
+    assert (type(raised.value), str(raised.value)) == (
+        FileExistsError,
+        f"[Errno {errno.EEXIST}] File exists: '{os.path.realpath(blocker)}'",
+    )
+
+
+def test_create_file_refuses_a_folder_of_that_name(tmp_path: Path) -> None:
+    path = tmp_path / "plan.yaml"
+    path.mkdir()
+
+    with pytest.raises(TargetAlreadyExistsError):
+        create_file(path, "new plan")
+
+
+def test_create_file_writes_through_a_dangling_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "real.yaml"
+    link = tmp_path / "plan.yaml"
+    link.symlink_to(target)
+
+    create_file(link, "new plan")
+
+    assert (link.is_symlink(), target.read_text(encoding="utf-8")) == (True, "new plan")

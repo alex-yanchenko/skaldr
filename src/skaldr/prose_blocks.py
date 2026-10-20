@@ -12,6 +12,8 @@ FEWEST_LIST_ITEMS: Final = 2
 MAX_LIST_DEPTH: Final = 20
 TOKEN_LEVELS_PER_LIST: Final = 3
 PARAGRAPH_OPEN: Final = "paragraph_open"
+FENCE: Final = "fence"
+REPLACEMENT_CHARACTER: Final = "�"
 LIST_CLOSE_OF_OPEN: Final = {
     "bullet_list_open": "bullet_list_close",
     "ordered_list_open": "ordered_list_close",
@@ -19,7 +21,7 @@ LIST_CLOSE_OF_OPEN: Final = {
 ITEM_CLOSE: Final = "list_item_close"
 BLANK_LINE: Final = re.compile(r"\n[ \t]*\n")
 LIST_READER: Final = MarkdownIt("zero", {"maxNesting": (MAX_LIST_DEPTH + 1) * TOKEN_LEVELS_PER_LIST}).enable(
-    "list"
+    ["list", "fence"]
 )
 
 
@@ -56,7 +58,9 @@ def _line_span(token: Token) -> tuple[int, int]:
     return first, end
 
 
-def _read_list(tokens: Sequence[Token], index: int, depth: int) -> tuple[ProseList, int]:
+def _read_list(
+    tokens: Sequence[Token], index: int, depth: int, lines: Sequence[str]
+) -> tuple[ProseList, int]:
     if depth > MAX_LIST_DEPTH:
         raise ReportError(
             f"a list nests more than {MAX_LIST_DEPTH} levels deep: indent fewer levels, "
@@ -68,7 +72,7 @@ def _read_list(tokens: Sequence[Token], index: int, depth: int) -> tuple[ProseLi
     items: list[ProseItem] = []
     index += 1
     while tokens[index].type != closing:
-        placed, index = _read_blocks(tokens, index + 1, ITEM_CLOSE, depth)
+        placed, index = _read_blocks(tokens, index + 1, ITEM_CLOSE, depth, lines)
         blocks = [entry.block for entry in placed]
         if blocks and isinstance(blocks[0], str):
             items.append(ProseItem(blocks[0], tuple(blocks[1:])))
@@ -77,8 +81,12 @@ def _read_list(tokens: Sequence[Token], index: int, depth: int) -> tuple[ProseLi
     return ProseList(tuple(items), start), index + 1
 
 
+def _fence_text(lines: Sequence[str], first: int, end: int) -> str:
+    return "\n".join(lines[first : _last_written_line(lines, first, end)])
+
+
 def _read_blocks(
-    tokens: Sequence[Token], index: int, closing: str | None, depth: int
+    tokens: Sequence[Token], index: int, closing: str | None, depth: int, lines: Sequence[str]
 ) -> tuple[list[_Placed], int]:
     placed: list[_Placed] = []
     while index < len(tokens) and tokens[index].type != closing:
@@ -87,8 +95,11 @@ def _read_blocks(
         if token.type == PARAGRAPH_OPEN:
             placed.append(_Placed(tokens[index + 1].content, first, end))
             index += 3
+        elif token.type == FENCE:
+            placed.append(_Placed(_fence_text(lines, first, end), first, end))
+            index += 1
         elif token.type in LIST_CLOSE_OF_OPEN:
-            block, index = _read_list(tokens, index, depth + 1)
+            block, index = _read_list(tokens, index, depth + 1, lines)
             placed.append(_Placed(block, first, end))
         else:
             index += 1
@@ -132,9 +143,10 @@ def _with_short_lists_as_text(placed: Sequence[_Placed], lines: Sequence[str]) -
 
 
 def prose_blocks(text: str) -> list[ProseBlock]:
-    source = text.replace("\r\n", "\n").replace("\r", "\n")
-    placed, _ = _read_blocks(LIST_READER.parse(source), 0, None, 0)
-    return _with_short_lists_as_text(placed, source.split("\n"))
+    source = text.replace("\r\n", "\n").replace("\r", "\n").replace("\x00", REPLACEMENT_CHARACTER)
+    lines = source.split("\n")
+    placed, _ = _read_blocks(LIST_READER.parse(source), 0, None, 0, lines)
+    return _with_short_lists_as_text(placed, lines)
 
 
 def _block_strings(block: ProseBlock) -> list[str]:

@@ -108,6 +108,32 @@ def test_prose_splits_into_paragraphs_and_lists(text: str, blocks: list[ProseBlo
             [ProseList((ProseItem("", (bullets("x", "y"),)), ProseItem("b")))],
             id="an-item-that-opens-with-a-list",
         ),
+        pytest.param("a\x00b", ["a�b"], id="a-nul-in-a-paragraph-becomes-the-replacement-character"),
+        pytest.param(
+            "- a\n- b\n\nx\x00y",
+            [bullets("a", "b"), "x�y"],
+            id="a-nul-in-text-after-a-list-becomes-the-replacement-character",
+        ),
+        pytest.param(
+            "```\n- a\n- b\n```",
+            ["```\n- a\n- b\n```"],
+            id="a-list-inside-a-backtick-fence-stays-text",
+        ),
+        pytest.param(
+            "Intro:\n~~~\n- a\n- b\n~~~\n\n- c\n- d",
+            ["Intro:\n~~~\n- a\n- b\n~~~", bullets("c", "d")],
+            id="a-list-inside-a-tilde-fence-stays-text-and-a-list-after-it-is-read",
+        ),
+        pytest.param(
+            "- a\n  ````\n  - x\n  ```\n  ````\n- b",
+            [ProseList((ProseItem("a", ("  ````\n  - x\n  ```\n  ````",)), ProseItem("b")))],
+            id="an-indented-four-backtick-fence-in-an-item-is-kept-as-written",
+        ),
+        pytest.param(
+            "- a\n  ```\n  - x\n- b",
+            [ProseList((ProseItem("a", ("  ```\n  - x",)), ProseItem("b")))],
+            id="an-unclosed-fence-in-an-item-gets-no-closing-fence",
+        ),
     ],
 )
 def test_prose_edge_cases(text: str, blocks: list[ProseBlock]) -> None:

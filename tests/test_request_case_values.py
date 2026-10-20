@@ -21,6 +21,7 @@ from tests.factories import (
     markdown_of,
     notion_of,
     parsed_block,
+    parsed_request,
 )
 
 RECORDS_URL = "https://api.example.test/v1/records"
@@ -76,16 +77,12 @@ def _built_request(**overrides: Any) -> dict[str, Any]:
     return block
 
 
-def _parsed_request(block: dict[str, Any]) -> Request:
-    return parsed_block(Request, block)
-
-
 def _parsed_flow(block: dict[str, Any]) -> RequestFlow:
     return parsed_block(RequestFlow, block)
 
 
 def test_a_shared_command_is_written_out_for_each_case_with_that_cases_values() -> None:
-    block = _parsed_request(_command_request())
+    block = parsed_request(_command_request())
 
     assert [command_for(block, case) for case in block.cases] == [
         _shared_command_with("A100", "2", "1"),
@@ -99,7 +96,7 @@ def test_a_cases_own_command_takes_that_cases_values() -> None:
         {"label": "Own", "command": own, "values": {"id": "B7", "term": "9"}, "response": OK},
         {"label": "Shared", "values": {"id": "A100", "term": "1", "seq": "1"}, "response": OK},
     ]
-    block = _parsed_request(_command_request(cases=cases, variables=VARIABLES))
+    block = parsed_request(_command_request(cases=cases, variables=VARIABLES))
 
     assert [command_for(block, case) for case in block.cases] == [
         "vault-run -- curl -s https://api.example.test/v1/other/B7/9",
@@ -108,7 +105,7 @@ def test_a_cases_own_command_takes_that_cases_values() -> None:
 
 
 def test_a_built_curl_fills_the_url_the_headers_and_the_body_from_the_cases_values() -> None:
-    block = _parsed_request(_built_request())
+    block = parsed_request(_built_request())
 
     assert command_for(block, block.cases[0]) == (
         "curl -i -X POST \\\n"
@@ -124,7 +121,7 @@ def test_a_built_curl_fills_the_url_the_headers_and_the_body_from_the_cases_valu
 def test_a_value_with_a_quote_cannot_break_out_of_a_built_curl() -> None:
     hostile = {"id": "x'; echo owned; '", "term": "1", "seq": "1"}
     cases = [{"label": "Quote", "values": hostile, "response": OK}]
-    block = _parsed_request(_built_request(cases=cases))
+    block = parsed_request(_built_request(cases=cases))
 
     assert command_for(block, block.cases[0]).splitlines()[-1] == (
         "  'https://api.example.test/v1/records/x'\"'\"'; echo owned; '\"'\"''"
@@ -136,7 +133,7 @@ def test_a_variable_a_case_leaves_unbound_stays_a_blank_in_that_cases_command() 
         {"label": "Partial", "values": {"id": "A100"}, "response": OK},
         {"label": "Whole", "values": {"id": "A100", "term": "1", "seq": "1"}, "response": OK},
     ]
-    block = _parsed_request(_command_request(cases=cases))
+    block = parsed_request(_command_request(cases=cases))
 
     assert [command_for(block, case) for case in block.cases] == [
         _shared_command_with("A100", "{{term}}", "{{seq}}"),
@@ -145,7 +142,7 @@ def test_a_variable_a_case_leaves_unbound_stays_a_blank_in_that_cases_command() 
 
 
 def test_case_variable_with_value_still_fills_its_one_name() -> None:
-    block = _parsed_request(
+    block = parsed_request(
         make_request(
             url="https://api.example.test/{{resource}}",
             variables=[],
@@ -168,7 +165,7 @@ def test_a_variable_every_case_binds_is_no_longer_a_field_the_reader_fills() -> 
         {"label": "One", "values": {"id": "A100", "term": "2"}, "response": OK},
         {"label": "Two", "values": {"id": "A100", "term": "1"}, "response": OK},
     ]
-    block = _parsed_request(_command_request(cases=cases))
+    block = parsed_request(_command_request(cases=cases))
 
     assert [variable.name for variable in reader_variables(block)] == ["seq"]
 
@@ -178,13 +175,13 @@ def test_a_variable_only_some_cases_bind_stays_a_field_for_the_cases_that_leave_
         {"label": "One", "values": {"id": "A100", "term": "2", "seq": "1"}, "response": OK},
         {"label": "Two", "values": {"id": "A100", "term": "1"}, "response": OK},
     ]
-    block = _parsed_request(_command_request(cases=cases))
+    block = parsed_request(_command_request(cases=cases))
 
     assert [variable.name for variable in reader_variables(block)] == ["seq"]
 
 
 def _query_request_with_values() -> Request:
-    return _parsed_request(
+    return parsed_request(
         make_query_request(
             query={
                 "runner": "mongosh, orders database",
@@ -215,14 +212,14 @@ def test_a_query_request_leaves_a_field_only_for_what_its_cases_do_not_bind() ->
 
 
 def test_a_block_with_no_values_keeps_every_declared_variable_as_a_field() -> None:
-    block = _parsed_request(_command_request(cases=[{"label": "Only", "response": OK}], variables=VARIABLES))
+    block = parsed_request(_command_request(cases=[{"label": "Only", "response": OK}], variables=VARIABLES))
 
     assert [variable.name for variable in reader_variables(block)] == ["id", "term", "seq"]
 
 
 def test_a_variable_no_case_binds_stays_a_field_even_where_every_case_overrides_the_request_text() -> None:
     cases = [{"label": "Only", "headers": {}, "response": OK}]
-    block = _parsed_request(
+    block = parsed_request(
         make_request(
             headers={"X-Term": "{{term}}"},
             url="https://api.example.test/{{id}}",
@@ -516,7 +513,7 @@ def test_a_value_carrying_a_token_is_inserted_as_written_and_the_token_stays_a_r
         variables=[{"name": "id"}, {"name": "term"}],
         cases=[{"label": "Nested", "values": {"id": "{{term}}"}, "response": OK}],
     )
-    parsed = _parsed_request(block)
+    parsed = parsed_request(block)
     html = render_html(parse_report(make_report(blocks=[block])))
 
     assert command_for(parsed, parsed.cases[0]) == "fetch {{term}} {{term}}"

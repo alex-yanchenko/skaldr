@@ -82,7 +82,7 @@ from tests.factories import (
     make_table,
     make_tabs,
     make_toggle,
-    parsed_block,
+    parsed_request,
 )
 
 
@@ -4597,12 +4597,8 @@ def test_a_request_is_accepted_inside_a_panel() -> None:
     assert isinstance(outer.blocks[0], Request)
 
 
-def _parsed_request(block: dict[str, Any]) -> Request:
-    return parsed_block(Request, block)
-
-
 def test_a_command_request_needs_no_method_url_or_reader_field() -> None:
-    block = _parsed_request(make_command_request())
+    block = parsed_request(make_command_request())
 
     assert (block.method, block.url, block.variables, block.command) == (
         None,
@@ -4613,7 +4609,7 @@ def test_a_command_request_needs_no_method_url_or_reader_field() -> None:
 
 
 def test_a_command_keeps_its_inner_lines_and_drops_the_trailing_newline_a_block_scalar_adds() -> None:
-    block = _parsed_request(make_command_request(command="cd /srv\nrun --all\n"))
+    block = parsed_request(make_command_request(command="cd /srv\nrun --all\n"))
 
     assert block.command == "cd /srv\nrun --all"
 
@@ -4686,7 +4682,7 @@ def test_a_flow_step_is_held_to_the_same_command_rules_as_a_request() -> None:
 
 
 def test_asking_a_command_request_for_its_composed_call_raises() -> None:
-    block = _parsed_request(make_command_request())
+    block = parsed_request(make_command_request())
 
     with pytest.raises(ReportError, match=r"runs a command, so skaldr composes no call for it"):
         block.composed_call()
@@ -4701,7 +4697,7 @@ def test_a_case_command_replaces_the_requests_for_that_case_alone() -> None:
             "response": {"body": "[]"},
         },
     ]
-    block = _parsed_request(make_command_request(cases=cases))
+    block = parsed_request(make_command_request(cases=cases))
 
     assert [compute.command_for(block, case) for case in block.cases] == [
         "vault-run -- curl -s https://api.partner.example/v1/tiers | jq 'map({code, mapped})'",
@@ -4723,7 +4719,7 @@ def test_a_case_of_a_command_request_cannot_set_headers(field: str) -> None:
 
 
 def test_a_command_fills_the_case_axis_and_counts_its_tokens_as_used() -> None:
-    block = _parsed_request(
+    block = parsed_request(
         make_command_request(
             command="vault-run -- curl -s 'https://{{host}}/v1/mappings?label={{label}}'",
             variables=[{"name": "host", "example": "api.partner.example"}],
@@ -4739,16 +4735,14 @@ def test_a_command_fills_the_case_axis_and_counts_its_tokens_as_used() -> None:
 
 def test_a_variable_used_only_in_a_case_command_counts_as_used() -> None:
     cases = [{"label": "one", "command": "vault-run -- fetch {{region}}", "response": {"body": "x"}}]
-    block = _parsed_request(
-        make_command_request(variables=[{"name": "region", "example": "eu"}], cases=cases)
-    )
+    block = parsed_request(make_command_request(variables=[{"name": "region", "example": "eu"}], cases=cases))
 
     assert block.referenced_variables() == {"region"}
 
 
 def test_a_case_tone_colours_a_case_that_recorded_no_status() -> None:
     cases = [{"label": "finding", "tone": "warning", "response": {"body": "[]"}}]
-    block = _parsed_request(make_command_request(cases=cases))
+    block = parsed_request(make_command_request(cases=cases))
 
     assert compute.case_tone(block.cases[0]) == "warning"
 
@@ -4784,7 +4778,7 @@ def _query_error(**overrides: Any) -> str:
 
 
 def test_a_query_request_needs_no_method_url_or_reader_field() -> None:
-    block = _parsed_request(make_query_request())
+    block = parsed_request(make_query_request())
 
     assert (block.method, block.url, block.command, block.variables) == (None, None, None, [])
     assert block.query is not None
@@ -4798,7 +4792,7 @@ def test_a_query_request_needs_no_method_url_or_reader_field() -> None:
 def test_a_query_keeps_its_inner_lines_and_drops_the_trailing_newline_a_block_scalar_adds() -> None:
     query = {"runner": "psql", "lang": "sql", "content": "SELECT 1\nFROM orders\n"}
 
-    block = _parsed_request(make_query_request(query=query))
+    block = parsed_request(make_query_request(query=query))
 
     assert block.query is not None
     assert block.query.content == "SELECT 1\nFROM orders"
@@ -4859,7 +4853,7 @@ def test_a_language_pygments_has_no_lexer_for_is_rejected_by_name() -> None:
 def test_a_lexer_name_is_accepted_in_any_letter_case_and_kept_as_written() -> None:
     query = {"runner": "mongosh", "lang": "JSON", "content": "[]"}
 
-    block = _parsed_request(make_query_request(query=query))
+    block = parsed_request(make_query_request(query=query))
 
     assert block.query is not None
     assert block.query.lang == "JSON"
@@ -4869,7 +4863,7 @@ def test_a_lexer_name_is_accepted_in_any_letter_case_and_kept_as_written() -> No
 def test_any_pygments_lexer_name_is_accepted_as_the_query_language(language: str) -> None:
     query = {"runner": "a tool", "lang": language, "content": "x"}
 
-    assert _parsed_request(make_query_request(query=query)).query is not None
+    assert parsed_request(make_query_request(query=query)).query is not None
 
 
 def test_a_command_note_on_a_query_request_is_rejected() -> None:
@@ -4899,7 +4893,7 @@ def test_a_case_cannot_override_the_query() -> None:
 def test_a_query_counts_its_tokens_as_used_and_fills_the_case_axis() -> None:
     content = '[{"$match": {"status": "{{status}}", "region": "{{region}}"}}]'
     query = {"runner": "mongosh", "lang": "json", "content": content}
-    block = _parsed_request(
+    block = parsed_request(
         make_query_request(
             query=query,
             variables=[{"name": "region"}],
