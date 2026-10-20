@@ -582,6 +582,9 @@ def test_a_source_without_a_top_level_publish_key_is_embedded_unchanged(source: 
         pytest.param("<<: {publish: {doc_id: secret-doc}}\nb: 2\n", id="merged-in-mapping"),
         pytest.param("<<: [{publish: {doc_id: secret-doc}}]\nb: 2\n", id="merged-in-list"),
         pytest.param("publish: &p\n  a: 1\nother: *p\n", id="anchor-inside-used-outside"),
+        pytest.param(
+            "<<: {publish: {a: 1}}\npublish: {a: 1}\nb: 2\n", id="merged-publish-equal-to-the-written-one"
+        ),
         pytest.param("{publish: {a: 1}, b: 2}\n", id="one-line-flow-document"),
         pytest.param("{a: 1, publish: {b: 2}}\n", id="flow-document-ending-in-publish"),
         pytest.param("{publish: {a: 1},\nb: 2}\n", id="flow-document-over-two-lines"),
@@ -615,6 +618,32 @@ def test_a_publish_block_that_cannot_be_cut_out_exactly_stops_the_render(source:
     ],
 )
 def test_the_comments_left_out_are_the_ones_next_to_the_block(source: str, embedded: str) -> None:
+    assert without_publish_block(source) == embedded
+
+
+@pytest.mark.parametrize(
+    ("source", "embedded"),
+    [
+        pytest.param(
+            "a: -0.0\nb: 0.0\npublish: {doc_id: x}\n",
+            "a: -0.0\nb: 0.0\n",
+            id="negative-zero-beside-zero",
+        ),
+        pytest.param(
+            "a: &s [1]\nb: *s\npublish: {doc_id: x}\n",
+            "a: &s [1]\nb: *s\n",
+            id="one-list-shared-by-an-alias",
+        ),
+        pytest.param(
+            "a: [1]\nb: [1]\npublish: {doc_id: x}\n",
+            "a: [1]\nb: [1]\n",
+            id="two-equal-lists-written-twice",
+        ),
+    ],
+)
+def test_values_outside_the_publish_block_are_embedded_as_written_whatever_their_equality(
+    source: str, embedded: str
+) -> None:
     assert without_publish_block(source) == embedded
 
 

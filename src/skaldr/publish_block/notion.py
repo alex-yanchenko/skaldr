@@ -82,7 +82,9 @@ class NotionWhere(FrozenModel):
 
     @property
     def _page_reference(self) -> str:
-        return self.parent_page if self.parent_page is not None else self.page or ""
+        reference = self.page if self.parent_page is None else self.parent_page
+        assert reference is not None
+        return reference
 
     @property
     def page_id(self) -> str:

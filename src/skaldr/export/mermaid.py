@@ -1,11 +1,11 @@
 import json
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import Final, NamedTuple, NoReturn
+from typing import Final, NamedTuple, NoReturn, get_args
 
 from typing_extensions import assert_never
 
-from skaldr.charts import chart_light_colour
+from skaldr.charts import chart_light_colour, tone_light_colours
 from skaldr.errors import ExportInvariantError
 from skaldr.export.capabilities import character_without_a_unicode_form, in_unicode_script_form
 from skaldr.export.glyphs import mark_glyph
@@ -55,22 +55,19 @@ PIE_TEXT_VARIABLES: Final[Mapping[str, str]] = {
 }
 
 
+TONE_NAMES: Final[tuple[ToneName, ...]] = get_args(ToneName)
+
+
 class NodeColors(NamedTuple):
     fill: str
     stroke: str
 
 
-MERMAID_FILL: Final[Mapping[ToneName, NodeColors]] = {
-    "success": NodeColors("#e6f4ea", "#1e8e3e"),
-    "info": NodeColors("#e8f0fe", "#1a73e8"),
-    "warning": NodeColors("#fef7e0", "#b06000"),
-    "danger": NodeColors("#fce8e6", "#c5221f"),
-    "accent": NodeColors("#f3e8fd", "#8430ce"),
-    "teal": NodeColors("#e4f7f6", "#00796b"),
-    "sky": NodeColors("#e1f5fe", "#0277bd"),
-    "neutral": NodeColors("#f1f3f4", "#5f6368"),
-    "muted": NodeColors("#f1f3f4", "#5f6368"),
-}
+def _node_colors(tone: ToneName) -> NodeColors:
+    fill, stroke = tone_light_colours("neutral" if tone == "muted" else tone)
+    return NodeColors(fill, stroke)
+
+
 MERMAID_TEXT: Final = "#1f2328"
 MERMAID_ENTITY: Final[Mapping[str, str]] = {
     "#": "#35;",
@@ -174,7 +171,7 @@ def _node_line(node: GraphNode, *, with_details: bool) -> str:
 
 
 def _class_line(tone: ToneName) -> str:
-    colors = MERMAID_FILL[tone]
+    colors = _node_colors(tone)
     return f"    classDef {tone} fill:{colors.fill},stroke:{colors.stroke},color:{MERMAID_TEXT}"
 
 
@@ -185,7 +182,7 @@ def _graph_lines(graph: Graph, *, with_details: bool) -> list[str]:
     ]
     lines += [f"    {edge.source} {'-.->' if edge.dashed else '-->'} {edge.target}" for edge in graph.edges]
     used = {node.tone for node in graph.nodes}
-    return [*lines, *(_class_line(tone) for tone in sorted(MERMAID_FILL) if tone in used)]
+    return [*lines, *(_class_line(tone) for tone in sorted(TONE_NAMES) if tone in used)]
 
 
 def _xy_lines(chart: XYChart) -> list[str]:

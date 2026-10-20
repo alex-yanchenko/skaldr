@@ -92,10 +92,10 @@ flowchart LR
     s3 --> s4
     s4 --> s5
     s5 -.-> s1
-    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
-    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
-    classDef success fill:#e6f4ea,stroke:#1e8e3e,color:#1f2328
-    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
+    classDef accent fill:#f3e8ff,stroke:#7c3aed,color:#1f2328
+    classDef info fill:#eff6ff,stroke:#1d4ed8,color:#1f2328
+    classDef success fill:#ecfdf5,stroke:#15803d,color:#1f2328
+    classDef warning fill:#fef3c7,stroke:#b45309,color:#1f2328
 ```
 - **Flag** <span color="blue">**System**</span>
 ### Discrepancy resolution across teams
@@ -594,9 +594,9 @@ flowchart LR
     s1 --> hub
     s2 --> hub
     s3 --> hub
-    classDef accent fill:#f3e8fd,stroke:#8430ce,color:#1f2328
-    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328
-    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328
+    classDef accent fill:#f3e8ff,stroke:#7c3aed,color:#1f2328
+    classDef info fill:#eff6ff,stroke:#1d4ed8,color:#1f2328
+    classDef warning fill:#fef3c7,stroke:#b45309,color:#1f2328
 ```
 ## How to run the recount
 1. <span color="blue">**Freeze the aisle and pull the expected list** *before any scanning*</span>

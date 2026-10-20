@@ -969,7 +969,7 @@ def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
         '    s1["Scan"]:::info\n'
         '    s2["Say #quot;hi#quot;<br>then stop"]\n'
         "    s1 --> s2\n"
-        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n"
+        "    classDef info fill:#eff6ff,stroke:#1d4ed8,color:#1f2328\n"
         "```\n"
     )
 
@@ -2511,6 +2511,36 @@ def test_a_heading_mid_section_moves_to_the_part_with_the_block_it_introduces() 
     split = _chunked(nodes, 80)
 
     assert split == NotionChunks(("## S\n" + "a" * 30 + "\n", "### H3\n#### H4\n" + "b" * 60 + "\n"), ())
+
+
+def test_a_carried_heading_counts_toward_the_part_it_starts() -> None:
+    nodes = [
+        Heading(2, (Plain("S"),)),
+        Paragraph((Plain("a" * 40),)),
+        Heading(3, (Plain("H3"),)),
+        Paragraph((Plain("b" * 40),)),
+        Paragraph((Plain("c" * 35),)),
+    ]
+
+    split = _chunked(nodes, 80)
+
+    assert split == NotionChunks(
+        ("## S\n" + "a" * 40 + "\n", "### H3\n" + "b" * 40 + "\n", "c" * 35 + "\n"), ()
+    )
+
+
+def test_a_chunk_that_opens_with_a_second_list_keeps_the_separator_so_the_chunks_join_into_the_page() -> None:
+    nodes = [
+        ListNode("bullet", (ListEntry((Plain("a" * 10),)),)),
+        ListNode("bullet", (ListEntry((Plain("b" * 10),)),)),
+    ]
+
+    split = _chunked(nodes, 30)
+
+    assert (split, "".join(split.chunks)) == (
+        NotionChunks(("- " + "a" * 10 + "\n", "<empty-block/>\n- " + "b" * 10 + "\n"), ()),
+        render_notion(nodes),
+    )
 
 
 def test_blocks_that_fill_the_chunk_exactly_stay_together() -> None:

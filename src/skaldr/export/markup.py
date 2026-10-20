@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
-from typing import Final, NoReturn
+from typing import Final, NoReturn, TypeAlias
 from urllib.parse import quote
 
 from typing_extensions import Self, assert_never
@@ -261,7 +261,7 @@ class _Emphasis:
     inner: str
 
 
-_Piece = str | _Emphasis
+_Piece: TypeAlias = str | _Emphasis
 
 
 @dataclass(frozen=True)

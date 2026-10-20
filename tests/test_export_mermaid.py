@@ -1,10 +1,13 @@
+import re
+from collections.abc import Iterator
 from typing import get_args
 
 import pytest
 
-from skaldr.charts import chart_light_colour
+from skaldr import charts
+from skaldr.charts import chart_light_colour, tone_light_colours
 from skaldr.errors import ExportInvariantError
-from skaldr.export.mermaid import MERMAID_FILL, mermaid_fence_lines
+from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.tree import Graph, GraphEdge, GraphNode, PieChart, PieSlice, ToneName, XYChart
 from skaldr.models import ToneLiteral
 from skaldr.richtext import (
@@ -20,15 +23,15 @@ from skaldr.richtext import (
 )
 from tests.factories.capability_factory import PIE_TEXT_VARIABLES_JSON
 
-LIGHT_THEME_COLOUR_OF: dict[str, str] = {
-    "neutral": "#475569",
-    "info": "#1d4ed8",
-    "success": "#15803d",
-    "warning": "#b45309",
-    "danger": "#b91c1c",
-    "accent": "#7c3aed",
-    "teal": "#0f766e",
-    "sky": "#0369a1",
+LIGHT_PALETTE: dict[ToneLiteral, tuple[str, str]] = {
+    "neutral": ("#f1f5f9", "#475569"),
+    "info": ("#eff6ff", "#1d4ed8"),
+    "success": ("#ecfdf5", "#15803d"),
+    "warning": ("#fef3c7", "#b45309"),
+    "danger": ("#fee2e2", "#b91c1c"),
+    "accent": ("#f3e8ff", "#7c3aed"),
+    "teal": ("#f0fdfa", "#0f766e"),
+    "sky": ("#e0f2fe", "#0369a1"),
 }
 
 
@@ -52,40 +55,61 @@ def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
         '    s3["Plain"]',
         "    s1 --> s2",
         "    s3 -.-> s1",
-        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328",
-        "    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328",
+        f"    classDef info {_stylesheet_node_colours('info')},color:#1f2328",
+        f"    classDef warning {_stylesheet_node_colours('warning')},color:#1f2328",
         "```",
     ]
 
 
-@pytest.mark.parametrize(
-    ("tone", "colors"),
-    [
-        pytest.param("success", "fill:#e6f4ea,stroke:#1e8e3e", id="success"),
-        pytest.param("info", "fill:#e8f0fe,stroke:#1a73e8", id="info"),
-        pytest.param("warning", "fill:#fef7e0,stroke:#b06000", id="warning"),
-        pytest.param("danger", "fill:#fce8e6,stroke:#c5221f", id="danger"),
-        pytest.param("accent", "fill:#f3e8fd,stroke:#8430ce", id="accent"),
-        pytest.param("teal", "fill:#e4f7f6,stroke:#00796b", id="teal"),
-        pytest.param("sky", "fill:#e1f5fe,stroke:#0277bd", id="sky"),
-        pytest.param("neutral", "fill:#f1f3f4,stroke:#5f6368", id="neutral"),
-        pytest.param("muted", "fill:#f1f3f4,stroke:#5f6368", id="muted"),
-    ],
-)
-def test_every_tone_has_a_node_class(tone: ToneName, colors: str) -> None:
+def _stylesheet_node_colours(tone: ToneName) -> str:
+    fill, stroke = tone_light_colours("neutral" if tone == "muted" else tone)
+    return f"fill:{fill},stroke:{stroke}"
+
+
+@pytest.mark.parametrize("tone", get_args(ToneName))
+def test_every_tone_has_a_node_class(tone: ToneName) -> None:
     graph = Graph("LR", (GraphNode("s1", "x", tone=tone),), (), "flow")
 
     assert mermaid_fence_lines(graph) == [
         "```mermaid",
         "flowchart LR",
         f'    s1["x"]:::{tone}',
-        f"    classDef {tone} {colors},color:#1f2328",
+        f"    classDef {tone} {_stylesheet_node_colours(tone)},color:#1f2328",
         "```",
     ]
 
 
-def test_every_tone_has_a_mermaid_fill() -> None:
-    assert sorted(MERMAID_FILL) == sorted(get_args(ToneName))
+@pytest.mark.parametrize("tone", get_args(ToneLiteral))
+def test_the_stylesheet_reader_returns_the_pinned_light_palette(tone: ToneLiteral) -> None:
+    assert tone_light_colours(tone) == LIGHT_PALETTE[tone]
+
+
+def test_the_pinned_light_palette_covers_exactly_the_tones() -> None:
+    assert sorted(LIGHT_PALETTE) == sorted(get_args(ToneLiteral))
+
+
+@pytest.fixture
+def palette_read_afresh() -> Iterator[None]:
+    charts.light_palette.cache_clear()
+    yield
+    charts.light_palette.cache_clear()
+
+
+def _stylesheet_with_only_an_info_foreground(_name: str) -> str:
+    return "--info-fg:light-dark(#010203,#aaaaaa);"
+
+
+@pytest.mark.usefixtures("palette_read_afresh")
+def test_a_tone_the_stylesheet_has_no_colour_for_stops_the_export_naming_the_tone_and_the_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(charts, "package_text", _stylesheet_with_only_an_info_foreground)
+
+    with pytest.raises(
+        ExportInvariantError,
+        match=re.escape("styles.css declares no light-theme 'bg' colour for the tone 'info'"),
+    ):
+        tone_light_colours("info")
 
 
 @pytest.mark.parametrize(
@@ -236,11 +260,7 @@ def test_a_pie_colours_at_most_the_twelve_slices_mermaid_has_a_colour_variable_f
 
 @pytest.mark.parametrize("tone", get_args(ToneLiteral))
 def test_every_tone_resolves_to_its_light_theme_colour_in_the_page_stylesheet(tone: ToneLiteral) -> None:
-    assert chart_light_colour(tone, 0) == LIGHT_THEME_COLOUR_OF[tone]
-
-
-def test_the_light_theme_colours_this_file_expects_cover_exactly_the_tones() -> None:
-    assert sorted(LIGHT_THEME_COLOUR_OF) == sorted(get_args(ToneLiteral))
+    assert chart_light_colour(tone, 0) == LIGHT_PALETTE[tone][1]
 
 
 def test_a_single_series_xy_chart_with_the_page_palette_writes_the_series_colour() -> None:

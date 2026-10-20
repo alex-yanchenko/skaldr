@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from skaldr.errors import ConnectorError
 from skaldr.publish.cli import main
 from skaldr.publish.content import TITLE, section_part
 from skaldr.publish.engine import (
@@ -10,6 +11,8 @@ from skaldr.publish.engine import (
     DryRun,
     ItemStatus,
     PublishDiff,
+    Refused,
+    RemoteEdit,
     YamlChange,
     apply_publish,
     diff_publish,
@@ -23,6 +26,8 @@ from tests.factories.publish_factory import (
     DOC_ID,
     INTO_LABEL,
     INTRO_KEY,
+    LOST_WRITE,
+    REFUSED_WRITE,
     TARGET_LABEL,
     FakeTransport,
     fake_registry,
@@ -112,6 +117,73 @@ def test_applying_no_targets_archives_each_created_item_and_empties_the_state_fi
         True,
         True,
         {},
+    )
+
+
+PERSONS_TEXT = "## Tools\nA person's own text.\n"
+
+
+def test_an_item_a_person_edited_is_refused_before_its_archive_starts(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path)
+    apply_publish(_prepared(path, transport))
+    transport.edit_section_by_hand("page-2", "tools", PERSONS_TEXT)
+    write_garden_report(tmp_path, publish=RETIRED)
+    transport.forget_calls()
+
+    outcome = apply_publish(_prepared(path, transport))
+
+    assert (outcome, transport.writes(), transport.items["page-2"].archived) == (
+        Refused(
+            (RemoteEdit(TOOLS, section_part("tools"), None, TOOLS_TEXT, PERSONS_TEXT, None, None),),
+            "edited",
+        ),
+        [],
+        False,
+    )
+
+
+def test_an_archive_the_service_rejected_checks_for_edits_again_on_the_next_run(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path)
+    apply_publish(_prepared(path, transport))
+    write_garden_report(tmp_path, publish=RETIRED)
+    transport.fail_on_write(1)
+    with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
+        apply_publish(_prepared(path, transport))
+    transport.stop_failing()
+    transport.edit_section_by_hand("page-2", "tools", PERSONS_TEXT)
+    transport.forget_calls()
+
+    outcome = apply_publish(_prepared(path, transport))
+
+    assert (outcome, transport.writes()) == (
+        Refused(
+            (RemoteEdit(TOOLS, section_part("tools"), None, TOOLS_TEXT, PERSONS_TEXT, None, None),),
+            "edited",
+        ),
+        [],
+    )
+
+
+def test_an_archive_that_started_and_stopped_finishes_over_an_edit_made_since(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = write_garden_report(tmp_path)
+    apply_publish(_prepared(path, transport))
+    write_garden_report(tmp_path, publish=RETIRED)
+    transport.lose_the_next_write()
+    with pytest.raises(ConnectorError, match=f"^{LOST_WRITE}$"):
+        apply_publish(_prepared(path, transport))
+    transport.stop_failing()
+    transport.edit_section_by_hand("page-2", "tools", PERSONS_TEXT)
+    transport.forget_calls()
+
+    outcome = apply_publish(_prepared(path, transport))
+
+    assert (outcome, transport.writes(), transport.items["page-2"].archived) == (
+        Applied(("archive  section tools (page-2)", "archive  document (page-1)")),
+        [("archive", "page-2"), ("archive", "page-1")],
+        True,
     )
 
 
