@@ -45,7 +45,9 @@ from skaldr.auth.store import (
     stored_slack_sign_ins,
 )
 from skaldr.auth.templates import (
+    UnreadableTemplatesError,
     clear_notion_template,
+    notion_template_for,
     notion_templates,
     save_notion_template,
 )
@@ -95,7 +97,7 @@ def main(
         elif args.command == "status":
             return _print_status()
         elif args.command == "template":
-            _manage_the_notion_template(args.link, args.clear, args.workspace, transport)
+            return _manage_the_notion_template(args.link, args.clear, args.workspace, transport)
         elif args.command == "logout" and args.service == "notion":
             _log_out_of_notion(args.selector, transport)
         elif args.command == "logout" and args.service == "jira":
@@ -208,27 +210,48 @@ def _offer_a_template(credentials: NotionCredentials, transport: httpx2.BaseTran
         return
     print(_TEMPLATE_EXPLANATION)
     try:
-        answer = input(_TEMPLATE_PROMPT).strip()
-    except (EOFError, KeyboardInterrupt):
+        holder = _template_holder(credentials)
+        answer = _asked_for_a_template(holder)
+        if answer:
+            _set_the_template(holder, answer, transport)
+    except EOFError:
         print()
-        return
-    if not answer:
-        return
+    except KeyboardInterrupt:
+        print()
+        _template_was_not_set("interrupted")
+    except UnicodeDecodeError:
+        _template_was_not_set("the answer is not valid text")
+    except Exception as exc:
+        _template_was_not_set(str(exc))
+
+
+def _template_was_not_set(why: str) -> None:
+    print(f"warning: the page template was not set: {why}. {_SET_THE_TEMPLATE_LATER}", file=sys.stderr)
+
+
+def _asked_for_a_template(holder: _TemplateHolder) -> str:
     try:
-        _set_the_template(_template_holder(credentials), answer, transport)
-    except AuthError as exc:
-        print(f"warning: the page template was not set: {exc}. {_SET_THE_TEMPLATE_LATER}", file=sys.stderr)
+        current = notion_template_for(holder.workspace_id)
+    except UnreadableTemplatesError:
+        current = None
+    prompt = _TEMPLATE_PROMPT if current is None else _template_prompt_keeping(current)
+    return input(prompt).strip()
+
+
+def _template_prompt_keeping(current: str) -> str:
+    return f"Notion page template link (currently {current}; Enter keeps it): "
 
 
 def _manage_the_notion_template(
     link: str | None, clear: bool, workspace: str | None, transport: httpx2.BaseTransport | None
-) -> None:
+) -> int:
     if clear:
         _clear_the_template(_template_holder(_the_notion_sign_in(workspace)))
     elif link is not None:
         _set_the_template(_template_holder(_the_notion_sign_in(workspace)), link, transport)
     else:
-        _show_the_templates(workspace)
+        return _show_the_templates(workspace)
+    return 0
 
 
 def _find_the_notion_entry(workspace: str | None) -> StoredEntry[NotionCredentials] | None:
@@ -291,21 +314,39 @@ def _entries_to_show(workspace: str | None) -> list[StoredEntry[NotionCredential
     return [] if entry is None else [entry]
 
 
-def _show_the_templates(workspace: str | None) -> None:
+def _show_the_templates(workspace: str | None) -> int:
     entries = _entries_to_show(workspace)
     if not entries:
         where = "" if workspace is None else f" workspace {printable_only(workspace)}"
         print(f"Not signed in to Notion{where}.")
-        return
-    templates = notion_templates()
-    for entry in entries:
-        if entry.credentials is None:
-            raise AuthError(entry.unreadable_message)
-        holder = _template_holder(entry.credentials)
-        template = templates.get(str(holder.workspace_id))
-        shown = "no page template" if template is None else f"page template {template}"
-        name = _workspace_named(entry.credentials.workspace_name)
-        print(f"Notion workspace {name} (id {holder.workspace_id}): {shown}")
+        return 0
+    try:
+        templates = notion_templates()
+        template_file_error = None
+    except UnreadableTemplatesError as unreadable:
+        templates = {}
+        template_file_error = _StatusLine(f"error: {unreadable}", failed=True)
+    lines = [_template_line(entry, templates) for entry in entries]
+    if template_file_error is not None:
+        lines.append(template_file_error)
+    for line in lines:
+        print(line.text)
+    return int(any(line.failed for line in lines))
+
+
+def _template_line(entry: StoredEntry[NotionCredentials], templates: Mapping[str, str]) -> _StatusLine:
+    credentials = entry.credentials
+    if credentials is None:
+        return _StatusLine(f"error: {entry.unreadable_message}", failed=True)
+    name = _workspace_named(credentials.workspace_name)
+    if credentials.workspace_id is None:
+        return _StatusLine(
+            f"Notion workspace {name} (no workspace id; name it as {entry.identifier}): cannot hold a page "
+            "template; run `skaldr auth notion` again"
+        )
+    template = templates.get(str(credentials.workspace_id))
+    shown = "no page template" if template is None else f"page template {template}"
+    return _StatusLine(f"Notion workspace {name} (id {credentials.workspace_id}): {shown}")
 
 
 def _sign_in_to_jira(transport: httpx2.BaseTransport | None) -> None:
@@ -369,7 +410,19 @@ def _log_out_of_notion(workspace: str | None, transport: httpx2.BaseTransport | 
         print(f"{outcome}, but a newer sign-in was stored in the meantime and was kept.")
         return
     outcome = "token revoked and removed from the keychain" if revoked else "removed from the keychain"
-    print(f"Signed out of Notion: {outcome}.")
+    print(f"Signed out of Notion: {outcome}.{_clearing_the_template_of(entry)}")
+
+
+def _clearing_the_template_of(entry: StoredEntry[NotionCredentials]) -> str:
+    workspace_id = None if entry.credentials is None else entry.credentials.workspace_id
+    if workspace_id is None:
+        return ""
+    try:
+        cleared = clear_notion_template(workspace_id)
+    except AuthError as unwritten:
+        print(f"warning: {unwritten}", file=sys.stderr)
+        return ""
+    return " Its page template was cleared." if cleared else ""
 
 
 def _forget_after_the_revoke(entry: StoredEntry[NotionCredentials], revoked: bool) -> bool:

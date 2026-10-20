@@ -1,6 +1,7 @@
 import sys
 from uuid import UUID
 
+import httpx2
 import pytest
 
 from skaldr.auth import cli as auth_cli
@@ -13,6 +14,7 @@ from tests.factories.auth_factory import (
     FakeBrowser,
     InMemoryKeyring,
     approving,
+    fake_api,
     free_port,
     legacy_entry_json,
     make_notion_credentials,
@@ -217,7 +219,6 @@ def test_a_sign_in_without_a_workspace_id_cannot_hold_a_template(
     [
         pytest.param(["template", "notion", TEMPLATE_LINK], id="set"),
         pytest.param(["template", "notion", "--clear"], id="clear"),
-        pytest.param(["template", "notion"], id="show"),
     ],
 )
 def test_the_template_command_names_the_entry_it_cannot_read_and_how_to_remove_it(
@@ -302,6 +303,95 @@ def test_the_template_command_shows_the_template_of_the_workspace_named_with_wor
     )
 
 
+def test_showing_the_templates_lists_a_sign_in_without_a_workspace_id_and_one_it_cannot_read(
+    keychain: InMemoryKeyring, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    keychain.entries[("skaldr", "notion")] = legacy_entry_json(
+        make_notion_credentials(workspace_id=None, workspace_name="Older Workspace")
+    )
+    keychain.entries[("skaldr", "notion:" + OTHER_WORKSPACE_ID)] = "not json"
+    keychain.entries[("skaldr", "index")] = (
+        f'{{"jira": [], "notion": ["notion:{WORKSPACE_ID}", "notion:{OTHER_WORKSPACE_ID}"]}}'
+    )
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+
+    exit_code = auth_cli.main(["template", "notion"])
+
+    assert (exit_code, capsys.readouterr().out.splitlines()) == (
+        1,
+        [
+            f"Notion workspace Example Workspace (id {WORKSPACE_ID}): page template {TEMPLATE_PAGE}",
+            f"error: The keychain entry for notion {OTHER_WORKSPACE_ID} is unreadable; run `skaldr auth "
+            "notion` again",
+            "Notion workspace Older Workspace (no workspace id; name it as unidentified): cannot hold a page "
+            "template; run `skaldr auth notion` again",
+        ],
+    )
+
+
+def test_showing_the_templates_still_lists_the_sign_ins_when_the_template_file_is_unreadable(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _signed_in()
+    templates.template_file().write_text("not json", encoding="utf-8")
+
+    exit_code = auth_cli.main(["template", "notion"])
+
+    assert (exit_code, capsys.readouterr().out.splitlines()) == (
+        1,
+        [
+            f"Notion workspace Example Workspace (id {WORKSPACE_ID}): no page template",
+            f"error: The file {templates.template_file()} that holds the Notion page templates is "
+            "unreadable; fix it or remove it, then set the template again with `skaldr auth template notion "
+            "<link>`",
+        ],
+    )
+
+
+def test_setting_a_template_replaces_an_unreadable_template_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _signed_in()
+    templates.template_file().write_text("not json", encoding="utf-8")
+
+    exit_code = auth_cli.main(["template", "notion", TEMPLATE_LINK], transport=_notion().mock())
+
+    assert (exit_code, notion_templates()) == (0, {WORKSPACE_ID: TEMPLATE_PAGE})
+    capsys.readouterr()
+
+
+def test_clearing_replaces_an_unreadable_template_file(capsys: pytest.CaptureFixture[str]) -> None:
+    _signed_in()
+    templates.template_file().write_text("not json", encoding="utf-8")
+
+    exit_code = auth_cli.main(["template", "notion", "--clear"])
+
+    assert (exit_code, notion_templates(), capsys.readouterr().out) == (
+        0,
+        {},
+        "Cleared the page template of Notion workspace Example Workspace.\n",
+    )
+
+
+def test_logging_out_of_notion_clears_that_workspaces_template_and_keeps_the_others(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _signed_in_to_two_workspaces()
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    save_notion_template(OTHER_WORKSPACE, OTHER_TEMPLATE_PAGE)
+
+    exit_code = auth_cli.main(
+        ["logout", "notion", WORKSPACE_ID], transport=fake_api({"/v1/oauth/revoke": (200, {})}, [])
+    )
+
+    assert (exit_code, notion_templates(), capsys.readouterr().out) == (
+        0,
+        {OTHER_WORKSPACE_ID: OTHER_TEMPLATE_PAGE},
+        "Signed out of Notion: token revoked and removed from the keychain. Its page template was cleared.\n",
+    )
+
+
 def test_showing_the_template_without_a_sign_in_says_to_sign_in(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = auth_cli.main(["template", "notion"])
 
@@ -348,8 +438,20 @@ class _Terminal:
         return True
 
 
+def _interrupting_the_check(notion: InMemoryNotion) -> httpx2.MockTransport:
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path.startswith("/v1/pages"):
+            raise KeyboardInterrupt
+        return notion.handle(request)
+
+    return httpx2.MockTransport(respond)
+
+
 def _sign_in_asking(
-    monkeypatch: pytest.MonkeyPatch, notion: InMemoryNotion, answers: list[str]
+    monkeypatch: pytest.MonkeyPatch,
+    notion: InMemoryNotion,
+    answers: list[str],
+    transport: httpx2.BaseTransport | None = None,
 ) -> tuple[int, list[str]]:
     monkeypatch.setenv("NOTION_CLIENT_ID", "client-id")
     monkeypatch.setenv("NOTION_CLIENT_SECRET", "client-secret")
@@ -363,18 +465,91 @@ def _sign_in_asking(
             raise EOFError
         if reply == "INTERRUPT":
             raise KeyboardInterrupt
+        if reply == "UNDECODABLE":
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
         return reply
 
     monkeypatch.setattr("builtins.input", answer)
     browser = FakeBrowser(approving)
     exit_code = auth_cli.main(
-        ["notion", "--port", str(free_port())], transport=notion.mock(), open_browser=browser
+        ["notion", "--port", str(free_port())], transport=transport or notion.mock(), open_browser=browser
     )
     browser.finished()
     return exit_code, asked
 
 
 PROMPT = "Notion page template link (Enter to skip): "
+
+
+def _prompt_with_the_current_template(page_id: str) -> str:
+    return f"Notion page template link (currently {page_id}; Enter keeps it): "
+
+
+def test_an_interrupt_while_the_template_is_checked_keeps_the_sign_in_and_exits_cleanly(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notion = _notion()
+
+    exit_code, _ = _sign_in_asking(
+        monkeypatch, notion, [TEMPLATE_LINK], transport=_interrupting_the_check(notion)
+    )
+
+    assert (exit_code, notion_templates(), _stored_workspaces(), capsys.readouterr().err) == (
+        0,
+        {},
+        [WORKSPACE_ID],
+        f"warning: the page template was not set: interrupted. {LATER}\n",
+    )
+
+
+def test_an_answer_that_is_not_valid_text_keeps_the_sign_in_and_says_how_to_set_it_later(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code, _ = _sign_in_asking(monkeypatch, _notion(), ["UNDECODABLE"])
+
+    assert (exit_code, _stored_workspaces(), capsys.readouterr().err) == (
+        0,
+        [WORKSPACE_ID],
+        f"warning: the page template was not set: the answer is not valid text. {LATER}\n",
+    )
+
+
+def test_the_template_question_shows_the_current_template_and_enter_keeps_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_notion_template(WORKSPACE, OTHER_TEMPLATE_PAGE)
+    notion = _notion()
+
+    exit_code, asked = _sign_in_asking(monkeypatch, notion, [""])
+
+    assert (exit_code, asked, notion_templates(), _paths(notion)) == (
+        0,
+        [_prompt_with_the_current_template(OTHER_TEMPLATE_PAGE)],
+        {WORKSPACE_ID: OTHER_TEMPLATE_PAGE},
+        [("POST", "/v1/oauth/token")],
+    )
+
+
+def test_a_new_link_at_the_template_question_replaces_the_current_template(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_notion_template(WORKSPACE, OTHER_TEMPLATE_PAGE)
+
+    exit_code, _ = _sign_in_asking(monkeypatch, _notion(), [TEMPLATE_LINK])
+
+    assert (exit_code, notion_templates()) == (0, {WORKSPACE_ID: TEMPLATE_PAGE})
+
+
+def test_the_template_question_is_still_asked_when_the_template_file_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    templates.template_file().write_text("not json", encoding="utf-8")
+
+    exit_code, asked = _sign_in_asking(monkeypatch, _notion(), [TEMPLATE_LINK])
+
+    assert (exit_code, asked, notion_templates()) == (0, [PROMPT], {WORKSPACE_ID: TEMPLATE_PAGE})
+
+
 EXPLANATION = (
     "A page template makes the pages skaldr creates keep the template page's Full width or Small text. "
     "It must be an empty page shared with your connection.\n"
