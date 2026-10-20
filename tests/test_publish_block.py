@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +10,9 @@ from skaldr.cli import main
 from skaldr.errors import ReportError
 from skaldr.models import parse_report
 from skaldr.publish_block import Publish, notion_page_id, without_publish_block
+from skaldr.publish_block.source import CANNOT_CUT as CANNOT_CUT_MESSAGE
 from skaldr.publish_block.source import _document, _same_documents  # pyright: ignore[reportPrivateUsage]
-from skaldr.render import extract_source, render_html
+from skaldr.render import extract_source, render_embed, render_html
 from tests.factories import (
     NOTION_PAGE_ID,
     NOTION_PAGE_URL,
@@ -59,8 +61,16 @@ def _parse(publish: dict[str, Any]) -> Publish | None:
 
 
 def _rejects(publish: dict[str, Any], message: str) -> None:
-    with pytest.raises(ReportError, match=re.escape(message)):
+    with pytest.raises(ReportError) as raised:
         _parse(publish)
+
+    before, found, after = str(raised.value).partition(message)
+    assert (found, "; " in before, "; " in after, before.startswith("invalid content data: ")) == (
+        message,
+        False,
+        False,
+        True,
+    )
 
 
 def test_a_publish_block_reads_every_key_of_each_target() -> None:
@@ -606,6 +616,22 @@ def test_a_rendered_page_carries_its_source_without_the_publish_block() -> None:
     html = render_html(parse_report(yaml.safe_load(SOURCE_WITH_PUBLISH)), source=SOURCE_WITH_PUBLISH)
 
     assert (extract_source(html), NOTION_PAGE_ID in html) == (SOURCE_WITHOUT_PUBLISH, False)
+
+
+def test_an_embedded_fragment_carries_its_source_without_the_publish_block() -> None:
+    html = render_embed(parse_report(yaml.safe_load(SOURCE_WITH_PUBLISH)), source=SOURCE_WITH_PUBLISH)
+
+    assert (extract_source(html), NOTION_PAGE_ID in html) == (SOURCE_WITHOUT_PUBLISH, False)
+
+
+@pytest.mark.parametrize("renderer", [render_html, render_embed])
+def test_a_source_holding_only_a_publish_block_stops_the_render(
+    renderer: Callable[..., str],
+) -> None:
+    with pytest.raises(ReportError) as raised:
+        renderer(parse_report(make_report()), source="publish:\n  doc_id: plan\n")
+
+    assert str(raised.value) == CANNOT_CUT_MESSAGE
 
 
 def test_a_render_stops_rather_than_embed_a_block_it_cannot_cut() -> None:
