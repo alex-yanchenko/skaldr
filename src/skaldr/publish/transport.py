@@ -39,7 +39,7 @@ NO_SECTIONS: RawSections = MappingProxyType({})
 @dataclass(frozen=True)
 class PublishedSections:
     rendered: RawSections
-    saved: RawSections
+    saved_remote: RawSections
 
 
 NO_PUBLISHED = PublishedSections(NO_SECTIONS, NO_SECTIONS)

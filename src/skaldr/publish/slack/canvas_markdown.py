@@ -227,34 +227,42 @@ class KeyedCanvas:
     def archived(self) -> bool:
         return self.title.endswith(ARCHIVED_TITLE_MARKER)
 
-    @property
-    def _keys_holding_only_what_skaldr_published(self) -> frozenset[str]:
-        roles: defaultdict[str | None, set[BlockRole]] = defaultdict(set[BlockRole])
-        for block in self.content:
-            roles[block.key].add(block.role)
-        return frozenset(
-            key
-            for key, held in roles.items()
-            if key is not None and "published" in held and "added" not in held
-        )
+    def _owned_spans(
+        self, rendered: Mapping[str, str], saved_remote: Mapping[str, str]
+    ) -> dict[int, tuple[int, str]]:
+        keying = _Keying(SectionLayout.of(saved_remote, _comparable_blocks))
+        keying.content([block.raw for block in self.content])
+        held: defaultdict[str, list[int]] = defaultdict(list[int])
+        for index, as_saved in enumerate(keying.blocks):
+            if as_saved.key is not None and as_saved.role == "published":
+                held[as_saved.key].append(index)
+        spans: dict[int, tuple[int, str]] = {}
+        for key, indexes in held.items():
+            first, last = indexes[0], indexes[-1]
+            whole = len(indexes) == len(_comparable_blocks(saved_remote[key]))
+            between = all(
+                keying.blocks[index].role in ("published", "blank") for index in range(first, last + 1)
+            )
+            if whole and between and rendered.get(key, "").strip():
+                spans[first] = (last, key)
+        return spans
 
     def in_the_markdown_skaldr_wrote(
-        self, rendered: Mapping[str, str], saved: "KeyedCanvas"
+        self, rendered: Mapping[str, str], saved_remote: Mapping[str, str]
     ) -> "KeyedCanvas":
-        owned = {
-            key for key in saved._keys_holding_only_what_skaldr_published if rendered.get(key, "").strip()
-        }
+        spans = self._owned_spans(rendered, saved_remote)
         content: list[CanvasBlock] = []
-        written: set[str] = set()
-        for position in range(self.content_start, self.content_end):
-            block, as_saved = self.blocks[position], saved.blocks[position]
-            key = as_saved.key
-            if key is None or as_saved.role != "published" or key not in owned:
+        index = 0
+        while index < len(self.content):
+            block = self.content[index]
+            if index not in spans:
                 content.append(block)
-            elif key not in written:
-                written.add(key)
-                texts = canvas_blocks(rendered[key].strip("\n"))
-                content += [CanvasBlock(text, block.key, "published") for text in texts]
+                index += 1
+                continue
+            last, key = spans[index]
+            texts = canvas_blocks(rendered[key].strip("\n"))
+            content += [CanvasBlock(text, block.key, "published") for text in texts]
+            index = last + 1
         blocks = (*self.blocks[: self.content_start], *content, *self.blocks[self.content_end :])
         stamp_at = None if self.stamp_at is None else self.content_start + len(content)
         return replace(self, blocks=blocks, stamp_at=stamp_at)

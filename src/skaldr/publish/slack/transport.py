@@ -71,7 +71,7 @@ def _as_skaldr_wrote_it(
     markdown: str, layout: Mapping[str, str], published: PublishedSections
 ) -> KeyedCanvas:
     return keyed_canvas(markdown, layout).in_the_markdown_skaldr_wrote(
-        published.rendered, keyed_canvas(markdown, published.saved)
+        published.rendered, published.saved_remote
     )
 
 
@@ -132,7 +132,7 @@ class SlackTransport:
         return self._written_with(item_id, after)
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
-        keyed = self._unchanged_since_read(item_id, request.raw_sections)
+        keyed = self._unchanged_since_read(item_id, request.raw_sections, NO_PUBLISHED)
         old = range(keyed.content_start, keyed.content_end)
         markdown = canvas_markdown_of(list(request.sections.values()))
         body = body_with_content_swapped(keyed, old, keyed.content_start, markdown)
@@ -187,7 +187,7 @@ class SlackTransport:
             ) from exc
 
     def release_item(self, item_id: str, request: Release, /) -> None:
-        self._unchanged_since_read(item_id, request.raw_sections)
+        self._unchanged_since_read(item_id, request.raw_sections, NO_PUBLISHED)
         keyed = keyed_canvas(self._markdown(item_id), self._read.published.get(item_id, request.raw_sections))
         kept = [
             block.raw for block in keyed.blocks[keyed.content_start :] if block.role not in RELEASED_ROLES
@@ -296,7 +296,7 @@ class SlackTransport:
         return self._remote(item_id, self._markdown(item_id), layout)
 
     def _unchanged_since_read(
-        self, item_id: str, raw_sections: RawSections, published: PublishedSections = NO_PUBLISHED
+        self, item_id: str, raw_sections: RawSections, published: PublishedSections
     ) -> KeyedCanvas:
         markdown = self._markdown(item_id)
         keyed = keyed_canvas(markdown, raw_sections)
@@ -305,7 +305,9 @@ class SlackTransport:
 
     def _create_into(self, item_id: str, request: NewItem, markdown: str) -> RemoteItem:
         title = request.content.title
-        keyed = refused_when_not_found(lambda: self._unchanged_since_read(item_id, request.into_raw_sections))
+        keyed = refused_when_not_found(
+            lambda: self._unchanged_since_read(item_id, request.into_raw_sections, NO_PUBLISHED)
+        )
         replace: JsonFields = {"operation": "replace", "document_content": markdown_content(markdown)}
         refused_when_not_found(lambda: self._api.edit_canvas(item_id, replace))
 

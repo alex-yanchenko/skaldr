@@ -15,7 +15,6 @@ from skaldr.publish.state import PublishedItem, PublishState, save_state
 from skaldr.publish.transport import (
     NO_PUBLISHED,
     LinksWrite,
-    PublishedSections,
     RemoteItem,
     ShownLink,
     Stamp,
@@ -144,9 +143,7 @@ class _LinkPlanner:
         wanted = [(partner, self.paired_link(partner)) for partner in partners]
         links = tuple(link for _, link in wanted if link is not None)
         current = () if held is None else self.current_links(ref, held)
-        published = (
-            NO_PUBLISHED if held is None else PublishedSections(held.rendered.sections, held.remote.sections)
-        )
+        published = NO_PUBLISHED if held is None else held.published_sections
         write = LinksWrite(self.stamp(ref), links, current, published)
         sent = set(write.sent)
         linked = [

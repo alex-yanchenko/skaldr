@@ -43,7 +43,6 @@ from skaldr.publish.transport import (
     ContentWrite,
     FieldsWrite,
     NewItem,
-    PublishedSections,
     RawSections,
     Release,
     RemoteItem,
@@ -195,8 +194,7 @@ class Applier:
                 self.state, ref, target_plan.target, item.model_copy(update={"rendered": rendered})
             )
         transport = self.transports.for_target(ref.target)
-        published = PublishedSections(item.rendered.sections, item.remote.sections)
-        request = SectionRequest(write, raw_sections, self._stamp(ref), published)
+        request = SectionRequest(write, raw_sections, self._stamp(ref), item.published_sections)
         return self._written(
             target_plan,
             ref,
@@ -233,7 +231,7 @@ class Applier:
             cover=step.content.cover,
             previous_icon=now.icon,
             previous_cover=now.cover,
-            published=PublishedSections(item.rendered.sections, item.remote.sections),
+            published=item.published_sections,
         )
         rendered = item.rendered.model_copy(
             update={

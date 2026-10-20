@@ -19,14 +19,17 @@ SEPARATOR_CELL = re.compile(r":?-{3,}:?")
 LIST_ITEM = re.compile(r"(?:\*|\d+\.) ")
 ESCAPED_CHARACTER = re.compile(r"\\([\\*_`~\[\]()<>])")
 MASK_BASE = 0xE000
-MASKED_CHARACTER = re.compile(f"[{chr(MASK_BASE)}-{chr(MASK_BASE + 0x7F)}]")
+MASK_RANGE = 0x80
+MASKED_CHARACTER = re.compile(f"[{chr(MASK_BASE)}-{chr(MASK_BASE + MASK_RANGE - 1)}]")
+BOLD = re.compile(r"\*\*(.+?)\*\*")
+CODE_SPAN = re.compile(r"`(.+?)`")
 FORMATTING = (
     (re.compile(r"\*(?=\S)([^*]*?\S)\*"), r"<i>\1</i>"),
     (re.compile(r"(?<!\w)_(?=\S)([^_]*?\S)_(?!\w)"), r"<i>\1</i>"),
     (re.compile(r"~~(.+?)~~"), r"<del>\1</del>"),
-    (re.compile(r"`(.+?)`"), r"<code>\1</code>"),
 )
 LINK_WITH_TARGET = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]*)\)")
+BARE_WORD_TARGET = re.compile(r"\w+")
 
 
 class LinkWithNoUrlError(Exception):
@@ -75,10 +78,17 @@ def _unmasked(line: str) -> str:
     return MASKED_CHARACTER.sub(lambda found: chr(ord(found.group(0)) - MASK_BASE), line)
 
 
+def _content_masked(text: str) -> str:
+    return "".join(
+        chr(MASK_BASE + ord(character)) if ord(character) < MASK_RANGE else character for character in text
+    )
+
+
 def _stored_text(line: str) -> str:
-    masked = _masked(line)
+    masked = BOLD.sub(lambda found: _content_masked(found.group(0)), _masked(line))
+    masked = CODE_SPAN.sub(lambda found: f"<code>{_content_masked(found.group(1))}</code>", masked)
     for link in LINK_WITH_TARGET.finditer(masked):
-        if not link.group(1).startswith(("http://", "https://", "mailto:")):
+        if BARE_WORD_TARGET.fullmatch(link.group(1)):
             raise LinkWithNoUrlError(link.group(0))
     for pattern, replacement in FORMATTING:
         masked = pattern.sub(replacement, masked)

@@ -397,12 +397,21 @@ def _literal_document_sent(planting: str = "Sow in spring.") -> str:
     return f"For new members\n\n{LITERAL_INTRO_AS_SENT}\n\n# Planting\n\n{planting}\n\n{DOCUMENT_STAMP}\n"
 
 
-def _literal_garden(tmp_path: Path, *, split: list[str], planting: str = "Sow in spring.") -> Path:
-    intro, _tools, section = make_garden_blocks(intro=LITERAL_INTRO, planting=planting)
+def _literal_garden(
+    tmp_path: Path,
+    *,
+    split: list[str],
+    planting: str = "Sow in spring.",
+    tools: str = "Spade.",
+    with_tools: bool = False,
+) -> Path:
+    intro, tools_section, planting_section = make_garden_blocks(
+        intro=LITERAL_INTRO, planting=planting, tools=tools
+    )
     return write_garden_report(
         tmp_path,
         publish=_slack_publish(split=split),
-        blocks=[intro, _tools, section] if split else [intro, section],
+        blocks=[intro, tools_section, planting_section] if split or with_tools else [intro, planting_section],
     )
 
 
@@ -516,10 +525,38 @@ def test_a_publish_whose_write_landed_but_was_not_read_back_leaves_the_untouched
 
     finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
 
-    assert (stopped, len(sent_before), finished, _sent_bodies(slack), slack.markdown_of(DOCUMENT_CANVAS)) == (
+    assert (stopped, sent_before, finished, _sent_bodies(slack), slack.markdown_of(DOCUMENT_CANVAS)) == (
         1,
-        1,
+        [_literal_document_sent("Sow in late spring.")],
         0,
         [],
         _literal_document_stored(planting="Sow in late spring."),
+    )
+
+
+def test_a_publish_stopped_by_a_locked_canvas_finishes_two_changed_sections_on_the_next_run(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+    save_slack(make_slack_credentials())
+    path = _literal_garden(tmp_path, split=[], with_tools=True)
+    assert main(["publish", str(path), "--apply"], registry=_registry(slack)) == 0
+    _literal_garden(tmp_path, split=[], with_tools=True, planting="Sow in late spring.", tools="Hoe.")
+    slack.fail_next("canvases.edit", "canvas_editing_locked", times=5)
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    slack.forget_requests()
+
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    def document(tools: str, planting: str) -> str:
+        return (
+            "For new members\n\n**Legend: badges used on this page**\n\n* 🔵 **api** the API\n\n"
+            f"{LITERAL_INTRO_AS_SENT}\n\n# Tools\n\n🔵 **api**\n\n* {tools}\n\n# Planting\n\n{planting}\n\n"
+            f"{DOCUMENT_STAMP}\n"
+        )
+
+    assert (stopped, finished, _sent_bodies(slack)) == (
+        1,
+        0,
+        [document("Hoe.", "Sow in spring."), document("Hoe.", "Sow in late spring.")],
     )
