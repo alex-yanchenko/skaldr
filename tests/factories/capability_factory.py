@@ -1262,7 +1262,7 @@ DIAGRAM_ACCEPTED: dict[str, AcceptedCase] = {
         [FLOW],
         "# Plan\n\n```mermaid\nflowchart LR\n"
         '    s1["1: Scan"]:::info\n    s2["2: Count<br>• twice"]\n    s1 --> s2\n    s2 -.-> s1\n'
-        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n```\n",
+        "    classDef info fill:#eff6ff,stroke:#1d4ed8,color:#1f2328\n```\n",
     ),
     "notion-flow": AcceptedCase("notion", [FLOW]),
     "markdown-fan": AcceptedCase("markdown", [FAN]),

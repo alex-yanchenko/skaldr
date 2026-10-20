@@ -9,7 +9,7 @@ Kept separate from `compute` because it is a self-contained geometry unit with n
 import math
 import re
 from functools import cache
-from typing import Final, TypedDict
+from typing import Final, Literal, TypedDict
 
 from markupsafe import Markup, escape
 from typing_extensions import assert_never
@@ -51,13 +51,19 @@ def _fill(tone: Tone | None, index: int) -> str:
 
 
 @cache
-def _light_foregrounds() -> dict[str, str]:
-    declarations = re.findall(r"--(\w+)-fg:\s*light-dark\((#[0-9a-fA-F]{6}),", package_text("styles.css"))
+def _light_palette(role: Literal["fg", "bg"]) -> dict[str, str]:
+    declarations = re.findall(
+        rf"--(\w+)-{role}:\s*light-dark\((#[0-9a-fA-F]{{6}}),", package_text("styles.css")
+    )
     return dict(declarations)
 
 
 def chart_light_colour(tone: Tone | None, index: int) -> str:
-    return _light_foregrounds()[chart_tone(tone, index)]
+    return _light_palette("fg")[chart_tone(tone, index)]
+
+
+def tone_light_colours(tone: Tone) -> tuple[str, str]:
+    return _light_palette("bg")[tone], _light_palette("fg")[tone]
 
 
 def _nice_max(value: float) -> float:

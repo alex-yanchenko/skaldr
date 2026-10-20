@@ -969,7 +969,7 @@ def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
         '    s1["Scan"]:::info\n'
         '    s2["Say #quot;hi#quot;<br>then stop"]\n'
         "    s1 --> s2\n"
-        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328\n"
+        "    classDef info fill:#eff6ff,stroke:#1d4ed8,color:#1f2328\n"
         "```\n"
     )
 

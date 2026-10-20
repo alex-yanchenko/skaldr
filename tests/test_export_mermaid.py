@@ -4,7 +4,7 @@ import pytest
 
 from skaldr.charts import chart_light_colour
 from skaldr.errors import ExportInvariantError
-from skaldr.export.mermaid import MERMAID_FILL, mermaid_fence_lines
+from skaldr.export.mermaid import mermaid_fence_lines
 from skaldr.export.tree import Graph, GraphEdge, GraphNode, PieChart, PieSlice, ToneName, XYChart
 from skaldr.models import ToneLiteral
 from skaldr.richtext import (
@@ -52,26 +52,26 @@ def test_a_graph_writes_its_nodes_edges_and_one_class_per_tone_used() -> None:
         '    s3["Plain"]',
         "    s1 --> s2",
         "    s3 -.-> s1",
-        "    classDef info fill:#e8f0fe,stroke:#1a73e8,color:#1f2328",
-        "    classDef warning fill:#fef7e0,stroke:#b06000,color:#1f2328",
+        "    classDef info fill:#eff6ff,stroke:#1d4ed8,color:#1f2328",
+        "    classDef warning fill:#fef3c7,stroke:#b45309,color:#1f2328",
         "```",
     ]
 
 
-@pytest.mark.parametrize(
-    ("tone", "colors"),
-    [
-        pytest.param("success", "fill:#e6f4ea,stroke:#1e8e3e", id="success"),
-        pytest.param("info", "fill:#e8f0fe,stroke:#1a73e8", id="info"),
-        pytest.param("warning", "fill:#fef7e0,stroke:#b06000", id="warning"),
-        pytest.param("danger", "fill:#fce8e6,stroke:#c5221f", id="danger"),
-        pytest.param("accent", "fill:#f3e8fd,stroke:#8430ce", id="accent"),
-        pytest.param("teal", "fill:#e4f7f6,stroke:#00796b", id="teal"),
-        pytest.param("sky", "fill:#e1f5fe,stroke:#0277bd", id="sky"),
-        pytest.param("neutral", "fill:#f1f3f4,stroke:#5f6368", id="neutral"),
-        pytest.param("muted", "fill:#f1f3f4,stroke:#5f6368", id="muted"),
-    ],
-)
+NODE_CLASS_COLOURS: dict[ToneName, str] = {
+    "success": "fill:#ecfdf5,stroke:#15803d",
+    "info": "fill:#eff6ff,stroke:#1d4ed8",
+    "warning": "fill:#fef3c7,stroke:#b45309",
+    "danger": "fill:#fee2e2,stroke:#b91c1c",
+    "accent": "fill:#f3e8ff,stroke:#7c3aed",
+    "teal": "fill:#f0fdfa,stroke:#0f766e",
+    "sky": "fill:#e0f2fe,stroke:#0369a1",
+    "neutral": "fill:#f1f5f9,stroke:#475569",
+    "muted": "fill:#f1f5f9,stroke:#475569",
+}
+
+
+@pytest.mark.parametrize(("tone", "colors"), list(NODE_CLASS_COLOURS.items()), ids=list(NODE_CLASS_COLOURS))
 def test_every_tone_has_a_node_class(tone: ToneName, colors: str) -> None:
     graph = Graph("LR", (GraphNode("s1", "x", tone=tone),), (), "flow")
 
@@ -84,8 +84,8 @@ def test_every_tone_has_a_node_class(tone: ToneName, colors: str) -> None:
     ]
 
 
-def test_every_tone_has_a_mermaid_fill() -> None:
-    assert sorted(MERMAID_FILL) == sorted(get_args(ToneName))
+def test_the_node_classes_above_cover_every_tone() -> None:
+    assert sorted(NODE_CLASS_COLOURS) == sorted(get_args(ToneName))
 
 
 @pytest.mark.parametrize(
