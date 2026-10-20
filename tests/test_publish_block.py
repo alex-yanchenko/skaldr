@@ -550,6 +550,9 @@ def test_a_source_without_a_top_level_publish_key_is_embedded_unchanged(source: 
         pytest.param("<<: {publish: {doc_id: secret-doc}}\nb: 2\n", id="merged-in-mapping"),
         pytest.param("<<: [{publish: {doc_id: secret-doc}}]\nb: 2\n", id="merged-in-list"),
         pytest.param("publish: &p\n  a: 1\nother: *p\n", id="anchor-inside-used-outside"),
+        pytest.param(
+            "<<: {publish: {a: 1}}\npublish: {a: 1}\nb: 2\n", id="merged-publish-equal-to-the-written-one"
+        ),
         pytest.param("{publish: {a: 1}, b: 2}\n", id="one-line-flow-document"),
         pytest.param("{a: 1, publish: {b: 2}}\n", id="flow-document-ending-in-publish"),
         pytest.param("{publish: {a: 1},\nb: 2}\n", id="flow-document-over-two-lines"),
