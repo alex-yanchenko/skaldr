@@ -74,15 +74,16 @@ class NotionWhere(FrozenModel):
 
     @model_validator(mode="after")
     def _validate_page_reference(self) -> "NotionWhere":
-        names_both_or_neither = (self.parent_page is None) == (self.page is None)
-        if names_both_or_neither:
-            raise ValueError("a notion target names exactly one of `parent_page` or `page`")
         _required_page_id(self._page_reference)
         return self
 
     @property
     def _page_reference(self) -> str:
-        return self.parent_page if self.parent_page is not None else self.page or ""
+        match (self.parent_page, self.page):
+            case (str() as reference, None) | (None, str() as reference):
+                return reference
+            case _:
+                raise ValueError("a notion target names exactly one of `parent_page` or `page`")
 
     @property
     def page_id(self) -> str:
