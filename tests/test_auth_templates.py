@@ -2,8 +2,9 @@ import json
 from uuid import UUID
 
 import pytest
+from filelock import FileLock
 
-from skaldr.auth import templates
+from skaldr.auth import store, templates
 from skaldr.auth.templates import (
     clear_notion_template,
     notion_template_for,
@@ -102,6 +103,50 @@ def test_a_template_file_skaldr_cannot_write_is_an_auth_error_naming_the_file() 
     assert str(caught.value) == (
         f"skaldr cannot write the file {path} that holds the Notion page templates "
         f"([Errno 13] the file is read-only, so skaldr leaves it as it is: '{path.resolve()}')"
+    )
+
+
+def test_an_unreadable_template_file_is_an_unreadable_templates_error() -> None:
+    templates.template_file().write_text("not json", encoding="utf-8")
+
+    with pytest.raises(templates.UnreadableTemplatesError):
+        notion_templates()
+
+
+def test_setting_a_template_replaces_an_unreadable_template_file() -> None:
+    templates.template_file().write_text("not json", encoding="utf-8")
+
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+
+    assert notion_templates() == {WORKSPACE_ID: TEMPLATE_PAGE}
+
+
+def test_clearing_replaces_an_unreadable_template_file_and_says_a_template_was_removed() -> None:
+    templates.template_file().write_text("not json", encoding="utf-8")
+
+    cleared = clear_notion_template(WORKSPACE)
+
+    assert (cleared, notion_templates()) == (True, {})
+
+
+def test_changing_the_templates_waits_for_the_auth_lock_and_says_so_when_it_is_still_held(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store, "LOCK_TIMEOUT_SECONDS", 0.05)
+    expected = (
+        "Another skaldr auth command has held the lock for 0.05 seconds; run this again when it finishes"
+    )
+
+    with FileLock(store.lock_file()):
+        with pytest.raises(AuthError) as saving:
+            save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+        with pytest.raises(AuthError) as clearing:
+            clear_notion_template(WORKSPACE)
+
+    assert (str(saving.value), str(clearing.value), templates.template_file().exists()) == (
+        expected,
+        expected,
+        False,
     )
 
 

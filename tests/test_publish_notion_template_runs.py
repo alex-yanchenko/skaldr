@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 
+from skaldr.auth import templates
 from skaldr.auth.templates import clear_notion_template, save_notion_template
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main
@@ -131,16 +132,25 @@ def test_a_template_cleared_between_runs_is_not_used_by_the_next_run(tmp_path: P
     assert [body.get("template") for body in _create_bodies(notion)] == [TEMPLATE, TEMPLATE, None, None]
 
 
-def test_a_template_changed_between_runs_is_the_one_the_next_run_creates_from(tmp_path: Path) -> None:
+def test_the_second_of_two_runs_that_each_create_pages_uses_the_template_changed_between_them(
+    tmp_path: Path,
+) -> None:
     seed_notion(make_notion_credentials())
     notion = _notion()
     save_notion_template(WORKSPACE, TEMPLATE_PAGE)
-    _publish(notion, tmp_path / "first")
+    first = _publish(notion, tmp_path / "first")
+    created_by_the_first = _templates_of_the_creates(notion)
+    notion.requests.clear()
     save_notion_template(WORKSPACE, OTHER_TEMPLATE_PAGE)
 
-    _publish(notion, tmp_path / "second")
+    second = _publish(notion, tmp_path / "second")
 
-    assert _templates_of_the_creates(notion) == [TEMPLATE, TEMPLATE, OTHER_TEMPLATE, OTHER_TEMPLATE]
+    assert (first, created_by_the_first, second, _templates_of_the_creates(notion)) == (
+        0,
+        [TEMPLATE, TEMPLATE],
+        0,
+        [OTHER_TEMPLATE, OTHER_TEMPLATE],
+    )
 
 
 def test_a_template_set_after_a_run_is_picked_up_by_the_next_run_without_touching_the_first_page(
@@ -167,6 +177,36 @@ def test_a_template_in_the_target_wins_over_the_workspace_template(tmp_path: Pat
         [OTHER_TEMPLATE, OTHER_TEMPLATE],
         0,
     )
+
+
+def test_an_unreadable_template_file_warns_once_and_creates_the_pages_without_a_template(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    templates.template_file().write_text("not json", encoding="utf-8")
+    notion = _notion()
+
+    exit_code = _publish(notion, tmp_path)
+
+    assert (exit_code, _templates_of_the_creates(notion), capsys.readouterr().err) == (
+        0,
+        [None, None],
+        f"warning: The file {templates.template_file()} that holds the Notion page templates is unreadable; "
+        "fix it or remove it, then set the template again with `skaldr auth template notion <link>`. "
+        "Pages are created without a template until then.\n",
+    )
+
+
+def test_a_target_that_names_none_never_reads_the_template_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    templates.template_file().write_text("not json", encoding="utf-8")
+    notion = _notion()
+
+    exit_code = _publish(notion, tmp_path, publish=_target_with(template="none"))
+
+    assert (exit_code, capsys.readouterr().err) == (0, "")
 
 
 def test_a_target_that_names_none_creates_without_the_workspace_template(tmp_path: Path) -> None:

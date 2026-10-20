@@ -1,3 +1,4 @@
+import sys
 import time
 from dataclasses import dataclass
 
@@ -5,7 +6,7 @@ import httpx2
 
 from skaldr.auth.notion import NotionSession
 from skaldr.auth.store import require_notion_for_a_target
-from skaldr.auth.templates import notion_template_for
+from skaldr.auth.templates import UnreadableTemplatesError, notion_template_for
 from skaldr.export.budget import json_string_bytes
 from skaldr.export.notion import notion_block_count, render_notion_regions
 from skaldr.export.tree import LoweredDocument
@@ -41,7 +42,11 @@ class _SignedInOnFirstUse:
         self._signed_in().renew()
 
     def workspace_template(self) -> str | None:
-        return notion_template_for(self._signed_in().workspace_id)
+        try:
+            return notion_template_for(self._signed_in().workspace_id)
+        except UnreadableTemplatesError as unreadable:
+            print(f"warning: {unreadable}. Pages are created without a template until then.", file=sys.stderr)
+            return None
 
 
 @dataclass(frozen=True)

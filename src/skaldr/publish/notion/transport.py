@@ -28,10 +28,10 @@ from skaldr.publish.notion.icon_and_cover import (
 )
 from skaldr.publish.notion.page_markdown import (
     KeyedPage,
-    child_links_of_a_page_with_no_content,
     Replacement,
     SectionPairs,
     carried_into,
+    child_links_of_a_page_with_no_content,
     comparable_text,
     holds_an_unknown_block,
     joined,
