@@ -3,6 +3,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 
@@ -45,13 +46,21 @@ controls.querySelectorAll = function (selector) {
   const named = selector.match(/data-set="(\\w+)"/);
   return named ? items.filter(function (item) { return item.dataset.set === named[1]; }) : items;
 };
+const disclosures = (input.disclosures || []).map(function (open) {
+  const element = makeElement({});
+  element.open = open;
+  return element;
+});
 const document = {
   documentElement: root,
   querySelector(selector) { return selector === ".sc" ? controls : null; },
-  querySelectorAll() { return []; },
+  querySelectorAll(selector) { return selector === "details" ? disclosures : []; },
   addEventListener() {},
 };
-const window = { addEventListener() {} };
+const windowListeners = {};
+const window = {
+  addEventListener(type, listener) { (windowListeners[type] = windowListeners[type] || []).push(listener); },
+};
 const context = vm.createContext({ document: document, window: window, localStorage: localStorage });
 
 input.scripts.forEach(function (script) { vm.runInContext(script, context); });
@@ -62,7 +71,14 @@ input.clicks.forEach(function (pair) {
   item.listeners.click.forEach(function (listener) { listener({ stopPropagation() {} }); });
 });
 
-process.stdout.write(JSON.stringify({ attributes: root.attributes, storage: storage }));
+function openStates() { return disclosures.map(function (element) { return element.open; }); }
+function fire(type) { (windowListeners[type] || []).forEach(function (listener) { listener({}); }); }
+fire("beforeprint");
+const duringPrint = openStates();
+fire("afterprint");
+process.stdout.write(JSON.stringify({
+  attributes: root.attributes, storage: storage, printed: { during: duringPrint, after: openStates() },
+}));
 """
 
 _FUNCTION_DRIVER = """
@@ -105,7 +121,13 @@ def script_containing(html: str, marker: str) -> str:
     return next(script for script in inline_scripts(html) if marker in script)
 
 
-def run_page_scripts(scripts: list[str], run: PageRun) -> PageOutcome:
+@dataclass(frozen=True)
+class PrintCycle:
+    during: list[bool]
+    after: list[bool]
+
+
+def _drive_page(scripts: list[str], run: PageRun, disclosures: list[bool]) -> dict[str, Any]:
     assert NODE is not None
     payload = {
         "scripts": scripts,
@@ -113,6 +135,7 @@ def run_page_scripts(scripts: list[str], run: PageRun) -> PageOutcome:
         "storage_throws": run.storage_throws,
         "controls": CONTROL_ITEMS,
         "clicks": run.clicks,
+        "disclosures": disclosures,
     }
     finished = subprocess.run(
         [NODE, "-e", _PAGE_DRIVER],
@@ -122,8 +145,17 @@ def run_page_scripts(scripts: list[str], run: PageRun) -> PageOutcome:
         check=True,
         timeout=30,
     )
-    outcome = json.loads(finished.stdout)
+    return json.loads(finished.stdout)
+
+
+def run_page_scripts(scripts: list[str], run: PageRun) -> PageOutcome:
+    outcome = _drive_page(scripts, run, [])
     return PageOutcome(outcome["attributes"], outcome["storage"])
+
+
+def run_print_cycle(scripts: list[str], disclosures: list[bool]) -> PrintCycle:
+    printed = _drive_page(scripts, PageRun(), disclosures)["printed"]
+    return PrintCycle(printed["during"], printed["after"])
 
 
 def call_script_function(script: str, name: str, argument: str) -> object:

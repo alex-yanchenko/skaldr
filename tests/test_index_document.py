@@ -30,6 +30,7 @@ from tests.factories import (
     write_index_document,
     write_report,
 )
+from tests.node_page import PrintCycle, requires_node, run_print_cycle, script_containing
 
 SITE = "https://example.atlassian.net"
 BADGE_UP = {"label": "up", "tone": "success", "legend": "service is up"}
@@ -651,6 +652,21 @@ def test_a_collapsed_part_page_carries_what_the_print_script_and_print_css_open(
     tmp_path: Path, snippet: str
 ) -> None:
     assert snippet in render_html(_collapsed(tmp_path))
+
+
+@requires_node
+def test_printing_a_page_opens_every_collapsed_part_and_then_restores_how_the_reader_left_it(
+    tmp_path: Path,
+) -> None:
+    html = render_html(_collapsed(tmp_path))
+    parts_on_the_page = html.count('<details class="part"')
+
+    printed = run_print_cycle([script_containing(html, "beforeprint")], [False] * parts_on_the_page + [True])
+
+    assert (parts_on_the_page, printed) == (
+        2,
+        PrintCycle(during=[True, True, True], after=[False, False, True]),
+    )
 
 
 @pytest.mark.parametrize("collapsed", [False, True])
