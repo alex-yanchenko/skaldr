@@ -194,9 +194,10 @@ class NotionApi:
         action = _Action(f"read data source {data_source_id}", "reading", writes=False)
         return self._get(DataSource, f"/v1/data_sources/{data_source_id}", action)
 
-    def create_page(self, body: JsonFields) -> Page:
+    def create_page(self, body: JsonFields, *, asynchronous: bool = True) -> Page:
         action = _Action("create a page", "creating a page", writes=True)
-        answer = self._send("POST", "/v1/pages", {**body, "allow_async": True}, action)
+        sent = {**body, "allow_async": True} if asynchronous else body
+        answer = self._send("POST", "/v1/pages", sent, action)
         return _validated(Page, self._finished(answer, action), action)
 
     def update_page(self, page_id: str, body: JsonFields) -> Page:

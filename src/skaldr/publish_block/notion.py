@@ -7,6 +7,7 @@ from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields, Location, TargetBase
 from skaldr.services import NotionService
 
+NO_TEMPLATE = "none"
 NOTION_HOSTS = ("notion.so", "notion.site", "notion.com")
 DASHLESS_PAGE_ID_LENGTH = 32
 DASHLESS_PAGE_ID = re.compile(rf"[0-9a-f]{{{DASHLESS_PAGE_ID_LENGTH}}}")
@@ -71,6 +72,14 @@ class NotionWhere(FrozenModel):
         description="Database property values when the target page is a database row; `overrides` changes "
         "them for one item.",
     )
+    template: str | None = Field(
+        default=None,
+        exclude_if=lambda template: template is None,
+        description="A Notion page URL or page id whose page settings (full width, small text) every page "
+        "created under `parent_page` takes, or `none` to create them without the workspace's template. "
+        "Without it the template set with `skaldr auth template notion` applies. The template page must "
+        "be empty, and a parent that is a database does not take one. Not part of the target's place.",
+    )
 
     @model_validator(mode="after")
     def _validate_page_reference(self) -> "NotionWhere":
@@ -78,7 +87,27 @@ class NotionWhere(FrozenModel):
         if names_both_or_neither:
             raise ValueError("a notion target names exactly one of `parent_page` or `page`")
         _required_page_id(self._page_reference)
+        self._validate_template()
         return self
+
+    def _validate_template(self) -> None:
+        if self.template is None:
+            return
+        if self.page is not None:
+            raise ValueError(
+                "`template` applies to pages skaldr creates, so it goes with `parent_page`, not `page`"
+            )
+        if self.template != NO_TEMPLATE and notion_page_id(self.template) is None:
+            raise ValueError(
+                f"'{self.template}' is not a Notion page URL (notion.so, notion.site, notion.com) or a page "
+                f"id, and not `{NO_TEMPLATE}`"
+            )
+
+    @property
+    def template_page_id(self) -> str | None:
+        if self.template is None or self.template == NO_TEMPLATE:
+            return None
+        return _required_page_id(self.template)
 
     @property
     def _page_reference(self) -> str:

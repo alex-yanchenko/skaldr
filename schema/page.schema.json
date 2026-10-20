@@ -3318,6 +3318,19 @@
           "description": "Database property values when the target page is a database row; `overrides` changes them for one item.",
           "title": "Fields",
           "type": "object"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Notion page URL or page id whose page settings (full width, small text) every page created under `parent_page` takes, or `none` to create them without the workspace's template. Without it the template set with `skaldr auth template notion` applies. The template page must be empty, and a parent that is a database does not take one. Not part of the target's place.",
+          "title": "Template"
         }
       },
       "title": "NotionWhere",

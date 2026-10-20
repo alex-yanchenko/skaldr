@@ -25,6 +25,7 @@ from tests.factories import (
 from tests.factories.auth_factory import site_refusal
 
 OTHER_NOTION_PAGE_ID = "fedcba9876543210fedcba9876543210"
+OTHER_NOTION_PAGE_URL = f"https://www.notion.so/Page-Template-{OTHER_NOTION_PAGE_ID}"
 SPLIT_ON_INNER: dict[str, Any] = {"doc_id": "plan", "targets": [make_notion_target(split=["inner"])]}
 SOURCE_WITH_PUBLISH = f"""\
 version: 1
@@ -136,6 +137,60 @@ def test_a_notion_target_may_name_a_workspace_that_is_not_part_of_its_place() ->
         ("notion", NOTION_PAGE_ID),
         f"notion page {NOTION_PAGE_ID}",
     )
+
+
+@pytest.mark.parametrize("template", [OTHER_NOTION_PAGE_URL, OTHER_NOTION_PAGE_ID, "none"])
+def test_a_parent_page_target_may_name_the_template_its_pages_are_created_from_or_turn_it_off(
+    template: str,
+) -> None:
+    publish = _parse(
+        {
+            "doc_id": "plan",
+            "targets": [make_notion_target(where={"parent_page": NOTION_PAGE_URL, "template": template})],
+        }
+    )
+
+    assert publish is not None
+    target = publish.targets[0]
+    assert (target.model_dump(mode="json")["where"], target.place_key()) == (
+        {"parent_page": NOTION_PAGE_URL, "page": None, "workspace": None, "fields": {}, "template": template},
+        ("notion", NOTION_PAGE_ID),
+    )
+
+
+@pytest.mark.parametrize(
+    ("where", "message"),
+    [
+        pytest.param(
+            {"parent_page": NOTION_PAGE_URL, "template": "https://www.notion.so/no-id-here"},
+            f"{NOTION_WHERE_ERROR}'https://www.notion.so/no-id-here' is not a Notion page URL "
+            "(notion.so, notion.site, notion.com) or a page id, and not `none`",
+            id="no-page-id",
+        ),
+        pytest.param(
+            {"parent_page": NOTION_PAGE_URL, "template": "None"},
+            f"{NOTION_WHERE_ERROR}'None' is not a Notion page URL (notion.so, notion.site, notion.com) or a "
+            "page id, and not `none`",
+            id="none-is-lowercase",
+        ),
+        pytest.param(
+            {"page": NOTION_PAGE_URL, "template": OTHER_NOTION_PAGE_ID},
+            f"{NOTION_WHERE_ERROR}`template` applies to pages skaldr creates, so it goes with `parent_page`, "
+            "not `page`",
+            id="with-page",
+        ),
+        pytest.param(
+            {"page": NOTION_PAGE_URL, "template": "none"},
+            f"{NOTION_WHERE_ERROR}`template` applies to pages skaldr creates, so it goes with `parent_page`, "
+            "not `page`",
+            id="none-with-page",
+        ),
+    ],
+)
+def test_a_notion_target_refuses_a_template_that_is_not_a_page_or_that_has_no_pages_to_create(
+    where: dict[str, Any], message: str
+) -> None:
+    _rejects({"doc_id": "plan", "targets": [{"to": "notion", "where": where}]}, message)
 
 
 @pytest.mark.parametrize(

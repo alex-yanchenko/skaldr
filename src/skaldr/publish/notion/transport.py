@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Final
 
 from pydantic import JsonValue
@@ -48,6 +49,7 @@ from skaldr.publish.notion.properties import (
     title_text,
 )
 from skaldr.publish.notion.responses import Page
+from skaldr.publish.notion.template import check_the_template_is_empty
 from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
@@ -64,6 +66,7 @@ from skaldr.publish.transport import (
     Stamp,
 )
 from skaldr.publish_block import NotionTarget, notion_page_id
+from skaldr.publish_block.notion import NO_TEMPLATE
 from skaldr.publish_block.target import JsonFields
 
 REQUEST_BLOCKS: Final = 2_500
@@ -76,6 +79,7 @@ SECTION_JSON_BYTES: Final = MARKDOWN_JSON_BYTES // 2
 DATABASE_BLOCK: Final = "child_database"
 PAGE_BLOCK: Final = "child_page"
 STAMP_KEY: Final = "skaldr stamp"
+TEMPLATE_FIELD: Final = "template"
 NOTION_PAGE_ADDRESS: Final = "https://www.notion.so/"
 
 
@@ -188,11 +192,28 @@ class _Parent:
         )
 
 
+def _no_workspace_template() -> str | None:
+    return None
+
+
+def _is_templated(create_body: JsonFields) -> bool:
+    return TEMPLATE_FIELD in create_body
+
+
 class NotionTransport:
-    def __init__(self, api: NotionApi) -> None:
+    def __init__(
+        self, api: NotionApi, workspace_template: Callable[[], str | None] = _no_workspace_template
+    ) -> None:
         self._api = api
+        self._workspace_template = workspace_template
         self._read = ReadLayouts()
         self._editor_names: dict[str, str] = {}
+        self._templates_found_empty: set[str] = set()
+        self._parents_that_are_databases: dict[str, bool] = {}
+
+    @cached_property
+    def _workspace_template_page(self) -> str | None:
+        return self._workspace_template()
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
         return comparable_sections(content, comparable_text)
@@ -210,13 +231,15 @@ class NotionTransport:
         stamp = stamp_line(request.stamp)
         batches = _create_batches(list(request.content.sections.values()), stamp)
         body = _with_nothing_sent(lambda: self._create_body(request, batches[0], stamp))
-        page = refused_when_not_found(lambda: self._api.create_page(body))
+        templated = _is_templated(body)
+        page = refused_when_not_found(lambda: self._api.create_page(body, asynchronous=not templated))
         item_id = _page_key(page.id)
+        first_write = joined([*batches[0], stamp]) if templated else None
         return finished_after_a_create(
             _page_named(item_id),
             item_id,
             request.content.title,
-            lambda: self._finish_create(item_id, request.content, batches[1:]),
+            lambda: self._finish_create(item_id, request.content, batches[1:], first_write),
         )
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
@@ -477,16 +500,61 @@ class NotionTransport:
             **title_request(request.content.title, parent.title_name),
             **_property_requests(parent.property_kinds, values, f"Notion database {parent.page_id}"),
         }
+        template = self._template_for(request, parent)
+        if template is not None:
+            self._refuse_a_template_that_is_not_empty(template)
+        content: JsonFields = (
+            {"markdown": joined([*first_batch, stamp])}
+            if template is None
+            else {TEMPLATE_FIELD: {"type": "template_id", "template_id": template}}
+        )
         return {
             "parent": parent.request,
             "properties": properties,
             **icon_and_cover_to_set(request.content),
-            "markdown": joined([*first_batch, stamp]),
+            **content,
         }
 
+    def _template_for(self, request: NewItem, parent: _Parent) -> str | None:
+        target = request.target
+        if not isinstance(target, NotionTarget) or target.where.template == NO_TEMPLATE:
+            return None
+        named = target.where.template_page_id
+        template = named or self._workspace_template_page
+        if template is None:
+            return None
+        if request.parent_id is None:
+            self._parents_that_are_databases[target.where.page_id] = parent.names_a_database
+        if not self._parent_is_a_database(target):
+            return template
+        if named is not None:
+            raise WriteRejectedError(
+                f"Notion database {target.where.page_id} does not take a page template, so skaldr cannot "
+                "create its rows from one; remove `template` from the target's `where`, or set it to "
+                f"`{NO_TEMPLATE}`"
+            )
+        return None
+
+    def _parent_is_a_database(self, target: NotionTarget) -> bool:
+        parent_id = target.where.page_id
+        if parent_id not in self._parents_that_are_databases:
+            self._parents_that_are_databases[parent_id] = self._api.block(parent_id).type == DATABASE_BLOCK
+        return self._parents_that_are_databases[parent_id]
+
+    def _refuse_a_template_that_is_not_empty(self, template: str) -> None:
+        if template not in self._templates_found_empty:
+            check_the_template_is_empty(self._api, template)
+            self._templates_found_empty.add(template)
+
     def _finish_create(
-        self, item_id: str, content: ItemContent, later_batches: Sequence[Sequence[str]]
+        self,
+        item_id: str,
+        content: ItemContent,
+        later_batches: Sequence[Sequence[str]],
+        first_write: str | None = None,
     ) -> RemoteItem:
+        if first_write is not None:
+            self._api.update_markdown(item_id, _replace_content(first_write))
         markdown = self._api.page_markdown(item_id).markdown
         for batch in later_batches:
             stamp = keyed_page(markdown, {}).stamp_line or ""
