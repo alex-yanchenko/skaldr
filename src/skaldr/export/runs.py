@@ -25,7 +25,7 @@ from skaldr.richtext import (
     Styled,
     Tinted,
     VisibleText,
-    Written,
+    WrittenRun,
     write_run,
     write_runs,
 )
@@ -147,23 +147,25 @@ def holds_a_chip(runs: ExportRich) -> bool:
     return any(isinstance(run, Chip) for run in runs)
 
 
-class ChiplessExportRunWriter(RunWriter[Written], Protocol[Written]):
-    def line_break(self) -> Written: ...
+class ChiplessExportRunWriter(RunWriter[WrittenRun], Protocol[WrittenRun]):
+    def line_break(self) -> WrittenRun: ...
 
-    def mark(self, run: Mark, /) -> Written: ...
+    def mark(self, run: Mark, /) -> WrittenRun: ...
 
-    def gauge(self, run: Gauge, /) -> Written: ...
+    def gauge(self, run: Gauge, /) -> WrittenRun: ...
 
-    def section_link(self, label: Written, anchor: str, /) -> Written: ...
+    def section_link(self, label: WrittenRun, anchor: str, /) -> WrittenRun: ...
 
-    def toned_label(self, tone: ToneLiteral, inner: Written, /) -> Written: ...
-
-
-class ExportRunWriter(ChiplessExportRunWriter[Written], Protocol[Written]):
-    def chip(self, run: Chip, /) -> Written: ...
+    def toned_label(self, tone: ToneLiteral, inner: WrittenRun, /) -> WrittenRun: ...
 
 
-def write_chipless_export_run(run: ChiplessExportRun, writer: ChiplessExportRunWriter[Written]) -> Written:
+class ExportRunWriter(ChiplessExportRunWriter[WrittenRun], Protocol[WrittenRun]):
+    def chip(self, run: Chip, /) -> WrittenRun: ...
+
+
+def write_chipless_export_run(
+    run: ChiplessExportRun, writer: ChiplessExportRunWriter[WrittenRun]
+) -> WrittenRun:
     match run:
         case Break():
             return writer.line_break()
@@ -179,7 +181,7 @@ def write_chipless_export_run(run: ChiplessExportRun, writer: ChiplessExportRunW
             return write_run(run, writer)
 
 
-def write_export_run(run: ExportRun, writer: ExportRunWriter[Written]) -> Written:
+def write_export_run(run: ExportRun, writer: ExportRunWriter[WrittenRun]) -> WrittenRun:
     match run:
         case Chip():
             return writer.chip(run)
@@ -187,11 +189,13 @@ def write_export_run(run: ExportRun, writer: ExportRunWriter[Written]) -> Writte
             return write_chipless_export_run(run, writer)
 
 
-def write_export_runs(runs: ExportRich, writer: ExportRunWriter[Written]) -> Written:
+def write_export_runs(runs: ExportRich, writer: ExportRunWriter[WrittenRun]) -> WrittenRun:
     return writer.concat([write_export_run(run, writer) for run in runs])
 
 
-def write_export_run_around(run: ExportRun, nested: Written, writer: ExportRunWriter[Written]) -> Written:
+def write_export_run_around(
+    run: ExportRun, nested: WrittenRun, writer: ExportRunWriter[WrittenRun]
+) -> WrittenRun:
     match run:
         case Link():
             return writer.link(nested, run.url)
