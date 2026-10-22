@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -26,6 +27,10 @@ TASK_PATH = re.compile(r"/v1/async_tasks/([^/]+)$")
 USER_PATH = re.compile(r"/v1/users/([^/]+)$")
 UUID_PATHS = (PAGE_PATH, MARKDOWN_PATH, BLOCK_PATH, DATABASE_PATH)
 FENCE = re.compile(r"`{3,}|\$\$")
+TEMPLATE_WITH_CONTENT_REFUSAL = (
+    "Cannot specify 'content', 'children', or 'markdown' when using a template. "
+    "The template will provide the page content."
+)
 
 
 def dashed(page_id: str) -> str:
@@ -179,14 +184,15 @@ class InMemoryNotion:
     polls_before_a_task_finishes: int = 0
     _unfinished_polls: dict[str, int] = field(default_factory=dict[str, int])
     _failing_task: dict[str, Any] | None = None
+    _arriving_template_content: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
     _clock: datetime = FIRST_EDIT
     _made: int = 0
 
     def api(self) -> NotionApi:
         return NotionApi(_Tokens(self.accepted_token), transport=self.mock(), sleep=lambda _: None)
 
-    def transport(self) -> NotionTransport:
-        return NotionTransport(self.api())
+    def transport(self, workspace_template: Callable[[], str | None] = lambda: None) -> NotionTransport:
+        return NotionTransport(self.api(), workspace_template)
 
     def mock(self) -> httpx2.MockTransport:
         return _CountingCloses(self)
@@ -266,6 +272,18 @@ class InMemoryNotion:
         return [(request.method, request.url.path) for request in self.requests if request.method != "GET"]
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
+        arriving, self._arriving_template_content = self._arriving_template_content, []
+        answer = self._answer_request(request)
+        for page_id, text in arriving:
+            self._append_template_content(page_id, text)
+        return answer
+
+    def _append_template_content(self, page_id: str, text: str) -> None:
+        page = self.pages[page_id]
+        page.markdown = as_notion_stores(f"{page.markdown}\n{text}" if page.markdown else text)
+        self._touch(page, BOT_ID)
+
+    def _answer_request(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
         if request.url.path == "/v1/oauth/token":
             self.accepted_token = "renewed-access"
@@ -387,6 +405,9 @@ class InMemoryNotion:
         return _markdown_json(page, page.page_id in self.truncated_pages, unknown)
 
     def _create(self, body: dict[str, Any]) -> httpx2.Response:
+        template = self._template_of(body)
+        if isinstance(template, httpx2.Response):
+            return template
         parent = body["parent"]
         if "data_source_id" in parent:
             schema = self.databases.get(parent["data_source_id"].removeprefix("source-"))
@@ -414,7 +435,25 @@ class InMemoryNotion:
         self.pages[page.page_id] = page
         if "page_id" in parent:
             self._list_child_page(self.pages[notion_page_id(parent["page_id"]) or parent["page_id"]], page)
+        if template is not None and template.markdown:
+            self._arriving_template_content.append((page.page_id, template.markdown))
         return self._answer(body, page.as_json())
+
+    def _template_of(self, body: dict[str, Any]) -> StoredPage | httpx2.Response | None:
+        if "template" not in body:
+            return None
+        if any(name in body for name in ("content", "children", "markdown")):
+            return _error(400, "validation_error", TEMPLATE_WITH_CONTENT_REFUSAL)
+        if body.get("allow_async"):
+            return _error(
+                400,
+                "validation_error",
+                "The `allow_async` parameter is only supported when `markdown` is provided",
+            )
+        template = self._found(body["template"]["template_id"])
+        if template is None:
+            return _error(404, "object_not_found", "Could not find page.")
+        return template
 
     def _list_child_page(self, parent: StoredPage, child: StoredPage) -> None:
         reference = f'<page url="https://www.notion.so/{child.page_id}">{child.title}</page>'

@@ -21,7 +21,7 @@ from skaldr.publish.drafts import ItemDraft
 from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
-from skaldr.publish.transport import RemoteItem, Transport
+from skaldr.publish.transport import FillsAPageLeftEmpty, NewItem, RemoteItem, Stamp, Transport
 from skaldr.publish_block import TargetBase
 from skaldr.services import SERVICE_NAMES, Service
 
@@ -94,6 +94,11 @@ def _has_content(remote: RemoteItem) -> bool:
         or bool(remote.child_ids)
         or bool(remote.set_properties)
     )
+
+
+def _left_empty_by_the_create(remote: RemoteItem) -> bool:
+    holds_text = any(text.strip() for text in remote.comparable.sections.values())
+    return remote.doc_id is None and not holds_text and not remote.child_ids
 
 
 def _settled(
@@ -219,6 +224,16 @@ def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> Pu
         created_by_skaldr = pending.into_id is None
         if remote is not None and created_by_skaldr:
             refuse_another_documents_item(ref, remote, prepared.doc_id)
+        draft = prepared.draft_of(ref)
+        if (
+            remote is not None
+            and created_by_skaldr
+            and draft is not None
+            and _left_empty_by_the_create(remote)
+            and isinstance(transport, FillsAPageLeftEmpty)
+        ):
+            stamp = Stamp(prepared.doc_id, ref.section_id)
+            remote = transport.fill_a_page_left_empty(item_id, NewItem(target, stamp, draft.content))
         remaining = [held for held in state.pending_creates if held != pending]
         state = state.model_copy(update={"pending_creates": remaining})
         if remote is not None and (created_by_skaldr or remote.doc_id == prepared.doc_id):

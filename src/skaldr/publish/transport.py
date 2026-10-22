@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish.content import ItemContent, Part, is_unset, same_value
@@ -12,6 +12,7 @@ __all__ = [
     "AddSection",
     "ContentWrite",
     "FieldsWrite",
+    "FillsAPageLeftEmpty",
     "ItemLink",
     "LinkedItem",
     "LinksWrite",
@@ -219,6 +220,11 @@ class FieldsWrite:
     @property
     def changes_the_title(self) -> bool:
         return self.title != self.previous_title
+
+
+@runtime_checkable
+class FillsAPageLeftEmpty(Protocol):
+    def fill_a_page_left_empty(self, item_id: str, request: NewItem, /) -> RemoteItem: ...
 
 
 class Transport(Protocol):

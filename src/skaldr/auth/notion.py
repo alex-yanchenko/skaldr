@@ -355,6 +355,10 @@ class NotionSession:
     def access_token(self) -> str:
         return self._sign_in.credentials.access_token
 
+    @property
+    def workspace_id(self) -> UUID | None:
+        return self._sign_in.credentials.workspace_id
+
     def renew(self) -> None:
         if self._sign_in.source == "environment":
             raise AuthError(
