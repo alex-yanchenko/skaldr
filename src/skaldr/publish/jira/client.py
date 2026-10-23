@@ -267,6 +267,8 @@ class JiraClient:
     ) -> httpx2.Response:
         response, attempts = self._answered(method, path, params=params, body=body)
         if missing_is_an_answer and response.status_code == HTTPStatus.NOT_FOUND:
+            if self._is_a_not_found_the_token_explains(response.status_code, key):
+                raise self._sign_in_refusal(method)
             return response
         self._refuse_a_failure(method, path, key, response, attempts)
         return response
@@ -305,9 +307,24 @@ class JiraClient:
 
     def _token_is_rejected(self) -> bool:
         if self._token_rejected is None:
-            answer, _ = self._answered("GET", f"{API}/myself")
+            path = f"{API}/myself"
+            answer, _ = self._answered("GET", path)
+            if answer.status_code not in (HTTPStatus.OK, HTTPStatus.UNAUTHORIZED):
+                raise ConnectorError(
+                    f"Jira answered HTTP {answer.status_code} to GET {path} when skaldr checked the sign-in "
+                    "before calling the issue missing"
+                )
             self._token_rejected = answer.status_code == HTTPStatus.UNAUTHORIZED
         return self._token_rejected
+
+    def _is_a_not_found_the_token_explains(self, status: int, key: str | None) -> bool:
+        return status == HTTPStatus.NOT_FOUND and key is not None and self._token_is_rejected()
+
+    def _sign_in_refusal(self, method: str) -> ConnectorError:
+        return _refusal_class(method)(
+            f"Jira at {self.site} rejected the sign-in (HTTP 401); the API token may have expired or "
+            "been revoked, so run `skaldr auth jira`"
+        )
 
     def _refuse_a_failure(
         self, method: str, path: str, key: str | None, response: httpx2.Response, attempts: int
@@ -319,13 +336,8 @@ class JiraClient:
         detail = _detail(response)
         explained = f": {detail}" if detail else ""
         refused = _refusal_class(method)
-        if status == HTTPStatus.UNAUTHORIZED or (
-            status == HTTPStatus.NOT_FOUND and key is not None and self._token_is_rejected()
-        ):
-            raise refused(
-                f"Jira at {self.site} rejected the sign-in (HTTP 401); the API token may have expired or "
-                "been revoked, so run `skaldr auth jira`"
-            )
+        if status == HTTPStatus.UNAUTHORIZED or self._is_a_not_found_the_token_explains(status, key):
+            raise self._sign_in_refusal(method)
         if status == HTTPStatus.NOT_FOUND and key is not None:
             raise ItemNotFoundError(
                 f"Jira has no issue {key} that this account can see (HTTP 404 to {where})"
