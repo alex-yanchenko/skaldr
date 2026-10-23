@@ -356,7 +356,8 @@ def test_an_issue_key_is_escaped_in_the_path() -> None:
         jira.client().get_issue("DEMO-1/../2", ["summary"])
 
     assert [str(request.url) for request in jira.requests] == [
-        f"{SITE}/rest/api/3/issue/DEMO-1%2F..%2F2?fields=summary"
+        f"{SITE}/rest/api/3/issue/DEMO-1%2F..%2F2?fields=summary",
+        f"{SITE}{MYSELF}",
     ]
 
 
@@ -639,6 +640,89 @@ def test_a_missing_issue_is_item_not_found() -> None:
         ),
     ):
         FakeJira().client().get_issue("DEMO-9", ["summary"])
+
+
+def test_a_missing_issue_asks_who_is_signed_in_before_it_is_called_missing() -> None:
+    jira = FakeJira()
+
+    with pytest.raises(ItemNotFoundError):
+        jira.client().get_issue("DEMO-9", ["summary"])
+
+    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-9"), ("GET", MYSELF)]
+
+
+def test_several_missing_issues_ask_who_is_signed_in_once() -> None:
+    jira = FakeJira()
+    client = jira.client()
+
+    for key in ("DEMO-7", "DEMO-8", "DEMO-9"):
+        with pytest.raises(ItemNotFoundError):
+            client.get_issue(key, ["summary"])
+
+    assert jira.calls() == [
+        ("GET", "/rest/api/3/issue/DEMO-7"),
+        ("GET", MYSELF),
+        ("GET", "/rest/api/3/issue/DEMO-8"),
+        ("GET", "/rest/api/3/issue/DEMO-9"),
+    ]
+
+
+def test_a_revoked_token_on_an_issue_read_says_to_sign_in_again() -> None:
+    jira = FakeJira(token_revoked=True)
+
+    with pytest.raises(ConnectorError) as raised:
+        jira.client().get_issue("DEMO-1", ["summary"])
+
+    assert (type(raised.value), str(raised.value), jira.calls()) == (
+        ConnectorError,
+        f"Jira at {SITE} rejected the sign-in (HTTP 401); the API token may have expired or been revoked, "
+        "so run `skaldr auth jira`",
+        [("GET", ISSUE), ("GET", MYSELF)],
+    )
+
+
+def test_a_revoked_token_on_an_issue_write_is_a_write_that_never_landed() -> None:
+    jira = FakeJira(token_revoked=True)
+
+    with pytest.raises(WriteRejectedError) as raised:
+        jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
+
+    assert (type(raised.value), str(raised.value), jira.calls()) == (
+        WriteRejectedError,
+        f"Jira at {SITE} rejected the sign-in (HTTP 401); the API token may have expired or been revoked, "
+        "so run `skaldr auth jira`",
+        [("PUT", ISSUE), ("GET", MYSELF)],
+    )
+
+
+def test_a_revoked_token_is_found_out_once_for_several_issue_calls() -> None:
+    jira = FakeJira(token_revoked=True)
+    client = jira.client()
+    messages: list[str] = []
+
+    for key in ("DEMO-1", "DEMO-2"):
+        with pytest.raises(ConnectorError) as raised:
+            client.get_issue(key, ["summary"])
+        messages.append(str(raised.value))
+
+    assert (len(set(messages)), jira.calls()) == (
+        1,
+        [
+            ("GET", "/rest/api/3/issue/DEMO-1"),
+            ("GET", MYSELF),
+            ("GET", "/rest/api/3/issue/DEMO-2"),
+        ],
+    )
+
+
+def test_a_not_found_on_a_create_does_not_ask_who_is_signed_in() -> None:
+    jira = FakeJira()
+    jira.answer_next("POST", CREATE, Reply(404, {"errorMessages": ["No project could be found."]}))
+
+    with pytest.raises(WriteRejectedError):
+        jira.client().create_issue({"summary": "Garden handbook"}, [])
+
+    assert jira.calls() == [("POST", CREATE)]
 
 
 @pytest.mark.parametrize(

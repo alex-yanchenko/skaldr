@@ -143,6 +143,7 @@ class JiraClient:
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.site = credentials.site
+        self._token_rejected: bool | None = None
         self._sleep = sleep
         self._http = httpx2.Client(
             base_url=credentials.site,
@@ -264,6 +265,20 @@ class JiraClient:
         body: JsonValue | _NoBody = NO_BODY,
         missing_is_an_answer: bool = False,
     ) -> httpx2.Response:
+        response, attempts = self._answered(method, path, params=params, body=body)
+        if missing_is_an_answer and response.status_code == HTTPStatus.NOT_FOUND:
+            return response
+        self._refuse_a_failure(method, path, key, response, attempts)
+        return response
+
+    def _answered(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, str | int] | None = None,
+        body: JsonValue | _NoBody = NO_BODY,
+    ) -> tuple[httpx2.Response, int]:
         def attempt() -> httpx2.Response:
             if isinstance(body, _NoBody):
                 headers = None if method in READ_METHODS else JSON_CONTENT_TYPE
@@ -285,11 +300,14 @@ class JiraClient:
             raise ConnectorError(f"could not reach Jira at {self.site} for {method} {path}: {exc}") from exc
         except httpx2.RequestError as exc:
             raise ConnectorError(f"the request {method} {path} to Jira at {self.site} failed: {exc}") from exc
-        if missing_is_an_answer and response.status_code == HTTPStatus.NOT_FOUND:
-            return response
         attempts: int = retrying.statistics["attempt_number"]
-        self._refuse_a_failure(method, path, key, response, attempts)
-        return response
+        return response, attempts
+
+    def _token_is_rejected(self) -> bool:
+        if self._token_rejected is None:
+            answer, _ = self._answered("GET", f"{API}/myself")
+            self._token_rejected = answer.status_code == HTTPStatus.UNAUTHORIZED
+        return self._token_rejected
 
     def _refuse_a_failure(
         self, method: str, path: str, key: str | None, response: httpx2.Response, attempts: int
@@ -301,7 +319,9 @@ class JiraClient:
         detail = _detail(response)
         explained = f": {detail}" if detail else ""
         refused = _refusal_class(method)
-        if status == HTTPStatus.UNAUTHORIZED:
+        if status == HTTPStatus.UNAUTHORIZED or (
+            status == HTTPStatus.NOT_FOUND and key is not None and self._token_is_rejected()
+        ):
             raise refused(
                 f"Jira at {self.site} rejected the sign-in (HTTP 401); the API token may have expired or "
                 "been revoked, so run `skaldr auth jira`"

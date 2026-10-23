@@ -545,11 +545,7 @@ class JiraTransport:
         return self._read_with(item_id, self._history(item_id))
 
     def _history(self, item_id: str) -> tuple[Changelog, ...]:
-        try:
-            return tuple(self._client.changelog(item_id))
-        except ItemNotFoundError:
-            self._client.myself()
-            raise
+        return tuple(self._client.changelog(item_id))
 
     def _read_with(self, item_id: str, history: tuple[Changelog, ...]) -> _Read:
         stamp, layout = self._stamp(item_id), self._layout(item_id)
