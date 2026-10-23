@@ -78,7 +78,9 @@ from tests.factories import (
     API_AND_RISK_BADGES,
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    EDGE_BADGES,
     HAVE_BADGE,
+    MATRIX_OF_EDGE_BADGE_LABELS,
     MATRIX_OF_EVERY_CELL_SHAPE,
     REFUSED_IN_THE_EXAMPLE,
     TEXT_X_BLOCK,
@@ -811,6 +813,14 @@ def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_the
         "|  | Badge | Both | Tone | Label |\n"
         "| --- | --- | --- | --- | --- |\n"
         "| **Receiving** | 🟢 Have | 🟢 **Have** · runbook v2 | 🔴 none yet | n/a |\n"
+    )
+
+
+def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add_and_escapes_the_ones_it_does() -> None:
+    assert markdown_of([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES) == (
+        "|  | Blank | Spaces | Same | Special |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| **Receiving** | 🔴 lbl | 🟡 lbl | 🟢 Have | 🔵 **A\\|B \\*x\\*** · a\\_b \\[c\\] \\<d\\> \\| e |\n"
     )
 
 

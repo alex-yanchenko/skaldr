@@ -43,7 +43,9 @@ from skaldr.render import (
 from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import (
+    EDGE_BADGES,
     HAVE_BADGE,
+    MATRIX_OF_EDGE_BADGE_LABELS,
     MATRIX_OF_EVERY_CELL_SHAPE,
     in_a_grid_cell,
     in_an_open_section,
@@ -1415,9 +1417,21 @@ def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_chip_then_the_la
     assert (
         "<tr><th>Receiving</th>"
         '<td class="c green"><span>Have</span></td>'
-        '<td class="c green"><span><span class="chip green">Have</span> runbook v2</span></td>'
+        '<td class="c green"><span><span class="chip">Have</span> runbook v2</span></td>'
         '<td class="c red"><span>none yet</span></td>'
         '<td class="c"><span>n/a</span></td></tr>'
+    ) in html
+
+
+def test_a_matrix_cell_whose_badge_adds_no_name_shows_its_text_without_a_chip() -> None:
+    html = render_html(parse_report(make_report(blocks=[MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES)))
+
+    assert (
+        "<tr><th>Receiving</th>"
+        '<td class="c red"><span>lbl</span></td>'
+        '<td class="c amber"><span>lbl</span></td>'
+        '<td class="c green"><span>Have</span></td>'
+        '<td class="c blue"><span><span class="chip">A|B *x*</span> a_b [c] &lt;d&gt; | e</span></td></tr>'
     ) in html
 
 

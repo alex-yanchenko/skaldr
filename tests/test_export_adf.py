@@ -63,7 +63,9 @@ from skaldr.export.tree import (
 from skaldr.richtext import Code, Plain, Styled
 from tests.factories import (
     API_AND_RISK_BADGES,
+    EDGE_BADGES,
     HAVE_BADGE,
+    MATRIX_OF_EDGE_BADGE_LABELS,
     MATRIX_OF_EVERY_CELL_SHAPE,
     check_nodes,
     lowered,
@@ -643,6 +645,30 @@ def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_the
                 },
                 _table_cell("tableCell", "none yet", red),
                 _table_cell("tableCell", "n/a"),
+            ),
+        )
+    )
+
+
+def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add() -> None:
+    assert json.loads(
+        json.dumps(render_adf(lowered([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES)))
+    ) == _doc(
+        _table(
+            _row(
+                _table_cell("tableHeader", ""),
+                *(_table_cell("tableHeader", name) for name in ("Blank", "Spaces", "Same", "Special")),
+            ),
+            _row(
+                _table_cell("tableHeader", "Receiving"),
+                _table_cell("tableCell", "lbl", "#FFEBE6"),
+                _table_cell("tableCell", "lbl", "#FFFAE6"),
+                _table_cell("tableCell", "Have", "#E3FCEF"),
+                {
+                    "type": "tableCell",
+                    "attrs": {"background": "#DEEBFF"},
+                    "content": [_paragraph(_text("A|B *x*", STRONG), _text(" · a_b [c] <d> | e"))],
+                },
             ),
         )
     )

@@ -984,8 +984,11 @@ class MatrixCellDisplay(NamedTuple):
 def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> MatrixCellDisplay:
     if cell.badge:
         badge = badges[cell.badge]
-        if cell.label:
-            return MatrixCellDisplay(badge.tone, cell.label, badge.label)
+        state = badge.label.strip()
+        if cell.label and not state:
+            return MatrixCellDisplay(badge.tone, cell.label, None)
+        if cell.label and state.casefold() != cell.label.strip().casefold():
+            return MatrixCellDisplay(badge.tone, cell.label, state)
         return MatrixCellDisplay(badge.tone, badge.label, None)
     return MatrixCellDisplay(cell.tone, cell.label or "", None)
 
