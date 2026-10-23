@@ -1236,7 +1236,9 @@ def test_references_with_a_gap_in_their_numbers_are_one_list_per_run_so_each_ite
     )
 
 
-def test_references_in_a_list_item_stay_bullets_led_by_their_numbers_since_jira_letters_a_nested_list() -> None:
+def test_references_in_a_list_item_stay_bullets_led_by_their_numbers_since_jira_letters_a_nested_list() -> (
+    None
+):
     node = ListNode("bullet", (text_entry("plan", References((_reference(1, "first"),))),))
 
     assert _rendered(node) == _doc(_bullets(_item(_words("plan"), _bullets(_item(_words("[1] first"))))))

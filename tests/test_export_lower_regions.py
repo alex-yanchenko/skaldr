@@ -306,7 +306,7 @@ def test_a_look_written_as_words_leads_the_title_with_the_icon_and_opens_the_doc
     region = lower_region(lowering, 0)
 
     page = assemble_item_page(
-        "Item", [region], lowering, opens_the_document=opens_the_document, look_as_words=True
+        "Item", [region], lowering, opens_the_document=opens_the_document, writes_look_as_words=True
     )
 
     assert page == LoweredDocument("\U0001f9ea Item", (*leading_parts, region))
@@ -316,7 +316,7 @@ def test_a_look_written_as_words_keeps_a_title_when_there_is_no_icon() -> None:
     lowering = lowering_for(parse_report(make_report(meta={"title": "T", "cover": COVER_URL})))
 
     page = assemble_item_page(
-        "Item", [lower_region(lowering, 0)], lowering, opens_the_document=False, look_as_words=True
+        "Item", [lower_region(lowering, 0)], lowering, opens_the_document=False, writes_look_as_words=True
     )
 
     assert page.title == "Item"

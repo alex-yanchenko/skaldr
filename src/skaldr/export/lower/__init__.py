@@ -110,11 +110,9 @@ def assemble_item_page(
     lowering: Lowering,
     *,
     opens_the_document: bool,
-    look_as_words: bool = False,
+    writes_look_as_words: bool = False,
 ) -> LoweredDocument:
     report = lowering.report
-    cover = report.meta.cover if opens_the_document else None
-    cover_link = (cover_link_paragraph(cover),) if cover and look_as_words else ()
     blocks = [report.blocks[region.source_index] for region in regions]
     used = compute.used_badges(report.model_copy(update={"blocks": blocks}))
     first_table = next(
@@ -125,6 +123,8 @@ def assemble_item_page(
         ),
         None,
     )
+    cover = report.meta.cover if opens_the_document else None
+    cover_link = (cover_link_paragraph(cover),) if cover and writes_look_as_words else ()
     header = PagePart(
         "header",
         (*cover_link, *_subtitle(report), *_table_of_contents(report, lowering))
@@ -134,10 +134,10 @@ def assemble_item_page(
     legend = PagePart("legend", tuple(_legend(lowering, used)))
     closing = PagePart("footer", _footer(report, lowering) if opens_the_document else ())
     return _without_empty_parts(
-        title_led_by_its_icon(title, report.meta.icon) if look_as_words else title,
+        title_led_by_its_icon(title, report.meta.icon) if writes_look_as_words else title,
         [header, *_with_the_legend(regions, legend, first_table), closing],
-        icon=None if look_as_words else report.meta.icon,
-        cover=None if look_as_words else cover,
+        icon=None if writes_look_as_words else report.meta.icon,
+        cover=None if writes_look_as_words else cover,
     )
 
 
