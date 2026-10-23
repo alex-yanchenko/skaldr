@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from typing import Final, Literal, get_args
 
@@ -405,12 +405,20 @@ def heading_of(node: Node) -> Heading | None:
     return None
 
 
-def uses_heading_level_1(nodes: Iterable[Node]) -> bool:
+def heading_levels(nodes: Iterable[Node]) -> Iterator[int]:
     for node in nodes:
         heading = heading_of(node)
-        if (heading is not None and heading.level == 1) or uses_heading_level_1(nested_nodes(node)):
-            return True
-    return False
+        if heading is not None:
+            yield heading.level
+        yield from heading_levels(nested_nodes(node))
+
+
+def uses_heading_level_1(nodes: Iterable[Node]) -> bool:
+    return 1 in heading_levels(nodes)
+
+
+def deepest_heading_level(nodes: Iterable[Node]) -> int:
+    return max(heading_levels(nodes), default=0)
 
 
 def canvas_heading_shift(body: Iterable[Node]) -> int:

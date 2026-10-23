@@ -1126,18 +1126,107 @@ def test_a_level_four_heading_is_four_hashes() -> None:
     assert notion_of([{"type": "heading", "level": 4, "text": "Bin detail"}]) == "#### Bin detail\n"
 
 
-def test_a_heading_deeper_than_notion_heading_4_is_written_as_heading_4() -> None:
-    section = {
+def _appendix_with_zone_and_bin_headings(*, collapsed: bool) -> dict[str, Any]:
+    return {
         "type": "section",
         "title": "Appendix",
-        "collapsed": False,
+        "collapsed": collapsed,
         "blocks": [
             {"type": "heading", "level": 3, "text": "Zone C"},
             {"type": "heading", "level": 4, "text": "Bin 12"},
         ],
     }
 
-    assert notion_of([section]) == "## Appendix\n#### Zone C\n#### Bin 12\n"
+
+def test_a_level_3_and_a_level_4_heading_in_a_section_stay_apart_after_the_shift() -> None:
+    section = _appendix_with_zone_and_bin_headings(collapsed=False)
+
+    assert notion_of([section]) == "# Appendix\n### Zone C\n#### Bin 12\n"
+
+
+def test_a_collapsed_sections_toggle_heading_moves_up_with_the_headings_inside_it() -> None:
+    section = _appendix_with_zone_and_bin_headings(collapsed=True)
+
+    assert notion_of([section]) == '# Appendix {toggle="true"}\n\t### Zone C\n\t#### Bin 12\n'
+
+
+def test_a_document_that_goes_no_deeper_than_heading_4_keeps_its_levels() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "level": 3, "text": "Zone C"}],
+    }
+
+    assert notion_of([section]) == "## Appendix\n#### Zone C\n"
+
+
+def test_a_deep_heading_nested_in_a_callout_moves_the_whole_document_up_one_level() -> None:
+    nodes = [
+        Heading(2, (Plain("Top"),)),
+        Heading(3, (Plain("Mid"),)),
+        Callout("info", (Heading(5, (Plain("Deep"),)),)),
+    ]
+
+    assert render_notion(nodes) == (
+        '# Top\n## Mid\n<callout icon="💡" color="blue_bg">\n\t#### Deep\n</callout>\n'
+    )
+
+
+def test_an_index_with_parts_has_no_level_1_to_spare_and_keeps_clamping_at_heading_4() -> None:
+    nodes = [
+        Heading(1, (Plain("Part"),)),
+        Heading(2, (Plain("Section"),)),
+        Heading(4, (Plain("Four"),)),
+        Heading(5, (Plain("Five"),)),
+    ]
+
+    assert render_notion(nodes) == "# Part\n## Section\n#### Four\n#### Five\n"
+
+
+def test_a_collapsed_part_is_a_level_1_heading_so_the_clamp_stays() -> None:
+    part = Toggle((Plain("Part"),), 1, (Heading(2, (Plain("Section"),)), Heading(5, (Plain("Five"),))))
+
+    assert render_notion([part]) == '# Part {toggle="true"}\n\t## Section\n\t#### Five\n'
+
+
+def test_a_toggle_heading_deeper_than_heading_4_is_the_only_trigger_for_the_shift() -> None:
+    nodes = [
+        Heading(2, (Plain("Top"),)),
+        Toggle((Plain("Deep"),), 5, (Paragraph((Plain("inside"),)),)),
+    ]
+
+    assert render_notion(nodes) == '# Top\n#### Deep {toggle="true"}\n\tinside\n'
+
+
+def _in_a_tab(deep: Heading) -> Node:
+    return Tabs((Tab((Plain("T"),), (deep,)),))
+
+
+def _in_a_column(deep: Heading) -> Node:
+    return Columns((GridColumn(1, (deep,)),))
+
+
+def _in_a_list_item(deep: Heading) -> Node:
+    return ListNode("bullet", (ListEntry((Plain("item"),), children=(deep,)),))
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(_in_a_tab, id="tab"),
+        pytest.param(_in_a_column, id="column"),
+        pytest.param(_in_a_list_item, id="list-item"),
+    ],
+)
+def test_a_deep_heading_in_a_nested_container_moves_the_heading_before_it_up_one_level(
+    container: Callable[[Heading], Node],
+) -> None:
+    nodes = [Heading(2, (Plain("Top"),)), container(Heading(5, (Plain("Deep"),)))]
+
+    written = render_notion(nodes).splitlines()
+
+    assert [line.strip() for line in written if "Top" in line or "Deep" in line] == ["# Top", "#### Deep"]
 
 
 @pytest.mark.parametrize(
@@ -2236,6 +2325,35 @@ def test_the_chunks_joined_are_the_whole_page(nodes: tuple[Node, ...], limit: in
     assert "".join(_chunked(nodes, limit).chunks) == render_notion(nodes)
 
 
+def test_a_chunked_export_of_a_document_with_a_deep_heading_splits_where_it_did_and_moves_every_heading(
+    tmp_path: Path,
+) -> None:
+    deep_section = {
+        "type": "section",
+        "title": "Part 1",
+        "collapsed": False,
+        "blocks": [
+            {"type": "heading", "level": 3, "text": "Zone C"},
+            {"type": "heading", "level": 4, "text": "Bin 12"},
+            {"type": "code", "content": "z = 3\n" * 20},
+        ],
+    }
+    first_section = {
+        "type": "section",
+        "title": "Part 0",
+        "collapsed": False,
+        "blocks": [{"type": "code", "content": "z = 3\n" * 20}],
+    }
+    report = parse_report(make_report(meta={"title": "Count"}, blocks=[first_section, deep_section]))
+
+    result = export_notion(report, tmp_path, chunk=200)
+
+    assert {path.name: path.read_text(encoding="utf-8") for path in result.files} == {
+        "page.00.md": _section_text("Part 0", "z = 3", 20).replace("## ", "# ", 1),
+        "page.01.md": "# Part 1\n### Zone C\n#### Bin 12\n```plain text\n" + "z = 3\n" * 20 + "```\n",
+    }
+
+
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:
     report = parse_report(make_report(meta={"title": "Count"}, blocks=heading_sections(2, "z = 3\n" * 20)))
 
@@ -2871,6 +2989,48 @@ def test_a_heading_mid_section_moves_to_the_part_with_the_block_it_introduces() 
     split = _chunked(nodes, 80)
 
     assert split == NotionChunks(("## S\n" + "a" * 30 + "\n", "### H3\n#### H4\n" + "b" * 60 + "\n"), ())
+
+
+def test_chunk_boundaries_stay_at_the_same_headings_when_a_deep_heading_moves_the_document_up() -> None:
+    nodes = [
+        Heading(2, (Plain("A"),)),
+        Paragraph((Plain("a" * 30),)),
+        Heading(2, (Plain("B"),)),
+        Heading(5, (Plain("Deep"),)),
+        Paragraph((Plain("b" * 30),)),
+        Heading(2, (Plain("C"),)),
+        Paragraph((Plain("c" * 30),)),
+    ]
+
+    split = _chunked(nodes, 60)
+
+    assert split == NotionChunks(
+        ("# A\n" + "a" * 30 + "\n", "# B\n#### Deep\n" + "b" * 30 + "\n", "# C\n" + "c" * 30 + "\n"), ()
+    )
+
+
+def test_a_heading_mid_section_moves_with_its_block_when_a_deep_heading_moves_the_document_up() -> None:
+    nodes = [
+        Heading(2, (Plain("S"),)),
+        Paragraph((Plain("a" * 30),)),
+        Heading(3, (Plain("H3"),)),
+        Heading(5, (Plain("H5"),)),
+        Paragraph((Plain("b" * 60),)),
+    ]
+
+    split = _chunked(nodes, 80)
+
+    assert split == NotionChunks(("# S\n" + "a" * 30 + "\n", "## H3\n#### H5\n" + "b" * 60 + "\n"), ())
+
+
+def test_an_oversized_section_is_named_by_the_heading_marks_the_page_writes() -> None:
+    nodes = [
+        Heading(2, (Plain("Big"),)),
+        Paragraph((Plain("y" * 50),)),
+        Heading(5, (Plain("Deep"),)),
+    ]
+
+    assert _chunked(nodes, 20).oversized_sections == ("# Big",)
 
 
 def test_a_carried_heading_counts_toward_the_part_it_starts() -> None:
