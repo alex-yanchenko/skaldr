@@ -104,16 +104,20 @@ class CountingKeyring(InMemoryKeyring):
     def __init__(self) -> None:
         super().__init__()
         self.operations: list[tuple[str, str]] = []
+        self.set_failure: BaseException | None = None
 
     @override
     def get_password(self, service: str, username: str) -> str | None:
-        self.operations.append(("get", username))
-        return super().get_password(service, username)
+        stored = super().get_password(service, username)
+        self.operations.append(("get" if stored is not None else "get missing", username))
+        return stored
 
     @override
     def set_password(self, service: str, username: str, password: str) -> None:
         self.operations.append(("set", username))
-        self.entries[(service, username)] = password
+        if self.set_failure is not None:
+            raise self.set_failure
+        super().set_password(service, username, password)  # pyright: ignore[reportUnknownMemberType]
 
     @override
     def delete_password(self, service: str, username: str) -> None:

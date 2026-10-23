@@ -12,16 +12,21 @@ from skaldr.auth import store
 from skaldr.auth.cli import main as auth_main
 from skaldr.auth.notion import NotionSession
 from skaldr.auth.store import (
+    KeychainWaitInterrupted,
+    SignIn,
     find_notion,
     forget,
     load_jira,
     load_notion,
+    require_jira,
     require_notion,
+    require_notion_for_a_target,
     save_jira,
     save_notion_returning_the_replaced,
     stored_notion_sign_ins,
 )
 from skaldr.cli import main as skaldr_main
+from skaldr.errors import AuthError
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main as publish_main
 from skaldr.publish.content import ItemContent
@@ -49,6 +54,8 @@ from tests.factories.slack_factory import InMemorySlack
 OTHER_JIRA_SITE = "https://other.atlassian.net"
 OTHER_SLACK_TEAM = "T0EXAMPLE2"
 SECOND_NOTION_PAGE_ID = "fedcba9876543210fedcba9876543210"
+THIRD_WORKSPACE_ID = "33333333-3333-4333-8333-333333333333"
+JIRA_ITEM = "jira:https://example.atlassian.net"
 Reads = Counter[tuple[str, str]]
 
 
@@ -103,7 +110,6 @@ def _counting_keyring() -> CountingKeyring:
     counting = CountingKeyring()
     keyring.set_keyring(counting)
     assert keyring.get_keyring() is counting
-    assert isinstance(counting, InMemoryKeyring)
     return counting
 
 
@@ -166,26 +172,36 @@ def measured(document: Document, command: Command, sign_ins_per_service: int, di
     return counting.counts()
 
 
-def _stored_items(service: str, sign_ins_per_service: int) -> list[str]:
-    first = {
+def _first_sign_in_item(service: str) -> str:
+    return {
         "notion": f"notion:{WORKSPACE_ID}",
-        "jira": "jira:https://example.atlassian.net",
+        "jira": JIRA_ITEM,
         "slack": "slack:T0EXAMPLE1",
-    }
-    second = {
+    }[service]
+
+
+def _second_sign_in_item(service: str) -> str:
+    return {
         "notion": f"notion:{OTHER_WORKSPACE_ID}",
         "jira": f"jira:{OTHER_JIRA_SITE}",
         "slack": f"slack:{OTHER_SLACK_TEAM}",
-    }
-    return [first[service], *([second[service]] if sign_ins_per_service == 2 else [])]
+    }[service]
 
 
-def each_item_read_once(services: tuple[str, ...], sign_ins_per_service: int) -> Reads:
+def listing_reads(services: tuple[str, ...], sign_ins_per_service: int) -> Reads:
     reads: Reads = Counter({("get", "index"): 1})
     for service in services:
-        reads[("get", service)] += 1
-        for item in _stored_items(service, sign_ins_per_service):
-            reads[("get", item)] += 1
+        reads[("get missing", service)] += 1
+        reads[("get", _first_sign_in_item(service))] += 1
+        if sign_ins_per_service == 2:
+            reads[("get", _second_sign_in_item(service))] += 1
+    return reads
+
+
+def named_reads(services: tuple[str, ...]) -> Reads:
+    reads: Reads = Counter({("get", "index"): 1})
+    for service in services:
+        reads[("get", _first_sign_in_item(service))] += 1
     return reads
 
 
@@ -195,11 +211,12 @@ def each_item_read_once(services: tuple[str, ...], sign_ins_per_service: int) ->
 def test_a_command_reads_each_keychain_item_it_needs_once_and_writes_none(
     document: Document, command: Command, sign_ins_per_service: int, tmp_path: Path
 ) -> None:
-    expected = (
-        Counter[tuple[str, str]]()
-        if command.name.startswith("--check")
-        else each_item_read_once(document.services, sign_ins_per_service)
-    )
+    if command.name.startswith("--check"):
+        expected = Counter[tuple[str, str]]()
+    elif sign_ins_per_service == 2:
+        expected = named_reads(document.services)
+    else:
+        expected = listing_reads(document.services, sign_ins_per_service)
 
     assert measured(document, command, sign_ins_per_service, tmp_path) == expected
 
@@ -243,12 +260,8 @@ def test_a_legacy_single_entry_is_migrated_as_before_and_read_once() -> None:
     with store.reading_each_keychain_item_once():
         loaded = load_notion()
 
-    assert (
-        loaded is not None and loaded.credentials,
-        counting.entries,
-        counting.counts(),
-    ) == (
-        notion,
+    assert (loaded, counting.entries, counting.counts()) == (
+        SignIn(notion, "keychain"),
         {
             ("skaldr", "notion:unidentified"): notion.model_dump_json(),
             ("skaldr", "index"): json.dumps({"jira": [], "notion": ["notion:unidentified"]}),
@@ -256,8 +269,8 @@ def test_a_legacy_single_entry_is_migrated_as_before_and_read_once() -> None:
         Counter(
             {
                 ("get", "notion"): 1,
-                ("get", "notion:unidentified"): 1,
-                ("get", "index"): 1,
+                ("get missing", "notion:unidentified"): 1,
+                ("get missing", "index"): 1,
                 ("set", "notion:unidentified"): 1,
                 ("set", "index"): 1,
                 ("delete", "notion"): 1,
@@ -290,7 +303,7 @@ def test_outside_a_command_every_read_asks_the_keychain() -> None:
     load_jira()
 
     assert counting.counts() == Counter(
-        {("get", "index"): 2, ("get", "jira"): 4, ("get", "jira:https://example.atlassian.net"): 2}
+        {("get", "index"): 2, ("get missing", "jira"): 4, ("get", JIRA_ITEM): 2}
     )
 
 
@@ -317,7 +330,7 @@ def test_a_renewal_inside_a_command_sees_the_token_another_skaldr_stored_meanwhi
         counting.entries[("skaldr", f"notion:{WORKSPACE_ID}")] = make_notion_credentials(
             access_token="second-access"
         ).model_dump_json()
-        found = find_notion(WORKSPACE_ID, reread=True)
+        found = find_notion(WORKSPACE_ID, fresh=True)
 
     assert (
         loaded and loaded.credentials.access_token,
@@ -369,22 +382,58 @@ def test_nested_commands_share_the_reads_of_the_outer_one() -> None:
             load_jira()
         load_jira()
 
-    assert counting.counts() == each_item_read_once(("jira",), 1)
+    assert counting.counts() == listing_reads(("jira",), 1)
 
 
-def test_a_command_that_fails_leaves_nothing_remembered_for_the_next_read() -> None:
+@pytest.mark.parametrize(
+    "failure",
+    [RuntimeError("the command failed"), KeyboardInterrupt(), KeychainWaitInterrupted()],
+    ids=["an error", "a keyboard interrupt", "an interrupted keychain wait"],
+)
+def test_a_command_that_ends_early_leaves_nothing_remembered_for_the_next_read(
+    failure: BaseException,
+) -> None:
     counting = _counting_keyring()
     save_jira(make_jira_credentials())
 
-    with pytest.raises(RuntimeError), store.reading_each_keychain_item_once():
+    with pytest.raises(type(failure)), store.reading_each_keychain_item_once():
         load_jira()
-        raise RuntimeError("the command failed")
+        raise failure
     counting.forget_operations()
     load_jira()
 
     assert counting.counts() == Counter(
-        {("get", "index"): 1, ("get", "jira"): 2, ("get", "jira:https://example.atlassian.net"): 1}
+        {("get", "index"): 1, ("get missing", "jira"): 2, ("get", JIRA_ITEM): 1}
     )
+
+
+def test_a_write_the_keychain_refuses_leaves_the_next_read_asking_the_keychain() -> None:
+    counting = _counting_keyring()
+    save_jira(make_jira_credentials(api_token="first-token"))
+    counting.forget_operations()
+
+    with store.reading_each_keychain_item_once():
+        load_jira()
+        counting.set_failure = RuntimeError("the keychain refuses the write")
+        with pytest.raises(RuntimeError, match="the keychain refuses the write"):
+            save_jira(make_jira_credentials(api_token="second-token"))
+        counting.set_failure = None
+        load_jira()
+
+    assert counting.counts()[("get", JIRA_ITEM)] == 2
+
+
+def test_a_read_after_a_delete_inside_a_command_asks_the_keychain_nothing() -> None:
+    counting = _counting_keyring()
+    save_jira(make_jira_credentials())
+
+    with store.reading_each_keychain_item_once():
+        entry = store.stored_jira_sign_ins()[0]
+        forget(entry)
+        counting.forget_operations()
+        remaining = load_jira("https://example.atlassian.net")
+
+    assert (remaining, counting.counts()) == (None, Counter())
 
 
 def test_several_targets_of_one_service_share_the_reads_of_its_sign_ins(tmp_path: Path) -> None:
@@ -398,25 +447,38 @@ def test_several_targets_of_one_service_share_the_reads_of_its_sign_ins(tmp_path
 
     exit_code = publish_main(["publish", str(path), "--apply"], registry=_registry())
 
-    assert (exit_code, counting.counts()) == (0, each_item_read_once(("notion",), 1))
+    assert (exit_code, counting.counts()) == (0, listing_reads(("notion",), 1))
 
 
-def test_a_renewed_token_is_the_only_write_a_command_makes() -> None:
-    counting = _counting_keyring()
-    store.save_notion_returning_the_replaced(make_notion_credentials(access_token="lapsed-access"))
+def _renewing_a_lapsed_notion_token_after_reading_jira() -> None:
     notion = InMemoryNotion()
     notion.add_page(NOTION_PAGE_ID, "Team plans")
     target = NotionTarget.model_validate(make_notion_target())
+    require_jira()
+    transport = NotionConnector(http=notion.mock(), sleep=lambda _: None).open_transport(target)
+    transport.read_item(NOTION_PAGE_ID, ItemContent(title=""))
+    require_jira()
+
+
+def test_a_renewal_re_reads_only_the_notion_items_and_the_index_and_writes_only_the_renewed_token() -> None:
+    counting = _counting_keyring()
+    store.save_notion_returning_the_replaced(make_notion_credentials(access_token="lapsed-access"))
+    save_jira(make_jira_credentials())
     counting.forget_operations()
 
     with store.reading_each_keychain_item_once():
-        transport = NotionConnector(http=notion.mock(), sleep=lambda _: None).open_transport(target)
-        transport.read_item(NOTION_PAGE_ID, ItemContent(title=""))
+        _renewing_a_lapsed_notion_token_after_reading_jira()
 
-    writes = Counter(
-        {operation: count for operation, count in counting.counts().items() if operation[0] != "get"}
+    assert counting.counts() == Counter(
+        {
+            ("get", "index"): 3,
+            ("get missing", "jira"): 1,
+            ("get", JIRA_ITEM): 1,
+            ("get missing", "notion"): 3,
+            ("get", f"notion:{WORKSPACE_ID}"): 3,
+            ("set", f"notion:{WORKSPACE_ID}"): 1,
+        }
     )
-    assert writes == Counter({("set", f"notion:{WORKSPACE_ID}"): 1})
 
 
 def test_listing_a_sign_in_found_by_name_keeps_an_index_entry_another_skaldr_added_meanwhile() -> None:
@@ -457,14 +519,83 @@ def test_forgetting_a_sign_in_keeps_an_index_entry_another_skaldr_added_meanwhil
     )
 
 
-def test_auth_status_reads_the_index_once_and_each_item_it_lists_once(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def _three_notion_sign_ins() -> None:
+    for workspace_id, name in (
+        (WORKSPACE_ID, "Alpha"),
+        (OTHER_WORKSPACE_ID, "Beta"),
+        (THIRD_WORKSPACE_ID, "Gamma"),
+    ):
+        store.save_notion_returning_the_replaced(
+            make_notion_credentials(workspace_id=workspace_id, workspace_name=name)
+        )
+
+
+def test_a_target_naming_a_workspace_id_reads_only_that_sign_in_item() -> None:
+    counting = _counting_keyring()
+    _three_notion_sign_ins()
+    counting.forget_operations()
+
+    with store.reading_each_keychain_item_once():
+        sign_in = require_notion_for_a_target(OTHER_WORKSPACE_ID)
+
+    assert (sign_in.credentials.workspace_name, counting.counts()) == (
+        "Beta",
+        Counter({("get", "index"): 1, ("get", f"notion:{OTHER_WORKSPACE_ID}"): 1}),
+    )
+
+
+def test_a_target_naming_a_workspace_by_name_lists_the_sign_ins() -> None:
+    counting = _counting_keyring()
+    _three_notion_sign_ins()
+    counting.forget_operations()
+
+    with store.reading_each_keychain_item_once():
+        sign_in = require_notion_for_a_target("Beta")
+
+    assert (sign_in.credentials.workspace_id, counting.counts()) == (
+        make_notion_credentials(workspace_id=OTHER_WORKSPACE_ID).workspace_id,
+        Counter(
+            {
+                ("get", "index"): 1,
+                ("get missing", "notion"): 1,
+                ("get", f"notion:{WORKSPACE_ID}"): 1,
+                ("get", f"notion:{OTHER_WORKSPACE_ID}"): 1,
+                ("get", f"notion:{THIRD_WORKSPACE_ID}"): 1,
+            }
+        ),
+    )
+
+
+def test_a_target_naming_a_workspace_id_that_is_not_stored_falls_back_to_the_listing() -> None:
+    counting = _counting_keyring()
+    _three_notion_sign_ins()
+    counting.forget_operations()
+    missing = "44444444-4444-4444-8444-444444444444"
+
+    with pytest.raises(AuthError) as refused, store.reading_each_keychain_item_once():
+        require_notion_for_a_target(missing)
+
+    assert (str(refused.value), counting.counts()) == (
+        f"No Notion sign-in matches workspace `{missing}`; signed in to "
+        f"Alpha ({WORKSPACE_ID}), Beta ({OTHER_WORKSPACE_ID}), Gamma ({THIRD_WORKSPACE_ID})",
+        Counter(
+            {
+                ("get", "index"): 1,
+                ("get missing", f"notion:{missing}"): 1,
+                ("get missing", "notion"): 1,
+                ("get", f"notion:{WORKSPACE_ID}"): 1,
+                ("get", f"notion:{OTHER_WORKSPACE_ID}"): 1,
+                ("get", f"notion:{THIRD_WORKSPACE_ID}"): 1,
+            }
+        ),
+    )
+
+
+def test_auth_status_reads_the_index_once_and_each_item_it_lists_once() -> None:
     counting = _counting_keyring()
     _sign_in_to_every_service(2)
     counting.forget_operations()
 
     exit_code = auth_main(["status"])
 
-    assert (exit_code, counting.counts()) == (0, each_item_read_once(("notion", "jira", "slack"), 2))
-    capsys.readouterr()
+    assert (exit_code, counting.counts()) == (0, listing_reads(("notion", "jira", "slack"), 2))
