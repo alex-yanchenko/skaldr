@@ -201,19 +201,19 @@ LATEX_TEXT_ESCAPES: Final = str.maketrans(
 class TableRoom:
     width: int
     sizes_every_table: bool
+    heading_shift: int
     in_a_column: bool = False
     enclosing: EnclosingContainers = field(default_factory=EnclosingContainers)
-    heading_shift: int = 0
 
     def inside(self, container: NotionContainer) -> "TableRoom":
         return replace(self, enclosing=self.enclosing.inside(container))
 
     @classmethod
-    def on_page(cls, page_width: NotionWidth, nodes: Iterable[Node]) -> "TableRoom":
+    def on_page(cls, page_width: NotionWidth, nodes: Sequence[Node]) -> "TableRoom":
         return cls(
             NOTION_PAGE_WIDTH_PX[page_width],
             sizes_every_table=page_width == "full",
-            heading_shift=notion_heading_shift(tuple(nodes)),
+            heading_shift=notion_heading_shift(nodes),
         )
 
     def within(self, ratio: int) -> "TableRoom":
@@ -675,12 +675,12 @@ def _quote_line(node: Quote) -> str:
 
 
 def notion_heading_shift(nodes: Sequence[Node]) -> int:
-    goes_past_the_deepest = deepest_heading_level(nodes) > DEEPEST_NOTION_HEADING
-    return 1 if goes_past_the_deepest and not uses_heading_level_1(nodes) else 0
+    has_a_heading_deeper_than_notion_has = deepest_heading_level(nodes) > DEEPEST_NOTION_HEADING
+    return 1 if has_a_heading_deeper_than_notion_has and not uses_heading_level_1(nodes) else 0
 
 
-def _heading_marks(level: HeadingLevel, shift: int) -> str:
-    return "#" * min(level - shift, DEEPEST_NOTION_HEADING)
+def _heading_marks(level: HeadingLevel, levels_moved_up: int) -> str:
+    return "#" * min(level - levels_moved_up, DEEPEST_NOTION_HEADING)
 
 
 def _toggle_lines(node: Toggle, room: TableRoom) -> list[str]:

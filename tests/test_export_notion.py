@@ -1138,9 +1138,7 @@ def _appendix_with_zone_and_bin_headings(*, collapsed: bool) -> dict[str, Any]:
     }
 
 
-def test_a_level_3_and_a_level_4_heading_inside_a_section_stay_apart_when_every_heading_moves_up_one() -> (
-    None
-):
+def test_a_level_3_and_a_level_4_heading_in_a_section_stay_apart_after_the_shift() -> None:
     section = _appendix_with_zone_and_bin_headings(collapsed=False)
 
     assert notion_of([section]) == "# Appendix\n### Zone C\n#### Bin 12\n"
@@ -1190,6 +1188,45 @@ def test_a_collapsed_part_is_a_level_1_heading_so_the_clamp_stays() -> None:
     part = Toggle((Plain("Part"),), 1, (Heading(2, (Plain("Section"),)), Heading(5, (Plain("Five"),))))
 
     assert render_notion([part]) == '# Part {toggle="true"}\n\t## Section\n\t#### Five\n'
+
+
+def test_a_toggle_heading_deeper_than_heading_4_is_the_only_trigger_for_the_shift() -> None:
+    nodes = [
+        Heading(2, (Plain("Top"),)),
+        Toggle((Plain("Deep"),), 5, (Paragraph((Plain("inside"),)),)),
+    ]
+
+    assert render_notion(nodes) == '# Top\n#### Deep {toggle="true"}\n\tinside\n'
+
+
+def _in_a_tab(deep: Heading) -> Node:
+    return Tabs((Tab((Plain("T"),), (deep,)),))
+
+
+def _in_a_column(deep: Heading) -> Node:
+    return Columns((GridColumn(1, (deep,)),))
+
+
+def _in_a_list_item(deep: Heading) -> Node:
+    return ListNode("bullet", (ListEntry((Plain("item"),), children=(deep,)),))
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param(_in_a_tab, id="tab"),
+        pytest.param(_in_a_column, id="column"),
+        pytest.param(_in_a_list_item, id="list-item"),
+    ],
+)
+def test_a_deep_heading_in_a_nested_container_moves_the_heading_before_it_up_one_level(
+    container: Callable[[Heading], Node],
+) -> None:
+    nodes = [Heading(2, (Plain("Top"),)), container(Heading(5, (Plain("Deep"),)))]
+
+    written = render_notion(nodes).splitlines()
+
+    assert [line.strip() for line in written if "Top" in line or "Deep" in line] == ["# Top", "#### Deep"]
 
 
 @pytest.mark.parametrize(
@@ -2286,6 +2323,35 @@ SECTIONS_WITH_LISTS = (
 )
 def test_the_chunks_joined_are_the_whole_page(nodes: tuple[Node, ...], limit: int) -> None:
     assert "".join(_chunked(nodes, limit).chunks) == render_notion(nodes)
+
+
+def test_a_chunked_export_of_a_document_with_a_deep_heading_splits_where_it_did_and_moves_every_heading(
+    tmp_path: Path,
+) -> None:
+    deep_section = {
+        "type": "section",
+        "title": "Part 1",
+        "collapsed": False,
+        "blocks": [
+            {"type": "heading", "level": 3, "text": "Zone C"},
+            {"type": "heading", "level": 4, "text": "Bin 12"},
+            {"type": "code", "content": "z = 3\n" * 20},
+        ],
+    }
+    first_section = {
+        "type": "section",
+        "title": "Part 0",
+        "collapsed": False,
+        "blocks": [{"type": "code", "content": "z = 3\n" * 20}],
+    }
+    report = parse_report(make_report(meta={"title": "Count"}, blocks=[first_section, deep_section]))
+
+    result = export_notion(report, tmp_path, chunk=200)
+
+    assert {path.name: path.read_text(encoding="utf-8") for path in result.files} == {
+        "page.00.md": _section_text("Part 0", "z = 3", 20).replace("## ", "# ", 1),
+        "page.01.md": "# Part 1\n### Zone C\n#### Bin 12\n```plain text\n" + "z = 3\n" * 20 + "```\n",
+    }
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:

@@ -109,25 +109,45 @@ def test_publishing_again_writes_only_the_section_the_yaml_changed(tmp_path: Pat
     )
 
 
-def _garden_with_zone_and_bin_headings_in_planting() -> list[dict[str, Any]]:
-    tools, planting = make_garden_blocks()[1:]
-    deeper = {
-        **planting,
-        "blocks": [
-            {"type": "heading", "level": 3, "text": "Zone C"},
-            {"type": "heading", "level": 4, "text": "Bin 12"},
-        ],
+def _garden_with_watering(deep_in: str | None = None) -> list[dict[str, Any]]:
+    zone_and_bin: list[dict[str, Any]] = [
+        {"type": "heading", "level": 3, "text": "Zone C"},
+        {"type": "heading", "level": 4, "text": "Bin 12"},
+    ]
+    watering: dict[str, Any] = {
+        "type": "section",
+        "id": "watering",
+        "title": "Watering",
+        "collapsed": False,
+        "blocks": [{"type": "text", "body": "Water daily."}],
     }
-    return [make_garden_blocks()[0], tools, deeper]
+    sections = [*make_garden_blocks()[1:], watering]
+    return [
+        make_garden_blocks()[0],
+        *(
+            {**section, "blocks": [*section["blocks"], *zone_and_bin]}
+            if section["id"] == deep_in
+            else section
+            for section in sections
+        ),
+    ]
 
 
-def test_a_document_that_gains_deep_headings_publishes_its_moved_headings_as_a_change_from_the_yaml(
+def _garden_published_then_given_a_deep_heading_in(
+    tmp_path: Path, transport: FakeTransport, section_id: str
+) -> Path:
+    path = write_garden_report(tmp_path, blocks=_garden_with_watering())
+    _publish(path, transport)
+    write_garden_report(tmp_path, blocks=_garden_with_watering(deep_in=section_id))
+    transport.forget_calls()
+    return path
+
+
+def test_a_deep_heading_in_one_section_rewrites_the_other_sections_of_the_page_one_level_up(
     tmp_path: Path,
 ) -> None:
     transport = FakeTransport()
-    path = _published_then_rewritten(
-        tmp_path, transport, blocks=_garden_with_zone_and_bin_headings_in_planting()
-    )
+    path = _garden_published_then_given_a_deep_heading_in(tmp_path, transport, "planting")
 
     outcome = _publish(path, transport)
 
@@ -136,27 +156,41 @@ def test_a_document_that_gains_deep_headings_publishes_its_moved_headings_as_a_c
         transport.writes(),
         transport.items["page-1"].content,
         _drafted(path).sections["planting"],
+        _drafted(path).sections["watering"],
     ) == (
-        Applied(("update   document: planting (blocks[2])",)),
-        [("write_section", "page-1", "planting")],
+        Applied(("update   document: planting (blocks[2])", "update   document: watering (blocks[3])")),
+        [("write_section", "page-1", "planting"), ("write_section", "page-1", "watering")],
         _drafted(path),
-        "# Planting\n### Zone C\n#### Bin 12\n",
+        "# Planting\nSow in spring.\n### Zone C\n#### Bin 12\n",
+        "# Watering\nWater daily.\n",
     )
 
 
 def test_publishing_again_after_the_headings_moved_changes_nothing(tmp_path: Path) -> None:
     transport = FakeTransport()
-    path = _published_then_rewritten(
-        tmp_path, transport, blocks=_garden_with_zone_and_bin_headings_in_planting()
-    )
+    path = _garden_published_then_given_a_deep_heading_in(tmp_path, transport, "planting")
     _publish(path, transport)
     transport.forget_calls()
 
     assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
 
 
+def test_a_deep_heading_in_a_split_section_moves_only_that_sections_own_page(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path, blocks=_garden_with_watering(deep_in="tools"))
+
+    assert (
+        list(_drafted(path, "tools").sections.values()),
+        _drafted(path).sections["planting"],
+        _drafted(path).sections["watering"],
+    ) == (
+        [LEGEND_TEXT, '# Tools\n<span color="blue">**api**</span>\n- Spade.\n### Zone C\n#### Bin 12\n'],
+        "## Planting\nSow in spring.\n",
+        "## Watering\nWater daily.\n",
+    )
+
+
 def test_a_split_sections_own_page_decides_its_heading_shift_on_what_that_page_holds(tmp_path: Path) -> None:
-    path = write_garden_report(tmp_path, blocks=_garden_with_zone_and_bin_headings_in_planting())
+    path = write_garden_report(tmp_path, blocks=_garden_with_watering(deep_in="planting"))
 
     assert list(_drafted(path, "tools").sections.values()) == [LEGEND_TEXT, TOOLS_TEXT]
 
