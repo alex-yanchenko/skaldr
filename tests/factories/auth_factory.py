@@ -11,6 +11,7 @@ from queue import Empty, SimpleQueue
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
+import keyring
 import pytest
 from keyring.backend import KeyringBackend
 from keyring.backends import null
@@ -18,7 +19,7 @@ from keyring.compat import properties
 from keyring.errors import KeyringError, PasswordDeleteError
 from typing_extensions import override
 
-from skaldr.auth import store
+from skaldr.auth import store, templates
 from skaldr.auth.store import (
     CredentialsT,
     JiraCredentials,
@@ -34,6 +35,8 @@ OTHER_WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
 HEX_WORKSPACE_ID = "abcdef01-2345-4678-89ab-cdef01234567"
 SITE_WITH_A_PASSWORD = "https://a:secret-password@b.atlassian.net"
 SITE_ON_ANOTHER_PORT = "https://example.atlassian.net:8443"
+REAL_LOCK_FILE = store.lock_file
+REAL_TEMPLATE_FILE = templates.template_file
 CREDENTIAL_ENVIRONMENT_VARIABLES = (
     "NOTION_ACCESS_TOKEN",
     "NOTION_CLIENT_ID",
@@ -52,6 +55,10 @@ def rendered_traceback(error: BaseException) -> str:
 def assert_secret_not_in_error_chain(error: BaseException, secret: str) -> None:
     secret_is_shown = secret in rendered_traceback(error)
     assert (secret_is_shown, error.__cause__, error.__context__) == (False, None, None)
+
+
+class UnsafeTestHelperCallError(RuntimeError):
+    pass
 
 
 class InMemoryKeyring(KeyringBackend):
@@ -449,7 +456,27 @@ def stored_entry(
     return StoredEntry(service, username, credentials, raw)
 
 
+def refuse_outside_the_tests_setup(helper: str) -> None:
+    found = keyring.get_keyring()
+    if not isinstance(found, InMemoryKeyring):
+        raise UnsafeTestHelperCallError(
+            f"{helper} refused: the keyring backend is {type(found).__module__}.{type(found).__qualname__}, "
+            "not an InMemoryKeyring; run the tests through pytest so tests/conftest.py installs one"
+        )
+    state_locations = (
+        ("skaldr.auth.store.lock_file", store.lock_file, REAL_LOCK_FILE),
+        ("skaldr.auth.templates.template_file", templates.template_file, REAL_TEMPLATE_FILE),
+    )
+    for name, redirected, real in state_locations:
+        if redirected is real:
+            raise UnsafeTestHelperCallError(
+                f"{helper} refused: {name} still points at skaldr's real state directory; run the tests "
+                "through pytest so tests/conftest.py redirects it"
+            )
+
+
 def seed_notion(credentials: NotionCredentials) -> None:
+    refuse_outside_the_tests_setup("seed_notion")
     save_notion_returning_the_replaced(credentials)
 
 

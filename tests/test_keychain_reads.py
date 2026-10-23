@@ -44,6 +44,7 @@ from tests.factories.auth_factory import (
     make_jira_credentials,
     make_notion_credentials,
     make_slack_credentials,
+    refuse_outside_the_tests_setup,
     stored_entry,
 )
 from tests.factories.jira_factory import FakeJira
@@ -114,6 +115,7 @@ def _counting_keyring() -> CountingKeyring:
 
 
 def _sign_in_to_every_service(sign_ins_per_service: int) -> None:
+    refuse_outside_the_tests_setup("_sign_in_to_every_service")
     store.save_notion_returning_the_replaced(make_notion_credentials())
     store.save_jira(make_jira_credentials())
     store.save_slack(make_slack_credentials())
@@ -520,6 +522,7 @@ def test_forgetting_a_sign_in_keeps_an_index_entry_another_skaldr_added_meanwhil
 
 
 def _three_notion_sign_ins() -> None:
+    refuse_outside_the_tests_setup("_three_notion_sign_ins")
     for workspace_id, name in (
         (WORKSPACE_ID, "Alpha"),
         (OTHER_WORKSPACE_ID, "Beta"),
