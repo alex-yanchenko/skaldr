@@ -16,13 +16,14 @@ class KnownPeople:
     def __init__(self, api: NotionApi) -> None:
         self._api = api
         self._notion_knows: dict[str, bool] = {}
+        self._connection_reads_users: bool | None = None
 
     def as_written(self, text: str) -> str:
         return CODE_OR_PERSON_MENTION.sub(self._mention_or_label, text)
 
     def _mention_or_label(self, found: re.Match[str]) -> str:
         user_id = found.group("id")
-        if user_id is None:
+        if user_id is None or self._connection_reads_users is False:
             return found.group(0)
         label = found.group("label")
         knows = self._notion_knows.get(user_id)
@@ -40,9 +41,29 @@ class KnownPeople:
         try:
             self._api.user(user_id)
         except ItemNotFoundError:
-            self._notion_knows[user_id] = False
-            return False
+            return self._no_such_user_if_the_connection_can_tell(user_id)
         except ConnectorError:
             return None
         self._notion_knows[user_id] = True
         return True
+
+    def _no_such_user_if_the_connection_can_tell(self, user_id: str) -> bool | None:
+        if not self._connection_can_read_users():
+            return None
+        self._notion_knows[user_id] = False
+        return False
+
+    def _connection_can_read_users(self) -> bool:
+        if self._connection_reads_users is None:
+            try:
+                self._api.first_user()
+            except ConnectorError:
+                self._connection_reads_users = False
+                print(
+                    "warning: skaldr could not check the people on this page because the Notion connection "
+                    "cannot read user information, so mentions are written as they are",
+                    file=sys.stderr,
+                )
+            else:
+                self._connection_reads_users = True
+        return self._connection_reads_users

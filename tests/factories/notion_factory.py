@@ -180,6 +180,7 @@ class InMemoryNotion:
     data_source_counts: dict[str, int] = field(default_factory=dict[str, int])
     other_blocks: dict[str, str] = field(default_factory=dict[str, str])
     users: dict[str, str] = field(default_factory=dict[str, str])
+    can_read_users: bool = True
     seconds_per_edit: int = 60
     polls_before_a_task_finishes: int = 0
     _unfinished_polls: dict[str, int] = field(default_factory=dict[str, int])
@@ -318,6 +319,8 @@ class InMemoryNotion:
     def _route(self, method: str, path: str, body: dict[str, Any]) -> httpx2.Response:
         if (method, path) == ("POST", "/v1/pages"):
             return self._create(body)
+        if (method, path) == ("GET", "/v1/users"):
+            return self._user_list()
         user = USER_PATH.fullmatch(path)
         if method == "GET" and user is not None:
             return self._user(user.group(1))
@@ -336,9 +339,15 @@ class InMemoryNotion:
                 return handler(method, found.group(1), body)
         return _error(400, "invalid_request_url", f"no route for {method} {path}")
 
+    def _user_list(self) -> httpx2.Response:
+        if not self.can_read_users:
+            return _error(403, "restricted_resource", "Insufficient permissions for this endpoint.")
+        results = [{"object": "user", "id": user_id, "name": name} for user_id, name in self.users.items()]
+        return httpx2.Response(200, json={"object": "list", "results": results[:1], "has_more": False})
+
     def _user(self, user_id: str) -> httpx2.Response:
         name = self.users.get(user_id)
-        if name is None:
+        if name is None or not self.can_read_users:
             return _error(404, "object_not_found", "Could not find user.")
         return httpx2.Response(200, json={"object": "user", "id": user_id, "type": "person", "name": name})
 

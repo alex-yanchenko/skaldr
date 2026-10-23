@@ -225,6 +225,55 @@ def test_a_sign_in_notion_refuses_while_asking_about_a_person_stops_the_write() 
         people.as_written(_mention(STRANGER_ID, "Grace"))
 
 
+def _user_list_reads(notion: InMemoryNotion) -> list[str]:
+    return [request.url.path for request in notion.requests if request.url.path == "/v1/users"]
+
+
+def test_whether_the_connection_can_read_users_is_asked_once_before_the_first_no_such_user() -> None:
+    notion = _notion()
+    sections = {
+        "intro": f"{_mention(STRANGER_ID, 'Grace')} and {_mention(OTHER_STRANGER_ID, 'Linus')}\n",
+        "tools": f"{_mention(STRANGER_ID, 'Grace')}\n",
+    }
+
+    _, created = _created(notion, sections)
+
+    assert (
+        notion.markdown_of(created.item_id),
+        [request.url.path for request in notion.requests if request.url.path.startswith("/v1/users")],
+    ) == (
+        f"Grace and Linus\nGrace\n{STAMP_LINE}",
+        [f"/v1/users/{STRANGER_ID}", "/v1/users", f"/v1/users/{OTHER_STRANGER_ID}"],
+    )
+
+
+def test_a_connection_that_cannot_read_users_keeps_every_mention_and_says_so_once(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    notion = _notion()
+    notion.can_read_users = False
+    sections = {
+        "intro": f"{_mention(PERSON_ID, 'Ada')} and {_mention(STRANGER_ID, 'Grace')}\n",
+        "tools": f"{_mention(OTHER_STRANGER_ID, 'Linus')}\n",
+    }
+
+    _, created = _created(notion, sections)
+
+    assert (
+        notion.markdown_of(created.item_id),
+        _user_reads(notion),
+        _user_list_reads(notion),
+        capsys.readouterr().err,
+    ) == (
+        f"{_mention(PERSON_ID, 'Ada')} and {_mention(STRANGER_ID, 'Grace')}\n"
+        f"{_mention(OTHER_STRANGER_ID, 'Linus')}\n{STAMP_LINE}",
+        [f"/v1/users/{PERSON_ID}"],
+        ["/v1/users"],
+        "warning: skaldr could not check the people on this page because the Notion connection cannot "
+        "read user information, so mentions are written as they are\n",
+    )
+
+
 def test_a_person_notion_fails_to_answer_for_is_left_a_mention() -> None:
     notion = _notion()
     refusal = {"object": "error", "code": "restricted_resource", "message": "No."}
