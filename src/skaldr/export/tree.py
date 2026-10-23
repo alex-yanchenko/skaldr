@@ -263,6 +263,7 @@ class LabelledValue:
 @dataclass(frozen=True)
 class FactStrip:
     facts: tuple[LabelledValue, ...]
+    of_section_fields: bool = False
     authored_at: str | None = field(default=None, compare=False)
 
 

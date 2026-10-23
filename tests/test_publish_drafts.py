@@ -66,6 +66,7 @@ def test_an_unsplit_target_is_one_item_holding_every_region_of_the_page() -> Non
                 section_part("tools"): "blocks[1]",
                 section_part("planting"): "blocks[2]",
             },
+            "Garden handbook",
         ),
         (),
     )
@@ -102,6 +103,7 @@ def test_a_split_parent_keeps_the_contents_and_each_item_lists_only_the_badges_i
                 section_part(INTRO_KEY): "blocks[0]",
                 section_part("planting"): "blocks[2]",
             },
+            "Garden handbook",
         ),
         (
             ItemDraft(
@@ -119,6 +121,7 @@ def test_a_split_parent_keeps_the_contents_and_each_item_lists_only_the_badges_i
                     section_part("page legend"): "badges",
                     section_part("tools"): "blocks[1]",
                 },
+                "Tools",
             ),
         ),
     )
@@ -129,6 +132,7 @@ def _without_the_look(draft: ItemDraft) -> ItemDraft:
         draft.section_id,
         draft.content.model_copy(update={"icon": None, "cover": None}),
         {part: path for part, path in draft.paths.items() if part not in (ICON, COVER)},
+        draft.title_without_icon,
     )
 
 

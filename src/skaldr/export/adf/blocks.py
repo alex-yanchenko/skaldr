@@ -53,7 +53,8 @@ from skaldr.export.adf.nodes import (
     AdfText,
 )
 from skaldr.export.apportion import apportioned, apportioned_at_least
-from skaldr.export.folds import folded, link_card_detail
+from skaldr.export.folds import folded, link_card_detail, reference_runs
+from skaldr.export.glyphs import cover_link_paragraph
 from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, StatusMark, export_visible_text
 from skaldr.export.swaps import (
@@ -89,6 +90,7 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    References,
     TableCell,
     TableColumn,
     TableNode,
@@ -102,7 +104,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import Link, Plain
+from skaldr.richtext import Plain
 
 Container = Literal["doc", "panel", "expand", "nested_expand", "cell", "list item", "quote"]
 
@@ -133,7 +135,6 @@ UNSHARED_COLUMN_MINIMUM_SHARE: Final = 0.1
 MINIMUM_COLUMN_WIDTH: Final = 60
 DECISION_MARK_SEPARATOR: Final = " "
 MOST_TOGGLE_LEVELS_IN_A_CELL: Final = 1
-COVER_LABEL: Final = "Cover image"
 WHEN_COLUMN: Final = "When"
 STATE_COLUMN: Final = "State"
 WHAT_COLUMN: Final = "What"
@@ -354,6 +355,8 @@ class _AdfBlocks:
         match node:
             case FactStrip() | KeyValueList() | DefinitionList() | Cards() | Timeline():
                 return self.table_blocks(node) if "table" in allowed else None
+            case References():
+                return self.reference_blocks(node)
             case LinkCard():
                 return self.link_card_blocks(node) if _CARDS_BY_DISPLAY[node.display] in allowed else None
             case Toggle() if node.open and _expand_type(container) in allowed:
@@ -595,6 +598,8 @@ class _AdfBlocks:
         self, node: FactStrip | KeyValueList | DefinitionList | Cards | Timeline
     ) -> list[AdfBlock]:
         match node:
+            case FactStrip() if node.of_section_fields:
+                return self.labelled_rows(node.facts)
             case FactStrip():
                 return self.fact_strip_blocks(node)
             case KeyValueList():
@@ -605,6 +610,19 @@ class _AdfBlocks:
                 return self.cards_blocks(node)
             case Timeline():
                 return self.timeline_blocks(node)
+
+    def reference_blocks(self, node: References) -> list[AdfBlock]:
+        in_citation_order = sorted(node.entries, key=lambda entry: entry.number)
+        runs = groupby(enumerate(in_citation_order), key=lambda numbered: numbered[1].number - numbered[0])
+        blocks: list[AdfBlock] = []
+        for _, run in runs:
+            entries = [entry for _, entry in run]
+            items = [
+                AdfListItem(type="listItem", content=[self.paragraph(reference_runs(entry))])
+                for entry in entries
+            ]
+            blocks.append(self.listed("number", items, entries[0].number))
+        return blocks
 
     def fact_strip_blocks(self, node: FactStrip) -> list[AdfBlock]:
         if not node.facts:
@@ -703,7 +721,7 @@ def render_adf(nodes: Sequence[Node], issue_links: IssueLinks | None = None) -> 
 
 
 def _cover_link(cover: str | None) -> tuple[Paragraph, ...]:
-    return (Paragraph((Link((Plain(COVER_LABEL),), cover),)),) if cover else ()
+    return (cover_link_paragraph(cover),) if cover else ()
 
 
 def render_adf_document(document: LoweredDocument, issue_links: IssueLinks | None = None) -> AdfDoc:

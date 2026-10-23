@@ -1041,7 +1041,7 @@ FIRST_BLOCK_OF_EACH_NODE_TYPE: Mapping[type, str] = {
     Cards: "table",
     Timeline: "table",
     LinkCard: "blockCard",
-    References: "bulletList",
+    References: "orderedList",
 }
 NODES_WRITING_A_FIRST_BLOCK = {
     kind: node for kind, node in MINIMAL_NODES.items() if kind is not TableOfContents

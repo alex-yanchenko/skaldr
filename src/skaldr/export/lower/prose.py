@@ -94,7 +94,11 @@ def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> li
     facts = compute.section_facts(fields, lowering.section_titles)
     if not facts:
         return []
-    return [FactStrip(tuple(LabelledValue(fact.label, _fact_values(fact)) for fact in facts))]
+    return [
+        FactStrip(
+            tuple(LabelledValue(fact.label, _fact_values(fact)) for fact in facts), of_section_fields=True
+        )
+    ]
 
 
 def _fact_values(fact: compute.SectionFact) -> ExportRich:

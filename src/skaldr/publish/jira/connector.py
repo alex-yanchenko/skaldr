@@ -66,6 +66,10 @@ class JiraConnector:
         return False
 
     @property
+    def writes_look_as_words(self) -> bool:
+        return True
+
+    @property
     def export_target(self) -> ExportTarget:
         return "adf"
 

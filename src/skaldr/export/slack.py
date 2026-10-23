@@ -16,7 +16,12 @@ from skaldr.export.capabilities import (
     in_unicode_script_form,
 )
 from skaldr.export.folds import card_text, folded, link_card_detail, quote_lines
-from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
+from skaldr.export.glyphs import (
+    callout_icon,
+    cover_link_paragraph,
+    tab_title_led_by_its_icon,
+    title_led_by_its_icon,
+)
 from skaldr.export.inline import ZERO_WIDTH_SPACE, bold, plain
 from skaldr.export.lower.context import spaced as spaced_runs
 from skaldr.export.lower.context import with_bold_label
@@ -72,7 +77,7 @@ from skaldr.export.tree import (
 )
 from skaldr.export_targets import SLACK_TARGET
 from skaldr.models import MEDIA_KIND_LABELS, Person
-from skaldr.richtext import Link, MarkerStyle, Plain, ScriptPosition
+from skaldr.richtext import MarkerStyle, Plain, ScriptPosition
 from skaldr.typed_links import date_target_text
 
 # external:slack canvases.create and canvases.edit limit markdown to "1 MiB (1,048,576 characters)"
@@ -98,7 +103,6 @@ CELL_TEXT_BULLET: Final = "• "
 CELL_TEXT_CHECK: Final = "☐ "
 CELL_LIST_INDENT: Final = "  "
 FACT_SEPARATOR: Final = " · "
-COVER_LINK_LABEL: Final = "Cover image"
 Place = Literal["top", "callout", "column"]
 OwnFormNode = FactStrip | DefinitionList | Cards | LinkCard
 CanvasNode = GenericNode | OwnFormNode
@@ -657,11 +661,11 @@ def render_slack_regions(document: LoweredDocument) -> tuple[str, ...]:
 
 
 def canvas_title(document: LoweredDocument) -> str:
-    return f"{document.icon} {document.title}" if document.icon else document.title
+    return title_led_by_its_icon(document.title, document.icon)
 
 
 def render_slack_document(document: LoweredDocument) -> str:
-    cover = (Paragraph((Link(plain(COVER_LINK_LABEL), document.cover),)),) if document.cover else ()
+    cover = (cover_link_paragraph(document.cover),) if document.cover else ()
     return render_slack((*cover, *document.body))
 
 

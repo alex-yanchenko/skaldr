@@ -14,10 +14,11 @@ from skaldr.export.runs import (
     StatusMark,
     SwimlaneMark,
 )
-from skaldr.export.tree import Callout, Tab, ToneName
+from skaldr.export.tree import Callout, Paragraph, Tab, ToneName
 from skaldr.models import StatusState, SwimlaneStepState, ToneLiteral
-from skaldr.richtext import Plain
+from skaldr.richtext import Link, Plain
 
+COVER_LINK_LABEL: Final = "Cover image"
 CALLOUT_ICON: Final[Mapping[ToneName, str]] = {
     "info": "💡",
     "success": "✅",
@@ -51,6 +52,14 @@ def tab_title_led_by_its_icon(tab: Tab) -> ExportRich:
     if icon is None:
         return tab.title
     return (Plain(f"{icon} "), *tab.title) if tab.title else (Plain(icon),)
+
+
+def title_led_by_its_icon(title: str, icon: str | None) -> str:
+    return f"{icon} {title}" if icon else title
+
+
+def cover_link_paragraph(cover: str) -> Paragraph:
+    return Paragraph((Link((Plain(COVER_LINK_LABEL),), cover),))
 
 
 def status_glyph(state: StatusState) -> str:

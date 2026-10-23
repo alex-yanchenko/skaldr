@@ -33,8 +33,10 @@ from skaldr.export.tree import (
     Toggle,
 )
 from skaldr.models import Report, parse_report
-from skaldr.richtext import Plain
+from skaldr.richtext import Link, Plain
 from tests.factories import API_BADGES, make_report, make_section, make_table
+
+COVER_URL = "https://example.com/cover.png"
 
 INTRO = BlockRegion(0, (Paragraph(plain("Intro.")),))
 SET_UP = BlockRegion(
@@ -286,6 +288,38 @@ def test_every_item_page_carries_the_icon_and_only_the_document_item_the_cover(
     )
 
     assert (page.title, page.icon, page.cover) == ("Item", "\U0001f9ea", cover)
+
+
+@pytest.mark.parametrize(
+    ("opens_the_document", "leading_parts"),
+    [
+        (True, (PagePart("header", (Paragraph((Link(plain("Cover image"), COVER_URL),)),)),)),
+        (False, ()),
+    ],
+    ids=["document item", "split child item"],
+)
+def test_a_look_written_as_words_leads_the_title_with_the_icon_and_opens_the_document_with_a_cover_link(
+    opens_the_document: bool, leading_parts: tuple[PagePart, ...]
+) -> None:
+    meta = {"title": "T", "icon": "\U0001f9ea", "cover": COVER_URL}
+    lowering = lowering_for(parse_report(make_report(meta=meta)))
+    region = lower_region(lowering, 0)
+
+    page = assemble_item_page(
+        "Item", [region], lowering, opens_the_document=opens_the_document, writes_look_as_words=True
+    )
+
+    assert page == LoweredDocument("\U0001f9ea Item", (*leading_parts, region))
+
+
+def test_a_look_written_as_words_keeps_a_title_when_there_is_no_icon() -> None:
+    lowering = lowering_for(parse_report(make_report(meta={"title": "T", "cover": COVER_URL})))
+
+    page = assemble_item_page(
+        "Item", [lower_region(lowering, 0)], lowering, opens_the_document=False, writes_look_as_words=True
+    )
+
+    assert page.title == "Item"
 
 
 def test_a_region_that_writes_nothing_slices_to_an_empty_text() -> None:
