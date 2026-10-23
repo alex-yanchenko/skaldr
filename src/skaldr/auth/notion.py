@@ -407,7 +407,7 @@ class NotionSession:
 def _stored_for_the_same_workspace(credentials: NotionCredentials) -> NotionCredentials | None:
     if credentials.workspace_id is None:
         return None
-    entry = find_notion(str(credentials.workspace_id))
+    entry = find_notion(str(credentials.workspace_id), reread=True)
     return None if entry is None else entry.credentials
 
 

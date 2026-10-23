@@ -36,6 +36,7 @@ from skaldr.auth.store import (
     normalise_site,
     notion_client_from_environment,
     notion_from_environment,
+    reading_each_keychain_item_once,
     refuse_an_unusable_keychain,
     save_jira,
     save_slack,
@@ -387,14 +388,15 @@ def _print_status() -> int:
         ("slack", _slack_status_lines),
     )
     exit_code = 0
-    for service, describe in sections:
-        try:
-            lines = describe()
-        except AuthError as exc:
-            lines = [_StatusLine(f"error: {exc}", failed=True)]
-        for line in lines:
-            exit_code = exit_code or int(line.failed)
-            print(f"{service:<8}{line.text}")
+    with reading_each_keychain_item_once():
+        for service, describe in sections:
+            try:
+                lines = describe()
+            except AuthError as exc:
+                lines = [_StatusLine(f"error: {exc}", failed=True)]
+            for line in lines:
+                exit_code = exit_code or int(line.failed)
+                print(f"{service:<8}{line.text}")
     return exit_code
 
 

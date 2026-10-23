@@ -240,6 +240,7 @@ def save_notion_returning_the_replaced(credentials: NotionCredentials) -> Notion
     username = _username(_NOTION, credentials)
 
     def look_up_then_write() -> NotionReplacement:
+        _discard_the_reads_so_far()
         entries = _entries(_NOTION)
         replacement = NotionReplacement(
             entry_for_workspace(entries, credentials.workspace_id) or _entry_named(_NOTION, workspace),
@@ -381,7 +382,11 @@ def _find_jira_among(
     return found
 
 
-def find_notion(workspace: str | None = None) -> StoredEntry[NotionCredentials] | None:
+def find_notion(
+    workspace: str | None = None, *, reread: bool = False
+) -> StoredEntry[NotionCredentials] | None:
+    if reread:
+        _discard_the_reads_so_far()
     wanted = None if workspace is None else _canonical_workspace_selector(workspace)
     found = _the_only_workspace(_NOTION, stored_notion_sign_ins(), wanted)
     if found is None and wanted is not None and _is_uuid(wanted):
@@ -442,7 +447,7 @@ def notion_client_from_environment() -> tuple[str | None, str | None]:
 
 def forget(entry: AnyStoredEntry) -> bool:
     def delete_unless_changed_then_unlist() -> bool:
-        stored = _get(entry.username)
+        stored = _get_afresh(entry.username)
         if stored is not None and stored != entry.raw:
             return False
         _delete(entry.username)
@@ -513,25 +518,72 @@ def _operation_backend() -> KeyringBackend:
     return cast("KeyringBackend", _operation.backend)
 
 
+@dataclass
+class _ReadsOfOneCommand:
+    remembered: dict[str, str | None] | None = None
+
+
+_command_reads = _ReadsOfOneCommand()
+
+
+@contextmanager
+def reading_each_keychain_item_once() -> Generator[None, None, None]:
+    if _command_reads.remembered is not None:
+        yield
+        return
+    _command_reads.remembered = {}
+    try:
+        yield
+    finally:
+        _command_reads.remembered = None
+
+
+def _discard_the_reads_so_far() -> None:
+    if _command_reads.remembered is not None:
+        _command_reads.remembered.clear()
+
+
+def _remember(username: str, stored: str | None) -> None:
+    if _command_reads.remembered is not None:
+        _command_reads.remembered[username] = stored
+
+
+def _forget_the_read_of(username: str) -> None:
+    if _command_reads.remembered is not None:
+        _command_reads.remembered.pop(username, None)
+
+
 def _get(username: str) -> str | None:
-    return _operation_backend().get_password(KEYCHAIN_SERVICE, username)
+    remembered = _command_reads.remembered
+    if remembered is not None and username in remembered:
+        return remembered[username]
+    stored = _operation_backend().get_password(KEYCHAIN_SERVICE, username)
+    _remember(username, stored)
+    return stored
+
+
+def _get_afresh(username: str) -> str | None:
+    _forget_the_read_of(username)
+    return _get(username)
 
 
 def _set(username: str, secret: str) -> None:
     backend = _operation_backend()
     _refuse_an_insecure_backend(backend)
+    _forget_the_read_of(username)
     backend.set_password(KEYCHAIN_SERVICE, username, secret)  # pyright: ignore[reportUnknownMemberType]
+    _remember(username, secret)
 
 
 def _delete(username: str) -> None:
-    try:
+    _forget_the_read_of(username)
+    with suppress(PasswordDeleteError):
         _operation_backend().delete_password(KEYCHAIN_SERVICE, username)
-    except PasswordDeleteError:
-        return
+    _remember(username, None)
 
 
-def _read_index() -> dict[Service, list[str]]:
-    stored = _get(KEYCHAIN_INDEX_USERNAME)
+def _read_index(*, afresh: bool = False) -> dict[Service, list[str]]:
+    stored = _get_afresh(KEYCHAIN_INDEX_USERNAME) if afresh else _get(KEYCHAIN_INDEX_USERNAME)
     if stored is None:
         return {service: [] for service in sorted(SERVICES)}
     with CaughtWithoutChaining(ValidationError):
@@ -554,14 +606,14 @@ def _write_index(index: dict[Service, list[str]]) -> None:
 
 
 def _list(service: Service, username: str) -> None:
-    index = _read_index()
+    index = _read_index(afresh=True)
     if username not in index[service]:
         index[service].append(username)
         _write_index(index)
 
 
 def _unlist(service: Service, username: str) -> None:
-    index = _read_index()
+    index = _read_index(afresh=True)
     if username in index[service]:
         index[service].remove(username)
         _write_index(index)

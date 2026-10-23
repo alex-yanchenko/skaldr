@@ -2,6 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from skaldr.auth.store import reading_each_keychain_item_once
 from skaldr.errors import AuthError, ConnectorError, PublishError, ReportError
 from skaldr.publish.connector import ConnectorRegistry
 from skaldr.publish.engine import (
@@ -125,7 +126,8 @@ def main(argv: list[str], *, registry: ConnectorRegistry | None = None) -> int:
     if args.command == "publish" and args.overwrite and not args.apply:
         publish_parser.error("--overwrite replaces remote edits while publishing, so it needs --apply")
     try:
-        return _run(args, registry if registry is not None else installed_connectors())
+        with reading_each_keychain_item_once():
+            return _run(args, registry if registry is not None else installed_connectors())
     except (ReportError, PublishError, ConnectorError, AuthError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
