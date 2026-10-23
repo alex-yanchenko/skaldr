@@ -39,6 +39,7 @@ from skaldr.publish.notion.page_markdown import (
     section_replacement,
     stamp_line,
 )
+from skaldr.publish.notion.people import KnownPeople
 from skaldr.publish.notion.properties import (
     TITLE_PROPERTY_ID,
     property_fields,
@@ -205,6 +206,7 @@ class NotionTransport:
         self, api: NotionApi, workspace_template: Callable[[], str | None] = _no_workspace_template
     ) -> None:
         self._api = api
+        self._people = KnownPeople(api)
         self._workspace_template = workspace_template
         self._read = ReadLayouts()
         self._editor_names: dict[str, str] = {}
@@ -215,8 +217,12 @@ class NotionTransport:
     def _workspace_template_page(self) -> str | None:
         return self._workspace_template()
 
+    def _sections_as_written(self, sections: Mapping[str, str]) -> dict[str, str]:
+        return {key: self._people.as_written(text) for key, text in sections.items()}
+
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
-        return comparable_sections(content, comparable_text)
+        written = content.model_copy(update={"sections": self._sections_as_written(content.sections)})
+        return comparable_sections(written, comparable_text)
 
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         page = self._live_page(item_id)
@@ -229,7 +235,7 @@ class NotionTransport:
         if request.into_id is not None:
             return self._create_into(request.into_id, request)
         stamp = stamp_line(request.stamp)
-        batches = _create_batches(list(request.content.sections.values()), stamp)
+        batches = _create_batches(list(self._sections_as_written(request.content.sections).values()), stamp)
         body = _with_nothing_sent(lambda: self._create_body(request, batches[0], stamp))
         templated = _is_templated(body)
         page = refused_when_not_found(lambda: self._api.create_page(body, asynchronous=not templated))
@@ -257,7 +263,7 @@ class NotionTransport:
             kept = carried_into(current[change.key], "") or None
         else:
             follows = change.follows
-            kept = carried_into(current.get(change.key, ""), change.text)
+            kept = carried_into(current.get(change.key, ""), self._people.as_written(change.text))
         after = list(placed_section(current, change.key, kept, follows).items())
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
         replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
@@ -273,7 +279,10 @@ class NotionTransport:
         current = keyed.raw_sections
         after = _with_children_of_removed_sections(
             current,
-            [(key, carried_into(current.get(key, ""), text)) for key, text in request.sections.items()],
+            [
+                (key, carried_into(current.get(key, ""), text))
+                for key, text in self._sections_as_written(request.sections).items()
+            ],
         )
         replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
         if replacement is None:
@@ -581,7 +590,7 @@ class NotionTransport:
     def _create_into(self, item_id: str, request: NewItem) -> RemoteItem:
         content = request.content
         stamp = stamp_line(request.stamp)
-        batches = _create_batches(list(content.sections.values()), stamp)
+        batches = _create_batches(list(self._sections_as_written(content.sections).values()), stamp)
         page_request = _with_nothing_sent(lambda: self._into_page_request(item_id, request))
         refused_when_not_found(
             lambda: self._api.update_markdown(item_id, _replace_content(joined([*batches[0], stamp])))
