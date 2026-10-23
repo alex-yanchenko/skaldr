@@ -436,7 +436,7 @@ class _MarkdownWriter:
         return quoted(lines)
 
     def media_lines(self, node: Media) -> list[str]:
-        url = self.image_names[node.url] if node.url in self.image_names else web_address_of(node, "markdown")
+        url = self.image_names.get(node.url) or web_address_of(node, "markdown")
         if node.kind == "image":
             image = f"![{self.inline(node.description)}]({encode_url(url)})"
             caption = [styled("italic", self.inline(node.caption))] if node.caption else []

@@ -364,8 +364,12 @@ card links to the URL. An `image` needs `alt`, and a blank `alt` fails the build
 with `http://` or `https://` and may not hold a username or password. A `media` block takes http(s)
 URLs only. The GitHub-flavored export decodes an `image` with a `data:` source to a file beside
 `page.md`, named by order (`image-1.png`, `image-2.jpg`, with the extension of its media type: png,
-jpeg, gif, webp, svg+xml, avif or bmp) and written as `![alt](image-1.png)`; it refuses a `data:` URI
-of another media type or with a payload that does not decode. The Notion, ADF and Slack canvas exports
+jpeg, gif, webp, svg+xml, avif or bmp) and written as `![alt](image-1.png)`. The file holds exactly
+the decoded bytes (an SVG keeps its content as it is). skaldr decodes the payload strictly, base64
+(line breaks and spaces YAML folds into a long string are ignored, any other character outside the
+base64 alphabet fails) or percent-encoded, and checks that the bytes are the type the URI names
+(the file's signature, or an `svg` root element for svg+xml). It refuses a `data:` URI of another
+media type, with a payload that does not decode, or whose bytes are another type. The Notion, ADF and Slack canvas exports
 refuse an `image` with a `data:` source, since none of them can show one; in a document you export
 to them, host the image and give its https address (for a Slack canvas, upload it to Slack and give
 its permalink).
@@ -1590,7 +1594,7 @@ The GitHub-flavored export refuses:
 - **colour span** and **colour and highlight span**: GitHub cannot colour text; write the text without the colour or export the document elsewhere.
 - **range**: GitHub cannot draw a range bar; use a meter or a table.
 - **link, citation, math or strikethrough in a flow or fan step's note**: GitHub cannot show a link, citation, inline math, struck-through text, or a subscript or superscript with no Unicode form in a step's note, since a Mermaid label holds plain text only (the Slack canvas section lists the characters that have a Unicode form); write the note as plain text and put the rest in a text block after the diagram. Any other mark in a note, such as bold, italic, underline, a colour or inline code, keeps its characters and loses its formatting.
-- **image from a data: URI that GitHub cannot write as a file**: GitHub cannot write an image from a data: URI as a file when its media type is not a png, jpeg, gif, webp, svg+xml, avif or bmp image or its payload does not decode; give a data: URI holding a png, jpeg, gif, webp, svg+xml, avif or bmp image, or host the image and give its https address.
+- **image from a data: URI that GitHub cannot write as a file**: GitHub cannot write an image from a data: URI as a file when its media type is not a png, jpeg, gif, webp, svg+xml, avif or bmp image, its payload does not decode, or its payload is not an image of the type it names; give a data: URI holding a png, jpeg, gif, webp, svg+xml, avif or bmp image, or host the image and give its https address.
 
 The Notion export refuses:
 

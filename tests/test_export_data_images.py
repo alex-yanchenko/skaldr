@@ -5,8 +5,37 @@ from typing import Any
 
 import pytest
 
+from skaldr.cli import main
 from skaldr.errors import ExportRejectedError, ReportError
 from skaldr.export import EXPORT_MANIFEST, ExportResult, ExportTarget, export_markdown, render_export
+from skaldr.export.data_images import (
+    IMAGE_FILE_EXTENSIONS,
+    DataImage,
+    ImageFile,
+    UnwritableDataImage,
+    data_image_files,
+    read_data_image,
+)
+from skaldr.export.inline import plain
+from skaldr.export.markdown import render_markdown
+from skaldr.export.tree import (
+    Callout,
+    Columns,
+    Definition,
+    DefinitionList,
+    Diagram,
+    GridColumn,
+    ListEntry,
+    ListNode,
+    Media,
+    Node,
+    PieChart,
+    PieSlice,
+    Quote,
+    Tab,
+    Tabs,
+    Toggle,
+)
 from skaldr.models import load_report, parse_report
 from tests.factories import make_report, write_report
 
@@ -33,7 +62,7 @@ def _exported(tmp_path: Path, blocks: list[dict[str, Any]]) -> tuple[ExportResul
 
 
 def _folder_bytes(folder: Path) -> dict[str, bytes]:
-    return {path.name: path.read_bytes() for path in sorted(folder.iterdir())}
+    return {path.name: path.read_bytes() for path in sorted(folder.iterdir()) if path.name != EXPORT_MANIFEST}
 
 
 def _manifest_files(folder: Path) -> list[str]:
@@ -46,7 +75,6 @@ def test_a_data_image_is_written_as_a_sibling_file_the_page_links_by_name(tmp_pa
     assert (result.files, _folder_bytes(out_dir), _manifest_files(out_dir)) == (
         (out_dir / "image-1.png", out_dir / "page.md"),
         {
-            EXPORT_MANIFEST: (out_dir / EXPORT_MANIFEST).read_bytes(),
             "image-1.png": PNG_BYTES,
             "page.md": b"# Test Report\n\n![Aisle 12](image-1.png)\n",
         },
@@ -208,3 +236,171 @@ def test_a_data_uri_the_other_targets_cannot_show_is_refused_as_an_image_from_a_
         render_export(report, target)
 
     assert "cannot show an image from a data: URI" in str(raised.value)
+
+
+def _unwritable(src: str) -> UnwritableDataImage:
+    read = read_data_image(src)
+    assert isinstance(read, UnwritableDataImage)
+    return read
+
+
+def test_a_payload_with_a_character_outside_the_base64_alphabet_is_refused() -> None:
+    assert _unwritable("data:image/png;base64,AAAA!!") == UnwritableDataImage("its payload does not decode")
+
+
+def test_a_payload_that_decodes_but_is_not_the_claimed_image_is_refused() -> None:
+    not_a_png = "data:image/png;base64," + base64.b64encode(b"just some words").decode("ascii")
+
+    assert _unwritable(not_a_png) == UnwritableDataImage("its payload is not a valid image/png")
+
+
+@pytest.mark.parametrize(
+    ("media_type", "content"),
+    [
+        pytest.param("image/png", PNG_BYTES, id="png"),
+        pytest.param("image/jpeg", JPEG_BYTES, id="jpeg"),
+        pytest.param("image/gif", b"GIF89a-synthetic", id="gif"),
+        pytest.param("image/webp", b"RIFF\x00\x00\x00\x00WEBPsynthetic", id="webp"),
+        pytest.param("image/avif", b"\x00\x00\x00\x1cftypavifsynthetic", id="avif"),
+        pytest.param("image/bmp", b"BMsynthetic", id="bmp"),
+        pytest.param("image/svg+xml", SVG_TEXT.encode("utf-8"), id="svg"),
+    ],
+)
+def test_each_accepted_type_is_read_when_its_bytes_are_that_type(media_type: str, content: bytes) -> None:
+    src = f"data:{media_type};base64," + base64.b64encode(content).decode("ascii")
+
+    assert read_data_image(src) == DataImage(IMAGE_FILE_EXTENSIONS[media_type], content)
+
+
+@pytest.mark.parametrize(
+    "media_type",
+    ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/svg+xml"],
+)
+def test_each_accepted_type_refuses_bytes_that_are_another_type(media_type: str) -> None:
+    src = f"data:{media_type};base64," + base64.b64encode(b"<html></html>").decode("ascii")
+
+    assert _unwritable(src) == UnwritableDataImage(f"its payload is not a valid {media_type}")
+
+
+def test_an_svg_without_an_svg_root_is_refused() -> None:
+    src = "data:image/svg+xml," + "%3Chtml%3E%3C/html%3E"
+
+    assert _unwritable(src) == UnwritableDataImage("its payload is not a valid image/svg+xml")
+
+
+def test_a_percent_encoded_svg_is_read() -> None:
+    assert read_data_image(PERCENT_ENCODED_SVG_URI) == DataImage("svg", SVG_TEXT.encode("utf-8"))
+
+
+def test_base64_folded_across_lines_by_yaml_is_read() -> None:
+    encoded = base64.b64encode(PNG_BYTES).decode("ascii")
+    folded = "data:image/png;base64," + encoded[:8] + " \n\t" + encoded[8:20] + "\r\n" + encoded[20:]
+
+    assert read_data_image(folded) == DataImage("png", PNG_BYTES)
+
+
+@pytest.mark.parametrize(
+    "src",
+    ["file:///etc/hosts", "https://example.com/a.png", "DATA:image/png;base64,AA==", "/etc/hosts", ""],
+)
+def test_read_data_image_refuses_anything_that_is_not_a_data_uri(src: str) -> None:
+    assert _unwritable(src) == UnwritableDataImage("it is not a data: URI")
+
+
+def test_a_re_export_where_the_image_changes_overwrites_the_file(tmp_path: Path) -> None:
+    _, out_dir = _exported(tmp_path, [_image(PNG_URI)])
+    other_png = "data:image/png;base64," + base64.b64encode(PNG_BYTES + b" changed").decode("ascii")
+
+    _exported(tmp_path, [_image(other_png)])
+
+    assert _folder_bytes(out_dir)["image-1.png"] == PNG_BYTES + b" changed"
+
+
+def test_a_re_export_where_two_images_drop_to_one_removes_the_second(tmp_path: Path) -> None:
+    _, out_dir = _exported(tmp_path, [_image(PNG_URI), _image(JPEG_URI, "Dock")])
+
+    _exported(tmp_path, [_image(PNG_URI)])
+
+    assert (sorted(_folder_bytes(out_dir)), _manifest_files(out_dir)) == (
+        ["image-1.png", "page.md"],
+        ["image-1.png", "page.md"],
+    )
+
+
+def _holding(kind: str, image: dict[str, Any]) -> dict[str, Any]:
+    match kind:
+        case "panel":
+            return {"type": "panel", "title": "Plan", "blocks": [image]}
+        case "grid-cell":
+            return {"type": "grid", "cells": [{"span": 6, "blocks": [image]}]}
+        case "walkthrough-step":
+            return {"type": "walkthrough", "steps": [{"label": "Scan", "detail": [image]}]}
+        case _:
+            return {"type": "toggle", "title": "More", "blocks": [image]}
+
+
+@pytest.mark.parametrize("kind", ["panel", "grid-cell", "walkthrough-step", "toggle"])
+def test_an_image_inside_each_block_that_holds_blocks_is_written(tmp_path: Path, kind: str) -> None:
+    _, out_dir = _exported(tmp_path, [_holding(kind, _image(PNG_URI))])
+
+    assert (_folder_bytes(out_dir)["image-1.png"], _manifest_files(out_dir)) == (
+        PNG_BYTES,
+        ["image-1.png", "page.md"],
+    )
+
+
+PHOTO = Media("image", PNG_URI, plain("Aisle 12"))
+THE_NODES_THAT_HOLD_NODES: dict[str, Node] = {
+    "callout": Callout("info", (PHOTO,)),
+    "quote": Quote((PHOTO,)),
+    "toggle": Toggle(plain("More"), None, (PHOTO,)),
+    "columns": Columns((GridColumn(1, (PHOTO,)),)),
+    "tabs": Tabs((Tab(plain("One"), (PHOTO,)),)),
+    "list-entry": ListNode("bullet", (ListEntry(plain("Step"), children=(PHOTO,)),)),
+    "definition": DefinitionList((Definition("Term", (PHOTO,)),)),
+    "diagram-supplement": Diagram(PieChart((PieSlice("A", 1.0, "info"),)), (PHOTO,)),
+}
+
+
+@pytest.mark.parametrize("holder", THE_NODES_THAT_HOLD_NODES.values(), ids=THE_NODES_THAT_HOLD_NODES.keys())
+def test_every_node_that_holds_nodes_is_searched_for_data_images(holder: Node) -> None:
+    assert data_image_files([holder]) == {PNG_URI: ImageFile("image-1.png", PNG_BYTES)}
+
+
+def test_the_writer_names_every_image_the_search_finds_in_a_nested_node() -> None:
+    nodes = list(THE_NODES_THAT_HOLD_NODES.values())
+
+    names = {src: file.name for src, file in data_image_files(nodes).items()}
+
+    assert render_markdown(nodes, names).count("![Aisle 12](image-1.png)") == len(nodes)
+
+
+def test_the_cli_check_reports_one_line_for_a_bad_data_uri(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = write_report(tmp_path, make_report(blocks=[_image("data:text/html;base64,AA==")]))
+
+    exit_code = main(["--check", str(data_path), "--for", "markdown"])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err) == (
+        1,
+        "",
+        f"FAIL  {data_path}: GitHub cannot write an image from a data: URI as a file, since its media type "
+        f"'text/html' is not a {ACCEPTED_TYPES} image, at blocks.0.image; {GIVE_AN_IMAGE_DATA_URI}\n\n"
+        "1 file failed\n",
+    )
+
+
+def test_the_cli_export_prints_an_ok_line_for_each_image_file_and_the_page(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = write_report(tmp_path, make_report(blocks=[_image(PNG_URI), _image(JPEG_URI, "Dock")]))
+    out_dir = tmp_path / "out"
+
+    exit_code = main([str(data_path), "--export", "markdown", "--export-dir", str(out_dir)])
+
+    assert (exit_code, capsys.readouterr().out.splitlines()) == (
+        0,
+        [f"OK  {out_dir / 'image-1.png'}", f"OK  {out_dir / 'image-2.jpg'}", f"OK  {out_dir / 'page.md'}"],
+    )

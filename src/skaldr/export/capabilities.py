@@ -805,7 +805,8 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
                 "GitHub cannot write an image from a data: URI as a file, since {problem}",
                 _GIVE_AN_IMAGE_DATA_URI,
                 in_the_guide="GitHub cannot write an image from a data: URI as a file when its media type "
-                f"is not a {ACCEPTED_IMAGE_TYPES_IN_WORDS} image or its payload does not decode; "
+                f"is not a {ACCEPTED_IMAGE_TYPES_IN_WORDS} image, its payload does not decode, "
+                "or its payload is not an image of the type it names; "
                 f"{_GIVE_AN_IMAGE_DATA_URI}",
             )
         }
