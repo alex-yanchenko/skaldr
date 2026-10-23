@@ -20,6 +20,7 @@ from skaldr.compute import (
 from skaldr.models import Card, Cards, Comparison, MatrixCell, Request, Swimlane, Table, parse_report
 from tests.factories import (
     API_BADGES,
+    EDGE_BADGES,
     make_command_request,
     make_report,
     make_request,
@@ -249,7 +250,7 @@ def test_a_step_needs_the_numbers_of_its_dependencies_once_each_in_order() -> No
     assert swimlane.dependency_numbers(swimlane.steps[3]) == ["2", "1"]
 
 
-def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() -> None:
+def test_a_matrix_cell_shows_its_badge_name_beside_its_own_label() -> None:
     badges = parse_report(make_report(badges=API_BADGES)).badges
     cells = [
         MatrixCell(row="r", col="c", badge="API"),
@@ -261,10 +262,29 @@ def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() 
     displays = [matrix_cell_display(cell, badges) for cell in cells]
 
     assert [(type(display), display) for display in displays] == [
-        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="api")),
-        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="yes")),
-        (MatrixCellDisplay, MatrixCellDisplay(tone="amber", text="")),
-        (MatrixCellDisplay, MatrixCellDisplay(tone=None, text="n/a")),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="api", state=None)),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="yes", state="api")),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="amber", text="", state=None)),
+        (MatrixCellDisplay, MatrixCellDisplay(tone=None, text="n/a", state=None)),
+    ]
+
+
+def test_a_matrix_cell_names_a_state_only_when_the_badge_label_adds_to_the_cell_label() -> None:
+    badges = parse_report(make_report(badges=EDGE_BADGES)).badges
+    cells = [
+        MatrixCell(row="r", col="c", badge="BLANK", label="lbl"),
+        MatrixCell(row="r", col="c", badge="SPACES", label="lbl"),
+        MatrixCell(row="r", col="c", badge="HAVE", label="HAVE"),
+        MatrixCell(row="r", col="c", badge="HAVE", label="  hAvE "),
+        MatrixCell(row="r", col="c", badge="SPECIAL", label="x"),
+    ]
+
+    assert [matrix_cell_display(cell, badges) for cell in cells] == [
+        MatrixCellDisplay(tone="red", text="lbl", state=None),
+        MatrixCellDisplay(tone="amber", text="lbl", state=None),
+        MatrixCellDisplay(tone="green", text="Have", state=None),
+        MatrixCellDisplay(tone="green", text="Have", state=None),
+        MatrixCellDisplay(tone="blue", text="x", state="A|B *x*"),
     ]
 
 

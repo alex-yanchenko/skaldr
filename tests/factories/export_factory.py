@@ -43,6 +43,35 @@ API_AND_RISK_BADGES: dict[str, Any] = {
     "RISK": {"label": "risk", "tone": "red", "legend": False},
 }
 TEXT_X_BLOCK: dict[str, Any] = {"type": "text", "body": "x"}
+HAVE_BADGE: dict[str, Any] = {"HAVE": {"label": "Have", "tone": "green", "legend": False}}
+EDGE_BADGES: dict[str, Any] = {
+    "BLANK": {"label": "", "tone": "red", "legend": False},
+    "SPACES": {"label": "   ", "tone": "amber", "legend": False},
+    "HAVE": HAVE_BADGE["HAVE"],
+    "SPECIAL": {"label": "A|B *x*", "tone": "blue", "legend": False},
+}
+MATRIX_OF_EDGE_BADGE_LABELS: dict[str, Any] = {
+    "type": "matrix",
+    "rows": ["Receiving"],
+    "columns": ["Blank", "Spaces", "Same", "Special"],
+    "cells": [
+        {"row": "Receiving", "col": "Blank", "badge": "BLANK", "label": "lbl"},
+        {"row": "Receiving", "col": "Spaces", "badge": "SPACES", "label": "lbl"},
+        {"row": "Receiving", "col": "Same", "badge": "HAVE", "label": " HAVE "},
+        {"row": "Receiving", "col": "Special", "badge": "SPECIAL", "label": "a_b [c] <d> | e"},
+    ],
+}
+MATRIX_OF_EVERY_CELL_SHAPE: dict[str, Any] = {
+    "type": "matrix",
+    "rows": ["Receiving"],
+    "columns": ["Badge", "Both", "Tone", "Label"],
+    "cells": [
+        {"row": "Receiving", "col": "Badge", "badge": "HAVE"},
+        {"row": "Receiving", "col": "Both", "badge": "HAVE", "label": "runbook v2"},
+        {"row": "Receiving", "col": "Tone", "tone": "red", "label": "none yet"},
+        {"row": "Receiving", "col": "Label", "label": "n/a"},
+    ],
+}
 BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
     {
         "type": "fact_strip",

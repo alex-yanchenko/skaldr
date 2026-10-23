@@ -978,13 +978,19 @@ def matrix_grid(block: Matrix) -> list[list[MatrixCell | None]]:
 class MatrixCellDisplay(NamedTuple):
     tone: BadgeColorLiteral | None
     text: str
+    state: str | None
 
 
 def matrix_cell_display(cell: MatrixCell, badges: Mapping[str, Badge]) -> MatrixCellDisplay:
     if cell.badge:
         badge = badges[cell.badge]
-        return MatrixCellDisplay(badge.tone, cell.label or badge.label)
-    return MatrixCellDisplay(cell.tone, cell.label or "")
+        state = badge.label.strip()
+        if cell.label and not state:
+            return MatrixCellDisplay(badge.tone, cell.label, None)
+        if cell.label and state.casefold() != cell.label.strip().casefold():
+            return MatrixCellDisplay(badge.tone, cell.label, state)
+        return MatrixCellDisplay(badge.tone, badge.label, None)
+    return MatrixCellDisplay(cell.tone, cell.label or "", None)
 
 
 def reason_phrase(status: int) -> str:

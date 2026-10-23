@@ -70,6 +70,10 @@ from skaldr.richtext import (
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    EDGE_BADGES,
+    HAVE_BADGE,
+    MATRIX_OF_EDGE_BADGE_LABELS,
+    MATRIX_OF_EVERY_CELL_SHAPE,
     REFUSED_IN_THE_EXAMPLE,
     accepted_example,
     authored_block_types,
@@ -1315,6 +1319,35 @@ def test_a_toned_donut_is_a_pie_with_mermaid_default_colours() -> None:
         '\t<tr>\n\t\t<td color="green_bg">A</td>\n\t\t<td>3</td>\n\t\t<td>75%</td>\n\t</tr>\n'
         "\t<tr>\n\t\t<td>B</td>\n\t\t<td>1</td>\n\t\t<td>25%</td>\n\t</tr>\n"
         "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**4**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
+    assert notion_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td></td>\n\t\t<td>**Badge**</td>\n\t\t<td>**Both**</td>\n\t\t<td>**Tone**</td>\n"
+        "\t\t<td>**Label**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Receiving**</td>\n"
+        '\t\t<td color="green_bg">Have</td>\n'
+        '\t\t<td color="green_bg">**Have** · runbook v2</td>\n'
+        '\t\t<td color="red_bg">none yet</td>\n'
+        "\t\t<td>n/a</td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add_and_escapes_the_ones_it_does() -> None:
+    assert notion_of([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td></td>\n\t\t<td>**Blank**</td>\n\t\t<td>**Spaces**</td>\n\t\t<td>**Same**</td>\n"
+        "\t\t<td>**Special**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Receiving**</td>\n"
+        '\t\t<td color="red_bg">lbl</td>\n'
+        '\t\t<td color="yellow_bg">lbl</td>\n'
+        '\t\t<td color="green_bg">Have</td>\n'
+        '\t\t<td color="blue_bg">**A\\|B \\*x\\*** · a\\_b \\[c\\] \\<d\\> \\| e</td>\n'
+        "\t</tr>\n"
         "</table>\n"
     )
 

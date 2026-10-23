@@ -43,6 +43,10 @@ from skaldr.render import (
 from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import (
+    EDGE_BADGES,
+    HAVE_BADGE,
+    MATRIX_OF_EDGE_BADGE_LABELS,
+    MATRIX_OF_EVERY_CELL_SHAPE,
     in_a_grid_cell,
     in_an_open_section,
     make_cell,
@@ -1407,20 +1411,28 @@ def test_matrix_fills_cells_by_state_and_leaves_blanks_empty() -> None:
     ) in html
 
 
-def test_matrix_cell_label_overrides_the_badge_label() -> None:
-    block = {
-        "type": "matrix",
-        "rows": ["r"],
-        "columns": ["c"],
-        "cells": [{"row": "r", "col": "c", "badge": "HAVE", "label": "✓"}],
-    }
-    report = parse_report(
-        make_report(blocks=[block], badges={"HAVE": {"label": "Have", "tone": "green", "legend": "covered"}})
-    )
+def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_chip_then_the_label() -> None:
+    html = render_html(parse_report(make_report(blocks=[MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE)))
 
-    html = render_html(report)
+    assert (
+        "<tr><th>Receiving</th>"
+        '<td class="c green"><span>Have</span></td>'
+        '<td class="c green"><span><span class="chip">Have</span> runbook v2</span></td>'
+        '<td class="c red"><span>none yet</span></td>'
+        '<td class="c"><span>n/a</span></td></tr>'
+    ) in html
 
-    assert '<td class="c green"><span>✓</span></td>' in html  # label wins over the badge's own "Have"
+
+def test_a_matrix_cell_whose_badge_adds_no_name_shows_its_text_without_a_chip() -> None:
+    html = render_html(parse_report(make_report(blocks=[MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES)))
+
+    assert (
+        "<tr><th>Receiving</th>"
+        '<td class="c red"><span>lbl</span></td>'
+        '<td class="c amber"><span>lbl</span></td>'
+        '<td class="c green"><span>Have</span></td>'
+        '<td class="c blue"><span><span class="chip">A|B *x*</span> a_b [c] &lt;d&gt; | e</span></td></tr>'
+    ) in html
 
 
 def test_matrix_tone_only_cell_fills_without_text() -> None:

@@ -216,7 +216,9 @@ def _matrix_cell(cell: models.MatrixCell | None, lowering: Lowering) -> TableCel
         return TableCell(())
     display = compute.matrix_cell_display(cell, lowering.report.badges)
     tone = models.BADGE_COLOR_TONE[display.tone] if display.tone else None
-    return TableCell(plain(display.text), tone)
+    if display.state is None:
+        return TableCell(plain(display.text), tone)
+    return TableCell((*bold(display.state), Plain(" · "), *plain(display.text)), tone)
 
 
 def lower_matrix(block: models.Matrix, lowering: Lowering) -> list[Node]:

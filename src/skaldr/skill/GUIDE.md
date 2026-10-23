@@ -697,8 +697,14 @@ Each cell names a `row` + `col` from the axes, plus its fill:
 
 - `badge: KEY`: a declared badge. Its tone fills the cell, its label is the text. (These badges join
   the page legend automatically, like any badge reference.)
+- `badge: KEY` with `label: "…"`: the cell shows the badge's name and your text together, so the
+  state survives where colour does not (print, a colour-blind reader, two badges sharing a Notion
+  background). The page draws the badge's chip, then the text. GitHub, Notion, Jira and Slack write
+  the badge's label in bold, then ` · `, then the text, as in `**Have** · runbook v2`, on one line
+  under the tone's dot or fill. This shows more text than a cell did before when it set both fields:
+  the label used to replace the badge's own label.
 - `tone: <colour>`: a one-off fill with no vocabulary badge; pair with `label` for the cell text (a
-  RACI letter, a ✓).
+  RACI letter, a ✓). It has no state name, so the cell shows the label alone.
 - `label: "…"` alone: plain short text on an untinted cell.
 - **omit the cell entirely for a blank.** At most one cell per (row, col); `badge` and `tone` are
   mutually exclusive.

@@ -2800,7 +2800,7 @@
             }
           ],
           "default": null,
-          "description": "A declared badge key: its tone fills the cell and its label is the cell text. Use this OR `tone`, not both.",
+          "description": "A declared badge key: its tone fills the cell and its label is the cell text, or the state name shown beside `label` when both are set. Use this OR `tone`, not both.",
           "title": "Badge"
         },
         "tone": {
@@ -2838,7 +2838,7 @@
             }
           ],
           "default": null,
-          "description": "Short text shown in the cell. With `badge` it overrides the badge's label; with `tone` it is the cell text; on its own it is plain text on an untinted cell.",
+          "description": "Short text shown in the cell. With `badge` it is shown after the badge's label; with `tone` it is the cell text; on its own it is plain text on an untinted cell.",
           "title": "Label"
         }
       },
