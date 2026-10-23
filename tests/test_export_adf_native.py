@@ -28,6 +28,8 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    ReferenceEntry,
+    References,
     Tab,
     TableCell,
     TableColumn,
@@ -1188,5 +1190,59 @@ def test_section_fields_in_a_callout_stay_bullets_since_a_panel_holds_no_table()
             "type": "panel",
             "attrs": {"panelType": "info"},
             "content": [_bullets(_item(_paragraph(_text("Site", STRONG), _text(": West"))))],
+        }
+    )
+
+
+def _reference(number: int, text: str, url: str | None = None) -> ReferenceEntry:
+    return ReferenceEntry(number, plain(text), url)
+
+
+def _numbered(*items: Json, order: int | None = None) -> Json:
+    attrs: Json = {"attrs": {"order": order}} if order is not None else {}
+    return {"type": "orderedList", **attrs, "content": list(items)}
+
+
+def test_references_are_an_ordered_list_whose_items_carry_the_source_link() -> None:
+    node = References((_reference(1, "Seed guide", RUNBOOK), _reference(2, "Soil handbook")))
+    source = _text("source", {"type": "link", "attrs": {"href": RUNBOOK}})
+
+    assert _rendered(node) == _doc(
+        _numbered(
+            _item(_paragraph(_text("Seed guide "), source)),
+            _item(_words("Soil handbook")),
+        )
+    )
+
+
+def test_references_are_listed_in_citation_order_whatever_order_they_were_written_in() -> None:
+    node = References((_reference(2, "second"), _reference(1, "first")))
+
+    assert _rendered(node) == _doc(_numbered(_item(_words("first")), _item(_words("second"))))
+
+
+def test_references_that_start_after_one_carry_the_number_of_the_first() -> None:
+    node = References((_reference(3, "third"), _reference(4, "fourth")))
+
+    assert _rendered(node) == _doc(_numbered(_item(_words("third")), _item(_words("fourth")), order=3))
+
+
+def test_references_with_a_gap_in_their_numbers_are_one_list_per_run_so_each_item_keeps_its_number() -> None:
+    node = References((_reference(1, "first"), _reference(2, "second"), _reference(5, "fifth")))
+
+    assert _rendered(node) == _doc(
+        _numbered(_item(_words("first")), _item(_words("second"))),
+        _numbered(_item(_words("fifth")), order=5),
+    )
+
+
+def test_references_in_a_callout_are_an_ordered_list_inside_the_panel() -> None:
+    node = Callout("info", (References((_reference(1, "first"),)),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "panel",
+            "attrs": {"panelType": "info"},
+            "content": [_numbered(_item(_words("first")))],
         }
     )

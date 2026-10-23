@@ -1630,6 +1630,7 @@ Interactive parts of the HTML (request input fields, live reload) have no Markdo
 | a table of contents | nothing, because a Jira heading has no anchor for an entry to link to |
 | `meta.cover` | a first paragraph holding a link named "Cover image", in the single-file export; a publish to Jira writes it nowhere |
 | a citation `[^key]` | its number in brackets as a superscript, linked to the reference's `url` when it has one |
+| a `references` block | an ordered list of its sources in citation order, each item the source's text followed by a link named "source" when it has a `url`. The list starts at the number of its first source, so a second `references` block continues the numbers of the first, and a run of numbers with a gap in it is one list for each unbroken run; each item then carries the number of the citation that points at it, and the item has no back-link |
 | `++underline++`, strike, bold, italic, links, subscripts, superscripts, `[text]{tone=…}` | the matching marks; inline code carries only a link, because ADF allows no other mark on code, so bold or a colour around code is dropped; a link to anything but an `http://`, `https://` or `mailto:` address is written as its label alone |
 | `[text]{bg=…}`, alone or with a `tone` | a background colour mark of the tone's light fill, beside the text colour mark when a `tone` is given |
 | a `{{name}}` blank | its braces and name on a pale yellow background colour mark; inside a highlight it keeps that yellow |

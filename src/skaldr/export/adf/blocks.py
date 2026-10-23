@@ -53,7 +53,7 @@ from skaldr.export.adf.nodes import (
     AdfText,
 )
 from skaldr.export.apportion import apportioned, apportioned_at_least
-from skaldr.export.folds import folded, link_card_detail
+from skaldr.export.folds import folded, link_card_detail, reference_runs
 from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, StatusMark, export_visible_text
 from skaldr.export.swaps import (
@@ -89,6 +89,7 @@ from skaldr.export.tree import (
     Node,
     Paragraph,
     Quote,
+    References,
     TableCell,
     TableColumn,
     TableNode,
@@ -354,6 +355,8 @@ class _AdfBlocks:
         match node:
             case FactStrip() | KeyValueList() | DefinitionList() | Cards() | Timeline():
                 return self.table_blocks(node) if "table" in allowed else None
+            case References():
+                return self.reference_blocks(node)
             case LinkCard():
                 return self.link_card_blocks(node) if _CARDS_BY_DISPLAY[node.display] in allowed else None
             case Toggle() if node.open and _expand_type(container) in allowed:
@@ -607,6 +610,19 @@ class _AdfBlocks:
                 return self.cards_blocks(node)
             case Timeline():
                 return self.timeline_blocks(node)
+
+    def reference_blocks(self, node: References) -> list[AdfBlock]:
+        in_citation_order = sorted(node.entries, key=lambda entry: entry.number)
+        runs = groupby(enumerate(in_citation_order), key=lambda numbered: numbered[1].number - numbered[0])
+        blocks: list[AdfBlock] = []
+        for _, run in runs:
+            entries = [entry for _, entry in run]
+            items = [
+                AdfListItem(type="listItem", content=[self.paragraph(reference_runs(entry))])
+                for entry in entries
+            ]
+            blocks.append(self.listed("number", items, entries[0].number))
+        return blocks
 
     def fact_strip_blocks(self, node: FactStrip) -> list[AdfBlock]:
         if not node.facts:

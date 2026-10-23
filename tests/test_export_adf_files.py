@@ -206,6 +206,28 @@ def test_the_cli_warns_when_the_adf_description_is_over_the_jira_limit(
     )
 
 
+def test_a_citation_carries_the_number_of_its_reference_in_the_ordered_list(tmp_path: Path) -> None:
+    blocks = [
+        {"type": "text", "body": "Soil first [^soil], then seeds [^seeds]."},
+        {
+            "type": "references",
+            "items": [{"key": "seeds", "text": "Seed guide"}, {"key": "soil", "text": "Soil handbook"}],
+        },
+    ]
+    report = load_report(write_report(tmp_path, make_report(blocks=blocks)))
+
+    export_adf(report, tmp_path / "out")
+
+    written = json.loads((tmp_path / "out" / "page.adf.json").read_text(encoding="utf-8"))
+    citations = [node["text"] for node in written["content"][0]["content"] if node["text"] in {"[1]", "[2]"}]
+    listed = [item["content"][0]["content"][0]["text"] for item in written["content"][1]["content"]]
+    assert (citations, written["content"][1]["type"], listed) == (
+        ["[2]", "[1]"],
+        "orderedList",
+        ["Seed guide", "Soil handbook"],
+    )
+
+
 def test_chunk_applies_only_to_notion(
     tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
