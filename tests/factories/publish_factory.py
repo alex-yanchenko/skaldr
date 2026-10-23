@@ -314,6 +314,9 @@ class FakeTransport:
     def forget_calls(self) -> None:
         self.calls.clear()
 
+    def comparable_draft(self, content: ItemContent, /) -> ItemContent:
+        return self.comparable_form(content)
+
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
         sections = {key: self._in_read_form(self._stored(text)) for key, text in content.sections.items()}
         return content.model_copy(update={"sections": sections})

@@ -209,6 +209,7 @@ def test_an_issue_property_is_read_and_written_as_its_json_value() -> None:
         EntityProperty(key="skaldr.stamp", value={"doc_id": "garden-handbook"}),
         [
             summarised_request("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
+            summarised_request("GET", MYSELF),
             summarised_request(
                 "PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp", {"doc_id": "garden-handbook"}
             ),
@@ -223,7 +224,7 @@ def test_deleting_a_remote_link_jira_no_longer_has_is_not_an_error() -> None:
 
     jira.client().delete_remote_link("DEMO-1", global_id)
 
-    assert jira.calls() == [("DELETE", "/rest/api/3/issue/DEMO-1/remotelink")]
+    assert jira.calls() == [("DELETE", "/rest/api/3/issue/DEMO-1/remotelink"), ("GET", MYSELF)]
 
 
 def test_a_remote_link_is_posted_by_its_global_id_listed_and_deleted_by_its_global_id() -> None:
@@ -356,7 +357,8 @@ def test_an_issue_key_is_escaped_in_the_path() -> None:
         jira.client().get_issue("DEMO-1/../2", ["summary"])
 
     assert [str(request.url) for request in jira.requests] == [
-        f"{SITE}/rest/api/3/issue/DEMO-1%2F..%2F2?fields=summary"
+        f"{SITE}/rest/api/3/issue/DEMO-1%2F..%2F2?fields=summary",
+        f"{SITE}{MYSELF}",
     ]
 
 
@@ -639,6 +641,154 @@ def test_a_missing_issue_is_item_not_found() -> None:
         ),
     ):
         FakeJira().client().get_issue("DEMO-9", ["summary"])
+
+
+def test_a_missing_issue_asks_who_is_signed_in_before_it_is_called_missing() -> None:
+    jira = FakeJira()
+
+    with pytest.raises(ItemNotFoundError):
+        jira.client().get_issue("DEMO-9", ["summary"])
+
+    assert jira.calls() == [("GET", "/rest/api/3/issue/DEMO-9"), ("GET", MYSELF)]
+
+
+def test_several_missing_issues_ask_who_is_signed_in_once() -> None:
+    jira = FakeJira()
+    client = jira.client()
+
+    for key in ("DEMO-7", "DEMO-8", "DEMO-9"):
+        with pytest.raises(ItemNotFoundError):
+            client.get_issue(key, ["summary"])
+
+    assert jira.calls() == [
+        ("GET", "/rest/api/3/issue/DEMO-7"),
+        ("GET", MYSELF),
+        ("GET", "/rest/api/3/issue/DEMO-8"),
+        ("GET", "/rest/api/3/issue/DEMO-9"),
+    ]
+
+
+def test_a_revoked_token_on_an_issue_read_says_to_sign_in_again() -> None:
+    jira = FakeJira(token_revoked=True)
+
+    with pytest.raises(ConnectorError) as raised:
+        jira.client().get_issue("DEMO-1", ["summary"])
+
+    assert (type(raised.value), str(raised.value), jira.calls()) == (
+        ConnectorError,
+        f"Jira at {SITE} rejected the sign-in (HTTP 401); the API token may have expired or been revoked, "
+        "so run `skaldr auth jira`",
+        [("GET", ISSUE), ("GET", MYSELF)],
+    )
+
+
+def test_a_revoked_token_on_an_issue_write_is_a_write_that_never_landed() -> None:
+    jira = FakeJira(token_revoked=True)
+
+    with pytest.raises(WriteRejectedError) as raised:
+        jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
+
+    assert (type(raised.value), str(raised.value), jira.calls()) == (
+        WriteRejectedError,
+        f"Jira at {SITE} rejected the sign-in (HTTP 401); the API token may have expired or been revoked, "
+        "so run `skaldr auth jira`",
+        [("PUT", ISSUE), ("GET", MYSELF)],
+    )
+
+
+def test_a_revoked_token_is_found_out_once_for_several_issue_calls() -> None:
+    jira = FakeJira(token_revoked=True)
+    client = jira.client()
+    messages: list[str] = []
+
+    for key in ("DEMO-1", "DEMO-2"):
+        with pytest.raises(ConnectorError) as raised:
+            client.get_issue(key, ["summary"])
+        messages.append(str(raised.value))
+
+    assert (len(set(messages)), jira.calls()) == (
+        1,
+        [
+            ("GET", "/rest/api/3/issue/DEMO-1"),
+            ("GET", MYSELF),
+            ("GET", "/rest/api/3/issue/DEMO-2"),
+        ],
+    )
+
+
+SIGN_IN_REJECTED = (
+    f"Jira at {SITE} rejected the sign-in (HTTP 401); the API token may have expired or been revoked, "
+    "so run `skaldr auth jira`"
+)
+
+
+def test_a_revoked_token_on_a_property_read_is_not_an_unstamped_issue() -> None:
+    jira = FakeJira(token_revoked=True)
+
+    with pytest.raises(ConnectorError) as raised:
+        jira.client().get_property("DEMO-1", "skaldr.stamp")
+
+    assert (type(raised.value), str(raised.value), jira.calls()) == (
+        ConnectorError,
+        SIGN_IN_REJECTED,
+        [("GET", f"{ISSUE}/properties/skaldr.stamp"), ("GET", MYSELF)],
+    )
+
+
+def test_a_revoked_token_on_a_remote_link_delete_is_not_an_already_deleted_link() -> None:
+    jira = FakeJira(token_revoked=True)
+
+    with pytest.raises(WriteRejectedError) as raised:
+        jira.client().delete_remote_link("DEMO-1", "skaldr:link")
+
+    assert (type(raised.value), str(raised.value), jira.calls()) == (
+        WriteRejectedError,
+        SIGN_IN_REJECTED,
+        [("DELETE", f"{ISSUE}/remotelink"), ("GET", MYSELF)],
+    )
+
+
+def test_a_missing_property_with_a_valid_sign_in_is_still_none() -> None:
+    jira = _seeded()
+
+    assert (jira.client().get_property("DEMO-1", "skaldr.stamp"), jira.calls()) == (
+        None,
+        [("GET", f"{ISSUE}/properties/skaldr.stamp"), ("GET", MYSELF)],
+    )
+
+
+@pytest.mark.parametrize("status", [500, 429])
+def test_a_myself_answer_that_is_neither_ok_nor_unauthorized_is_an_error_and_is_asked_again(
+    status: int,
+) -> None:
+    jira = FakeJira()
+    jira.answer_next("GET", MYSELF, *[Reply(status, {})] * 8)
+    client = jira.client()
+    messages: list[str] = []
+
+    for key in ("DEMO-8", "DEMO-9"):
+        with pytest.raises(ConnectorError) as raised:
+            client.get_issue(key, ["summary"])
+        messages.append(str(raised.value))
+
+    assert (messages, jira.calls().count(("GET", MYSELF))) == (
+        [
+            f"Jira answered HTTP {status} to GET {MYSELF} when skaldr checked the sign-in before calling "
+            "the issue missing"
+        ]
+        * 2,
+        8,
+    )
+
+
+def test_a_not_found_on_a_create_does_not_ask_who_is_signed_in() -> None:
+    jira = FakeJira()
+    jira.answer_next("POST", CREATE, Reply(404, {"errorMessages": ["No project could be found."]}))
+
+    with pytest.raises(WriteRejectedError):
+        jira.client().create_issue({"summary": "Garden handbook"}, [])
+
+    assert jira.calls() == [("POST", CREATE)]
 
 
 @pytest.mark.parametrize(

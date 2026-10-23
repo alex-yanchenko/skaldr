@@ -150,6 +150,7 @@ class FakeJira:
     honours_properties_on_edit: bool = True
     close_screen_requires_resolution: bool = False
     fills_in_saved_defaults: bool = False
+    token_revoked: bool = False
     issues: dict[str, FakeIssue] = field(default_factory=dict[str, FakeIssue])
     histories: dict[str, list[History]] = field(default_factory=dict[str, list[History]])
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
@@ -226,11 +227,18 @@ class FakeJira:
                 raise queued
             return queued.response()
         path = request.url.raw_path.decode().partition("?")[0]
+        if self.token_revoked:
+            return self._answer_a_revoked_token(path)
         for pattern, method, answer in self._routes():
             matched = re.fullmatch(pattern, path)
             if matched and request.method == method:
                 return answer(request, *(unquote(group) for group in matched.groups()))
         return httpx2.Response(405, json={"errorMessages": [f"no route for {request.method} {path}"]})
+
+    def _answer_a_revoked_token(self, path: str) -> httpx2.Response:
+        if path == f"{_API}/myself":
+            return httpx2.Response(401, text="Client must be authenticated to access this resource.")
+        return httpx2.Response(404, json=NOT_FOUND)
 
     def _routes(
         self,

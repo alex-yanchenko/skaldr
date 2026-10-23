@@ -37,6 +37,10 @@ class User(NotionResponse):
     name: str | None = None
 
 
+class UserList(NotionResponse):
+    results: list[PartialUser]
+
+
 class RichTextItem(NotionResponse):
     plain_text: str
 

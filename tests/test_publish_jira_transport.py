@@ -498,7 +498,9 @@ def test_when_jira_drops_the_properties_of_a_create_skaldr_puts_them_without_rea
         RAW_AFTER_CREATE,
         [
             ("POST", "/rest/api/3/issue"),
-            *_read_calls("DEMO-1"),
+            *_read_calls("DEMO-1")[:2],
+            ("GET", "/rest/api/3/myself"),
+            *_read_calls("DEMO-1")[2:],
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.layout"),
             ("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
         ],
