@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.2.0](https://github.com/alex-yanchenko/skaldr/compare/v4.1.0...v4.2.0) (2026-10-23)
+
+
+### Features
+
+* **export:** colour github mermaid charts, fold collapsed sections and alert toned grid cells ([#235](https://github.com/alex-yanchenko/skaldr/issues/235)) ([c8081bb](https://github.com/alex-yanchenko/skaldr/commit/c8081bbb863af92ef0c94c191cabb0e8e8f614a0))
+* **notion:** create pages from a template page so they keep its page settings ([#244](https://github.com/alex-yanchenko/skaldr/issues/244)) ([6ba4753](https://github.com/alex-yanchenko/skaldr/commit/6ba4753225e93b1b257b023e3caf84a19f8456f4))
+* **publish:** carry the icon and cover to jira and slack, and write adf fields and references natively ([#248](https://github.com/alex-yanchenko/skaldr/issues/248)) ([a6943d6](https://github.com/alex-yanchenko/skaldr/commit/a6943d67f0f1495e2be95c550a7df22e30c2981f))
+
+
+### Bug Fixes
+
+* **auth:** read each keychain item once per command and only the sign-in a target names ([#245](https://github.com/alex-yanchenko/skaldr/issues/245)) ([e745d89](https://github.com/alex-yanchenko/skaldr/commit/e745d8915b5d57e48b658bfb6d7d0ef4272e2d5f))
+* **cli:** locate unfilled placeholders under --check --strict and never half-write a new starter ([#239](https://github.com/alex-yanchenko/skaldr/issues/239)) ([9b72ff3](https://github.com/alex-yanchenko/skaldr/commit/9b72ff31e124bce538d78af2e4a52645ea91440d))
+* **export:** colour diagram nodes from the page stylesheet and state when an archive rechecks edits ([#240](https://github.com/alex-yanchenko/skaldr/issues/240)) ([7a8ac90](https://github.com/alex-yanchenko/skaldr/commit/7a8ac901d52aab7d66eb74f4116ab55680e514d2))
+* **export:** keep code text from breaking the notion page ([#243](https://github.com/alex-yanchenko/skaldr/issues/243)) ([b2bac97](https://github.com/alex-yanchenko/skaldr/commit/b2bac97ab8a3d95899ad6cbad153955123771b40))
+* **matrix:** show a cell's badge name beside its label in every target ([#246](https://github.com/alex-yanchenko/skaldr/issues/246)) ([7606f5d](https://github.com/alex-yanchenko/skaldr/commit/7606f5dbc552e696d7f5535034de73c03c3a2066))
+* **notion:** split requests under the sizes Notion accepts and name a 413 ([#241](https://github.com/alex-yanchenko/skaldr/issues/241)) ([ba75d05](https://github.com/alex-yanchenko/skaldr/commit/ba75d05803c935a5811865a8a0fd2cda36b002c1))
+* **publish:** report a revoked jira token as a sign-in problem and keep unknown notion people as names ([#247](https://github.com/alex-yanchenko/skaldr/issues/247)) ([f9923c2](https://github.com/alex-yanchenko/skaldr/commit/f9923c2c8fc65fbed98616da81c08d2357e68305))
+* **publish:** send untouched slack canvas sections as skaldr wrote them ([#242](https://github.com/alex-yanchenko/skaldr/issues/242)) ([b2deaf4](https://github.com/alex-yanchenko/skaldr/commit/b2deaf40573f91e72607d35d644174019ba14dd3))
+
 ## [4.1.0](https://github.com/alex-yanchenko/skaldr/compare/v4.0.1...v4.1.0) (2026-10-17)
 
 
