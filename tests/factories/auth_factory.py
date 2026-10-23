@@ -3,6 +3,7 @@ import json
 import socket
 import threading
 import traceback
+from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -97,6 +98,37 @@ class ReadRecordingKeyring(InMemoryKeyring):
     def get_password(self, service: str, username: str) -> str | None:
         self.reads.append((service, username))
         return super().get_password(service, username)
+
+
+class CountingKeyring(InMemoryKeyring):
+    def __init__(self) -> None:
+        super().__init__()
+        self.operations: list[tuple[str, str]] = []
+        self.set_failure: BaseException | None = None
+
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        stored = super().get_password(service, username)
+        self.operations.append(("get" if stored is not None else "get missing", username))
+        return stored
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.operations.append(("set", username))
+        if self.set_failure is not None:
+            raise self.set_failure
+        super().set_password(service, username, password)  # pyright: ignore[reportUnknownMemberType]
+
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        self.operations.append(("delete", username))
+        super().delete_password(service, username)
+
+    def counts(self) -> Counter[tuple[str, str]]:
+        return Counter(self.operations)
+
+    def forget_operations(self) -> None:
+        self.operations.clear()
 
 
 class WriteFailingKeyring(InMemoryKeyring):

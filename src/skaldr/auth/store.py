@@ -240,6 +240,7 @@ def save_notion_returning_the_replaced(credentials: NotionCredentials) -> Notion
     username = _username(_NOTION, credentials)
 
     def look_up_then_write() -> NotionReplacement:
+        _drop_remembered_reads_of("notion")
         entries = _entries(_NOTION)
         replacement = NotionReplacement(
             entry_for_workspace(entries, credentials.workspace_id) or _entry_named(_NOTION, workspace),
@@ -286,7 +287,9 @@ def load_slack(workspace: str | None = None) -> SignIn[SlackCredentials] | None:
     from_environment = slack_from_environment() if workspace is None else None
     if from_environment is not None:
         return SignIn(from_environment, "environment")
-    return _signed_in(find_slack(workspace))
+    is_an_id = workspace is not None and SLACK_TEAM_ID.fullmatch(workspace) is not None
+    named = _sign_in_stored_under_the_name(_SLACK, workspace) if is_an_id else None
+    return named or _signed_in(find_slack(workspace))
 
 
 def require_slack_for_a_target(workspace: str | None) -> SignIn[SlackCredentials]:
@@ -381,7 +384,11 @@ def _find_jira_among(
     return found
 
 
-def find_notion(workspace: str | None = None) -> StoredEntry[NotionCredentials] | None:
+def find_notion(
+    workspace: str | None = None, *, fresh: bool = False
+) -> StoredEntry[NotionCredentials] | None:
+    if fresh:
+        _drop_remembered_reads_of("notion")
     wanted = None if workspace is None else _canonical_workspace_selector(workspace)
     found = _the_only_workspace(_NOTION, stored_notion_sign_ins(), wanted)
     if found is None and wanted is not None and _is_uuid(wanted):
@@ -405,14 +412,26 @@ def _load_jira_by_selector(wanted: str | None) -> SignIn[JiraCredentials] | None
     from_environment = jira_from_environment()
     if from_environment is not None and wanted in (None, from_environment.site):
         return SignIn(from_environment, "environment")
-    return _signed_in(_find_jira_among(stored_jira_sign_ins(), wanted))
+    is_a_site = wanted is not None and wanted != LEGACY_SELECTOR
+    named = _sign_in_stored_under_the_name(_JIRA, wanted) if is_a_site else None
+    return named or _signed_in(_find_jira_among(stored_jira_sign_ins(), wanted))
 
 
 def load_notion(workspace: str | None = None) -> SignIn[NotionCredentials] | None:
     from_environment = notion_from_environment() if workspace is None else None
     if from_environment is not None:
         return SignIn(from_environment, "environment")
-    return _signed_in(find_notion(workspace))
+    wanted = None if workspace is None else _canonical_workspace_selector(workspace)
+    named = _sign_in_stored_under_the_name(_NOTION, wanted) if wanted and _is_uuid(wanted) else None
+    return named or _signed_in(find_notion(workspace))
+
+
+def _sign_in_stored_under_the_name(
+    kind: _Kind[CredentialsT], identifier: str | None
+) -> SignIn[CredentialsT] | None:
+    if identifier is None:
+        return None
+    return _signed_in(_in_the_keychain(lambda: _entry_named(kind, identifier)))
 
 
 def require_notion_for_a_target(workspace: str | None) -> SignIn[NotionCredentials]:
@@ -442,7 +461,7 @@ def notion_client_from_environment() -> tuple[str | None, str | None]:
 
 def forget(entry: AnyStoredEntry) -> bool:
     def delete_unless_changed_then_unlist() -> bool:
-        stored = _get(entry.username)
+        stored = _get(entry.username, fresh=True)
         if stored is not None and stored != entry.raw:
             return False
         _delete(entry.username)
@@ -513,25 +532,79 @@ def _operation_backend() -> KeyringBackend:
     return cast("KeyringBackend", _operation.backend)
 
 
-def _get(username: str) -> str | None:
-    return _operation_backend().get_password(KEYCHAIN_SERVICE, username)
+@dataclass
+class _ReadsOfOneCommand:
+    remembered: dict[str, str | None] | None = None
+
+
+_command_reads = _ReadsOfOneCommand()
+
+
+@contextmanager
+def reading_each_keychain_item_once() -> Generator[None, None, None]:
+    if _command_reads.remembered is not None:
+        yield
+        return
+    _command_reads.remembered = {}
+    try:
+        yield
+    finally:
+        _command_reads.remembered = None
+
+
+def _is_remembered(username: str) -> bool:
+    remembered = _command_reads.remembered
+    return remembered is not None and username in remembered
+
+
+def _drop_remembered_reads_of(service: Service) -> None:
+    remembered = _command_reads.remembered
+    if remembered is None:
+        return
+    for username in list(remembered):
+        if username in (KEYCHAIN_INDEX_USERNAME, service) or username.startswith(f"{service}:"):
+            remembered.pop(username, None)
+
+
+def _remember(username: str, stored: str | None) -> None:
+    remembered = _command_reads.remembered
+    if remembered is not None:
+        remembered[username] = stored
+
+
+def _drop_remembered_read(username: str) -> None:
+    remembered = _command_reads.remembered
+    if remembered is not None:
+        remembered.pop(username, None)
+
+
+def _get(username: str, *, fresh: bool = False) -> str | None:
+    remembered = _command_reads.remembered
+    if remembered is not None and not fresh and username in remembered:
+        return remembered[username]
+    stored = _operation_backend().get_password(KEYCHAIN_SERVICE, username)
+    if remembered is not None:
+        remembered[username] = stored
+    return stored
 
 
 def _set(username: str, secret: str) -> None:
     backend = _operation_backend()
     _refuse_an_insecure_backend(backend)
+    _drop_remembered_read(username)
     backend.set_password(KEYCHAIN_SERVICE, username, secret)  # pyright: ignore[reportUnknownMemberType]
+    _remember(username, secret)
 
 
 def _delete(username: str) -> None:
-    try:
+    _drop_remembered_read(username)
+    with suppress(PasswordDeleteError):
         _operation_backend().delete_password(KEYCHAIN_SERVICE, username)
-    except PasswordDeleteError:
-        return
+    _remember(username, None)
 
 
-def _read_index() -> dict[Service, list[str]]:
-    stored = _get(KEYCHAIN_INDEX_USERNAME)
+def _read_index(*, fresh: bool = False) -> dict[Service, list[str]]:
+    stored = _get(KEYCHAIN_INDEX_USERNAME, fresh=fresh)
     if stored is None:
         return {service: [] for service in sorted(SERVICES)}
     with CaughtWithoutChaining(ValidationError):
@@ -554,14 +627,19 @@ def _write_index(index: dict[Service, list[str]]) -> None:
 
 
 def _list(service: Service, username: str) -> None:
+    index_may_be_stale = _is_remembered(KEYCHAIN_INDEX_USERNAME)
     index = _read_index()
+    if username in index[service]:
+        return
+    if index_may_be_stale:
+        index = _read_index(fresh=True)
     if username not in index[service]:
         index[service].append(username)
         _write_index(index)
 
 
 def _unlist(service: Service, username: str) -> None:
-    index = _read_index()
+    index = _read_index(fresh=True)
     if username in index[service]:
         index[service].remove(username)
         _write_index(index)
