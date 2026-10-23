@@ -549,7 +549,7 @@ pie
 		<td>**Zone B**</td>
 		<td color="yellow_bg">Floor</td>
 		<td color="yellow_bg">Floor</td>
-		<td color="blue_bg">System</td>
+		<td color="blue_bg">**System** · bin codes</td>
 		<td></td>
 	</tr>
 	<tr>

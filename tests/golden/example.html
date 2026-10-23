@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;4.0.1&#34;}">
+<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;4.1.0&#34;}">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
      (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
@@ -610,6 +610,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& td.c > span{display:flex; align-items:center; justify-content:center; height:100%; padding:0 8px;
 			background:var(--cb,transparent); color:var(--cf,var(--muted)); font-size:10px; font-weight:700;
 			text-transform:uppercase; letter-spacing:0.04em}
+		& td.c .chip{background:var(--surface); color:var(--cf); margin-inline-end:6px}
 		& .c.slate{--cf:var(--neutral-fg); --cb:var(--neutral-bg)} & .c.blue{--cf:var(--info-fg); --cb:var(--info-bg)}
 		& .c.green{--cf:var(--success-fg); --cb:var(--success-bg)} & .c.amber{--cf:var(--warning-fg); --cb:var(--warning-bg)}
 		& .c.red{--cf:var(--danger-fg); --cb:var(--danger-bg)} & .c.violet{--cf:var(--accent-fg); --cb:var(--accent-bg)}
@@ -1348,7 +1349,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 <thead><tr><th></th><th>Scanned</th><th>Reconciled</th><th>Re-labeled</th><th>Signed off</th></tr></thead>
 <tbody>
 <tr><th>Zone A</th><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td></tr>
-<tr><th>Zone B</th><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td><td class="c blue"><span>System</span></td><td class="c"><span></span></td></tr>
+<tr><th>Zone B</th><td class="c amber"><span>Floor</span></td><td class="c amber"><span>Floor</span></td><td class="c blue"><span><span class="chip blue">System</span> bin codes</span></td><td class="c"><span></span></td></tr>
 <tr><th>Zone C</th><td class="c amber"><span>Floor</span></td><td class="c blue"><span>System</span></td><td class="c slate"><span>n/a</span></td><td class="c"><span></span></td></tr>
 <tr><th>Overflow</th><td class="c red"><span>Vendor</span></td><td class="c red"><span>Vendor</span></td><td class="c"><span></span></td><td class="c"><span></span></td></tr>
 </tbody>

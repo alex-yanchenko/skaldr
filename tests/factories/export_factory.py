@@ -43,6 +43,18 @@ API_AND_RISK_BADGES: dict[str, Any] = {
     "RISK": {"label": "risk", "tone": "red", "legend": False},
 }
 TEXT_X_BLOCK: dict[str, Any] = {"type": "text", "body": "x"}
+HAVE_BADGE: dict[str, Any] = {"HAVE": {"label": "Have", "tone": "green", "legend": False}}
+MATRIX_OF_EVERY_CELL_SHAPE: dict[str, Any] = {
+    "type": "matrix",
+    "rows": ["Receiving"],
+    "columns": ["Badge", "Both", "Tone", "Label"],
+    "cells": [
+        {"row": "Receiving", "col": "Badge", "badge": "HAVE"},
+        {"row": "Receiving", "col": "Both", "badge": "HAVE", "label": "runbook v2"},
+        {"row": "Receiving", "col": "Tone", "tone": "red", "label": "none yet"},
+        {"row": "Receiving", "col": "Label", "label": "n/a"},
+    ],
+}
 BADGE_AND_STATE_BLOCKS: list[dict[str, Any]] = [
     {
         "type": "fact_strip",

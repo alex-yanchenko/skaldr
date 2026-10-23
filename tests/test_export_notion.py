@@ -70,6 +70,8 @@ from skaldr.richtext import (
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    HAVE_BADGE,
+    MATRIX_OF_EVERY_CELL_SHAPE,
     REFUSED_IN_THE_EXAMPLE,
     accepted_example,
     authored_block_types,
@@ -1315,6 +1317,20 @@ def test_a_toned_donut_is_a_pie_with_mermaid_default_colours() -> None:
         '\t<tr>\n\t\t<td color="green_bg">A</td>\n\t\t<td>3</td>\n\t\t<td>75%</td>\n\t</tr>\n'
         "\t<tr>\n\t\t<td>B</td>\n\t\t<td>1</td>\n\t\t<td>25%</td>\n\t</tr>\n"
         "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**4**</td>\n\t\t<td></td>\n\t</tr>\n"
+        "</table>\n"
+    )
+
+
+def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
+    assert notion_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td></td>\n\t\t<td>**Badge**</td>\n\t\t<td>**Both**</td>\n\t\t<td>**Tone**</td>\n"
+        "\t\t<td>**Label**</td>\n\t</tr>\n"
+        "\t<tr>\n\t\t<td>**Receiving**</td>\n"
+        '\t\t<td color="green_bg">Have</td>\n'
+        '\t\t<td color="green_bg">**Have** · runbook v2</td>\n'
+        '\t\t<td color="red_bg">none yet</td>\n'
+        "\t\t<td>n/a</td>\n\t</tr>\n"
         "</table>\n"
     )
 

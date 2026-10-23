@@ -1707,8 +1707,8 @@ class MatrixCell(FrozenModel):
     col: NonBlank = Field(description="Which column this cell sits in: one of the block's `columns`.")
     badge: NonBlank | None = Field(
         default=None,
-        description="A declared badge key: its tone fills the cell and its label is the cell text. Use "
-        "this OR `tone`, not both.",
+        description="A declared badge key: its tone fills the cell and its label is the cell text, or "
+        "the state name shown beside `label` when both are set. Use this OR `tone`, not both.",
     )
     tone: BadgeColor | None = Field(
         default=None,
@@ -1717,7 +1717,7 @@ class MatrixCell(FrozenModel):
     )
     label: NonBlank | None = Field(
         default=None,
-        description="Short text shown in the cell. With `badge` it overrides the badge's label; with "
+        description="Short text shown in the cell. With `badge` it is shown after the badge's label; with "
         "`tone` it is the cell text; on its own it is plain text on an untinted cell.",
     )
 

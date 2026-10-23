@@ -592,6 +592,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& td.c > span{display:flex; align-items:center; justify-content:center; height:100%; padding:0 8px;
 			background:var(--cb,transparent); color:var(--cf,var(--muted)); font-size:10px; font-weight:700;
 			text-transform:uppercase; letter-spacing:0.04em}
+		& td.c .chip{background:var(--surface); color:var(--cf); margin-inline-end:6px}
 		& .c.slate{--cf:var(--neutral-fg); --cb:var(--neutral-bg)} & .c.blue{--cf:var(--info-fg); --cb:var(--info-bg)}
 		& .c.green{--cf:var(--success-fg); --cb:var(--success-bg)} & .c.amber{--cf:var(--warning-fg); --cb:var(--warning-bg)}
 		& .c.red{--cf:var(--danger-fg); --cb:var(--danger-bg)} & .c.violet{--cf:var(--accent-fg); --cb:var(--accent-bg)}

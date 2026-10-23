@@ -78,6 +78,8 @@ from tests.factories import (
     API_AND_RISK_BADGES,
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
+    HAVE_BADGE,
+    MATRIX_OF_EVERY_CELL_SHAPE,
     REFUSED_IN_THE_EXAMPLE,
     TEXT_X_BLOCK,
     accepted_example,
@@ -801,6 +803,14 @@ def test_a_matrix_cell_fill_is_its_dot_before_its_label_or_the_dot_alone() -> No
 
     assert markdown_of([matrix]) == (
         "|  | Plain | Fill | Both |\n| --- | --- | --- | --- |\n| **Build** | x | 🔴 | 🟢 ok |\n"
+    )
+
+
+def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
+    assert markdown_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
+        "|  | Badge | Both | Tone | Label |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| **Receiving** | 🟢 Have | 🟢 **Have** · runbook v2 | 🔴 none yet | n/a |\n"
     )
 
 

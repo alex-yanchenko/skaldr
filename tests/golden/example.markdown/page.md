@@ -379,7 +379,7 @@ pie
 |  | Scanned | Reconciled | Re-labeled | Signed off |
 | --- | --- | --- | --- | --- |
 | **Zone A** | 🟡 Floor | 🟡 Floor | 🟡 Floor | 🟡 Floor |
-| **Zone B** | 🟡 Floor | 🟡 Floor | 🔵 System |  |
+| **Zone B** | 🟡 Floor | 🟡 Floor | 🔵 **System** · bin codes |  |
 | **Zone C** | 🟡 Floor | 🔵 System | ⚪ n/a |  |
 | **Overflow** | 🔴 Vendor | 🔴 Vendor |  |  |
 

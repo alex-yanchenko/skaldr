@@ -249,7 +249,7 @@ def test_a_step_needs_the_numbers_of_its_dependencies_once_each_in_order() -> No
     assert swimlane.dependency_numbers(swimlane.steps[3]) == ["2", "1"]
 
 
-def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() -> None:
+def test_a_matrix_cell_shows_its_badge_name_beside_its_own_label() -> None:
     badges = parse_report(make_report(badges=API_BADGES)).badges
     cells = [
         MatrixCell(row="r", col="c", badge="API"),
@@ -261,10 +261,10 @@ def test_a_matrix_cell_shows_its_badge_tone_and_label_unless_it_names_its_own() 
     displays = [matrix_cell_display(cell, badges) for cell in cells]
 
     assert [(type(display), display) for display in displays] == [
-        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="api")),
-        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="yes")),
-        (MatrixCellDisplay, MatrixCellDisplay(tone="amber", text="")),
-        (MatrixCellDisplay, MatrixCellDisplay(tone=None, text="n/a")),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="api", state=None)),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="blue", text="yes", state="api")),
+        (MatrixCellDisplay, MatrixCellDisplay(tone="amber", text="", state=None)),
+        (MatrixCellDisplay, MatrixCellDisplay(tone=None, text="n/a", state=None)),
     ]
 
 

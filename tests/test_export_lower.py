@@ -85,6 +85,8 @@ from skaldr.richtext import (
 )
 from tests.factories import (
     API_BADGES,
+    HAVE_BADGE,
+    MATRIX_OF_EVERY_CELL_SHAPE,
     lowered,
     lowered_as_written_today,
     make_cell,
@@ -2001,9 +2003,29 @@ def test_a_matrix_shows_badge_toned_labelled_and_blank_cells() -> None:
                     (
                         TableCell((Plain("r1"),)),
                         TableCell((Plain("api"),), "info"),
-                        TableCell((Plain("yes"),), "info"),
+                        TableCell((*bold("api"), Plain(" · "), Plain("yes")), "info"),
                         TableCell((Plain("n/a"),), "neutral"),
                         TableCell(()),
+                    )
+                ),
+            ),
+            header_column=True,
+        ),
+    )
+
+
+def test_a_matrix_cell_with_a_badge_and_a_label_leads_with_the_badge_name() -> None:
+    assert lowered([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
+        TableNode(
+            (TableCell(()), *_cells("Badge", "Both", "Tone", "Label")),
+            (
+                TableRow(
+                    (
+                        TableCell((Plain("Receiving"),)),
+                        TableCell((Plain("Have"),), "success"),
+                        TableCell((*bold("Have"), Plain(" · "), Plain("runbook v2")), "success"),
+                        TableCell((Plain("none yet"),), "danger"),
+                        TableCell((Plain("n/a"),)),
                     )
                 ),
             ),

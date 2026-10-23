@@ -6257,7 +6257,16 @@
                   "content": [
                     {
                       "type": "text",
-                      "text": "System"
+                      "text": "System",
+                      "marks": [
+                        {
+                          "type": "strong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " · bin codes"
                     }
                   ]
                 }

@@ -417,7 +417,7 @@ blocks:
       - { row: "Zone A", col: "Signed off", badge: FLOOR }
       - { row: "Zone B", col: "Scanned",    badge: FLOOR }
       - { row: "Zone B", col: "Reconciled", badge: FLOOR }
-      - { row: "Zone B", col: "Re-labeled", badge: SYSTEM }
+      - { row: "Zone B", col: "Re-labeled", badge: SYSTEM, label: "bin codes" }
       - { row: "Zone C", col: "Scanned",    badge: FLOOR }
       - { row: "Zone C", col: "Reconciled", badge: SYSTEM }
       - { row: "Zone C", col: "Re-labeled", tone: slate, label: "n/a" }

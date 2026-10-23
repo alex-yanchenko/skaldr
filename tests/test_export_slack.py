@@ -69,6 +69,8 @@ from skaldr.richtext import (
 )
 from tests.factories import (
     API_AND_RISK_BADGES,
+    HAVE_BADGE,
+    MATRIX_OF_EVERY_CELL_SHAPE,
     TEXT_X_BLOCK,
     accepted_example,
     folder_texts,
@@ -884,6 +886,14 @@ def test_a_canvas_table_dots_tones_drops_widths_escapes_pipes_and_joins_lines() 
         "| 🟡 ~~(old)~~ | y |\n"
         "| 🔴 ~~fire~~ | z |\n"
         "| **Total** | **2** |\n"
+    )
+
+
+def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
+    assert slack_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
+        "|  | Badge | Both | Tone | Label |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| **Receiving** | 🟢 Have | 🟢 **Have** · runbook v2 | 🔴 none yet | n/a |\n"
     )
 
 
