@@ -122,7 +122,7 @@ class _LinkPlanner:
         held = self.held(partner)
         if held is None:
             return None
-        title = self.drafted[partner].content.title
+        title = self.drafted[partner].link_title
         shown = self.transports.for_target(partner.target).item_link(held.item_id, title)
         return ShownLink(
             service=self.targets[partner.target].target.service(),

@@ -866,6 +866,28 @@ def test_a_canvas_links_its_notion_page_and_jira_issue_in_its_stamp_and_both_lin
     ) == (0, "Nothing to publish: every item matches the YAML.", [], [], [])
 
 
+def test_a_stamp_links_a_partner_by_its_title_without_the_icon(tmp_path: Path) -> None:
+    notion, _, registry = _services()
+    save_slack(make_slack_credentials())
+    slack = InMemorySlack()
+    registry = ConnectorRegistry([registry.for_service("notion"), SlackConnector(http=slack.mock())])
+    publish = _publish_block(_notion(), make_slack_target(where={}))
+    path = write_garden_report(tmp_path, publish=publish, meta=make_garden_meta(icon="🌱"))
+
+    assert main(["publish", str(path), "--apply"], registry=registry) == 0
+
+    canvas_link = f"{SLACK_WORKSPACE_URL}docs/{SLACK_TEAM}/F000000001"
+    assert (
+        slack.markdown_of("F000000001").splitlines()[-1],
+        notion.markdown_of(DOCUMENT_PAGE).splitlines()[-1],
+    ) == (
+        "Published with skaldr from document garden-handbook · Notion "
+        f"[Garden handbook](https://www.notion.so/{DOCUMENT_PAGE})",
+        "Published with skaldr from document garden-handbook · Slack "
+        f'[Garden handbook]({canvas_link}) {{color="gray"}}',
+    )
+
+
 def test_the_dry_run_prints_the_links_after_the_plan(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

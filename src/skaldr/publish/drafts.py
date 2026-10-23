@@ -105,6 +105,11 @@ class ItemDraft:
     section_id: str | None
     content: ItemContent
     paths: Mapping[Part, str]
+    title_without_icon: str | None = None
+
+    @property
+    def link_title(self) -> str:
+        return self.content.title if self.title_without_icon is None else self.title_without_icon
 
 
 @dataclass(frozen=True)
@@ -172,6 +177,7 @@ def _look_paths(section_id: str | None) -> dict[Part, str]:
 def _item_draft(
     context: _TargetContext,
     page: LoweredDocument,
+    title_without_icon: str,
     section_id: str | None,
     title_path: str,
     section_defaults: SectionDefaults,
@@ -202,6 +208,7 @@ def _item_draft(
                 section_part(key): region_path(region) for key, region in zip(keys, page.regions, strict=True)
             },
         },
+        title_without_icon,
     )
 
 
@@ -244,6 +251,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
             opens_the_document=True,
             look_as_words=look_as_words,
         ),
+        context.report.meta.title,
         None,
         "meta.title",
         NO_SECTION_DEFAULTS,
@@ -258,6 +266,7 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
                 opens_the_document=False,
                 look_as_words=look_as_words,
             ),
+            _section_title(context.report, region),
             region.section_id,
             f"blocks[{region.source_index}].title",
             context.section_defaults_of(region),
