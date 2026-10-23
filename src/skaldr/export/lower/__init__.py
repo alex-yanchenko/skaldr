@@ -5,6 +5,7 @@ from typing_extensions import assert_never
 from skaldr import compute, models
 from skaldr.errors import RegionNotFoundError
 from skaldr.export.apportion import apportioned
+from skaldr.export.glyphs import cover_link_paragraph, title_led_by_its_icon
 from skaldr.export.inline import bold, italic, plain
 from skaldr.export.lower.context import Lowering, lowering_for, spaced, toned
 from skaldr.export.lower.diagrams import lower_chart, lower_fan, lower_flow
@@ -104,9 +105,16 @@ def assemble_page(regions: Sequence[BlockRegion], lowering: Lowering) -> Lowered
 
 
 def assemble_item_page(
-    title: str, regions: Sequence[BlockRegion], lowering: Lowering, *, opens_the_document: bool
+    title: str,
+    regions: Sequence[BlockRegion],
+    lowering: Lowering,
+    *,
+    opens_the_document: bool,
+    look_as_words: bool = False,
 ) -> LoweredDocument:
     report = lowering.report
+    cover = report.meta.cover if opens_the_document else None
+    cover_link = (cover_link_paragraph(cover),) if cover and look_as_words else ()
     blocks = [report.blocks[region.source_index] for region in regions]
     used = compute.used_badges(report.model_copy(update={"blocks": blocks}))
     first_table = next(
@@ -118,15 +126,18 @@ def assemble_item_page(
         None,
     )
     header = PagePart(
-        "header", (*_subtitle(report), *_table_of_contents(report, lowering)) if opens_the_document else ()
+        "header",
+        (*cover_link, *_subtitle(report), *_table_of_contents(report, lowering))
+        if opens_the_document
+        else (),
     )
     legend = PagePart("legend", tuple(_legend(lowering, used)))
     closing = PagePart("footer", _footer(report, lowering) if opens_the_document else ())
     return _without_empty_parts(
-        title,
+        title_led_by_its_icon(title, report.meta.icon) if look_as_words else title,
         [header, *_with_the_legend(regions, legend, first_table), closing],
-        icon=report.meta.icon,
-        cover=report.meta.cover if opens_the_document else None,
+        icon=None if look_as_words else report.meta.icon,
+        cover=None if look_as_words else cover,
     )
 
 

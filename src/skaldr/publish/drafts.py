@@ -234,10 +234,15 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
         if target.from_sections is None or region.section_id in target.from_sections
     ]
     on_the_document = [region for region in chosen if region.section_id not in target.split]
+    look_as_words = context.connector.writes_look_as_words
     document = _item_draft(
         context,
         assemble_item_page(
-            context.report.meta.title, on_the_document, context.lowering, opens_the_document=True
+            context.report.meta.title,
+            on_the_document,
+            context.lowering,
+            opens_the_document=True,
+            look_as_words=look_as_words,
         ),
         None,
         "meta.title",
@@ -247,7 +252,11 @@ def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> Ta
         _item_draft(
             context,
             assemble_item_page(
-                _section_title(context.report, region), [region], context.lowering, opens_the_document=False
+                _section_title(context.report, region),
+                [region],
+                context.lowering,
+                opens_the_document=False,
+                look_as_words=look_as_words,
             ),
             region.section_id,
             f"blocks[{region.source_index}].title",

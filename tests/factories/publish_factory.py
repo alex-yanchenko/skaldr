@@ -529,6 +529,7 @@ class FakeConnector:
     writes: WriteGranularity = "section"
     carries_look: bool = True
     export_target: ExportTarget = "notion"
+    writes_look_as_words: bool = False
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:
         return render_notion_regions(page, report.meta.notion_width)

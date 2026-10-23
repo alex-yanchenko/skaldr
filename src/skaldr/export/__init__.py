@@ -11,6 +11,7 @@ from skaldr.errors import ReportError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document
 from skaldr.export.budget import character_budget
 from skaldr.export.check import reject_what_the_target_cannot_show
+from skaldr.export.glyphs import title_led_by_its_icon
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import chunk_notion, render_notion
@@ -169,7 +170,8 @@ def _adf_pages(document: LoweredDocument) -> RenderedExport:
         if size > JIRA_DESCRIPTION_LIMIT
         else ()
     )
-    return RenderedExport(document.title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
+    title = title_led_by_its_icon(document.title, document.icon)
+    return RenderedExport(title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
 
 
 def render_export(report: Report, target: ExportTarget) -> RenderedExport:

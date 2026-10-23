@@ -57,6 +57,7 @@ class NotionConnector:
     limits: tuple[ContentLimit, ...] = NOTION_LIMITS
     writes: WriteGranularity = "section"
     carries_look: bool = True
+    writes_look_as_words: bool = False
     export_target: ExportTarget = "notion"
 
     def render_regions(self, report: Report, page: LoweredDocument, /) -> tuple[str, ...]:

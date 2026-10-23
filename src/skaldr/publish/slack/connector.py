@@ -32,6 +32,7 @@ class SlackConnector:
     limits: tuple[ContentLimit, ...] = (CANVAS_LIMIT,)
     writes: WriteGranularity = "section"
     carries_look: bool = False
+    writes_look_as_words: bool = True
     export_target: ExportTarget = "slack"
 
     def render_regions(self, _report: Report, page: LoweredDocument, /) -> tuple[str, ...]:

@@ -22,6 +22,7 @@ from tests.factories.jira_factory import DONE, SITE, FakeJira, Reply
 from tests.factories.publish_factory import (
     DOC_ID,
     make_garden_blocks,
+    make_garden_meta,
     make_garden_report,
     write_garden_report,
 )
@@ -69,11 +70,13 @@ def test_the_connector_replaces_whole_descriptions_never_writes_into_an_issue_an
         connector.writes,
         connector.existing_item_id(target),
         connector.limits,
+        (connector.carries_look, connector.writes_look_as_words),
     ) == (
         JiraTarget,
         "content",
         None,
         (ContentLimit("item", JIRA_DESCRIPTION_LIMIT, "characters of ADF", description_length),),
+        (False, True),
     )
 
 
@@ -357,6 +360,91 @@ def test_a_title_edited_in_jira_while_skaldr_writes_the_description_stops_the_ne
         [edit.part.label for edit in again.edits] if isinstance(again, Refused) else [],
         _writes(jira),
     ) == (Refused, ["title"], [])
+
+
+COVER_URL = "https://example.com/garden.png"
+LOOK = {"icon": "🌱", "cover": COVER_URL}
+COVER_PARAGRAPH: dict[str, Any] = {
+    "type": "paragraph",
+    "content": [
+        {
+            "type": "text",
+            "text": "Cover image",
+            "marks": [{"type": "link", "attrs": {"href": COVER_URL}}],
+        }
+    ],
+}
+
+
+def _summaries(jira: FakeJira) -> dict[str, JsonValue]:
+    return {key: issue.fields["summary"] for key, issue in jira.issues.items()}
+
+
+def _description_blocks(jira: FakeJira, key: str) -> list[JsonValue]:
+    description = jira.issues[key].fields["description"]
+    if not isinstance(description, dict) or not isinstance(description["content"], list):
+        raise TypeError(f"{key} has no description")
+    return description["content"]
+
+
+def test_publishing_leads_each_summary_with_the_icon_and_opens_only_the_document_with_the_cover_link(
+    tmp_path: Path,
+) -> None:
+    jira = FakeJira()
+    path = write_garden_report(
+        tmp_path, publish=_jira_publish(split=["tools"]), meta=make_garden_meta(**LOOK)
+    )
+
+    _publish(path, jira)
+
+    assert (
+        _summaries(jira),
+        _description_blocks(jira, "DEMO-1")[0],
+        COVER_PARAGRAPH in _description_blocks(jira, "DEMO-2"),
+    ) == ({"DEMO-1": "🌱 Garden handbook", "DEMO-2": "🌱 Tools"}, COVER_PARAGRAPH, False)
+
+
+def test_a_document_published_before_it_had_an_icon_and_cover_republishes_without_a_remote_edit(
+    tmp_path: Path,
+) -> None:
+    jira = FakeJira()
+    path = write_garden_report(tmp_path, publish=_jira_publish(split=["tools"]))
+    _publish(path, jira)
+    write_garden_report(tmp_path, publish=_jira_publish(split=["tools"]), meta=make_garden_meta(**LOOK))
+    jira.forget_requests()
+
+    outcome = _publish(path, jira)
+
+    assert (outcome, _summaries(jira), _description_blocks(jira, "DEMO-1")[0], _publish(path, jira)) == (
+        Applied(
+            (
+                "update   document: title",
+                "update   document: page header (meta)",
+                "update   section tools: title",
+            )
+        ),
+        {"DEMO-1": "🌱 Garden handbook", "DEMO-2": "🌱 Tools"},
+        COVER_PARAGRAPH,
+        Applied(()),
+    )
+
+
+def test_an_icon_removed_from_the_yaml_takes_it_off_the_summary_and_the_cover_off_the_description(
+    tmp_path: Path,
+) -> None:
+    jira = FakeJira()
+    path = write_garden_report(tmp_path, publish=_jira_publish(), meta=make_garden_meta(**LOOK))
+    _publish(path, jira)
+    with_the_look = (_summaries(jira), COVER_PARAGRAPH in _description_blocks(jira, "DEMO-1"))
+    write_garden_report(tmp_path, publish=_jira_publish())
+
+    _publish(path, jira)
+
+    assert (with_the_look, _summaries(jira), COVER_PARAGRAPH in _description_blocks(jira, "DEMO-1")) == (
+        ({"DEMO-1": "🌱 Garden handbook"}, True),
+        {"DEMO-1": "Garden handbook"},
+        False,
+    )
 
 
 def test_a_section_that_leaves_the_split_is_archived_by_closing_its_issue(tmp_path: Path) -> None:

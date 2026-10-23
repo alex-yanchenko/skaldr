@@ -16,7 +16,12 @@ from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish_block import JiraTarget, SlackTarget
 from tests.factories import SLACK_CANVAS_ID, make_jira_target, make_slack_target
 from tests.factories.auth_factory import make_slack_credentials
-from tests.factories.publish_factory import make_garden_blocks, make_garden_report, write_garden_report
+from tests.factories.publish_factory import (
+    make_garden_blocks,
+    make_garden_meta,
+    make_garden_report,
+    write_garden_report,
+)
 from tests.factories.slack_factory import TEAM_ID, WORKSPACE_URL, InMemorySlack
 
 DOCUMENT_CANVAS = "F000000001"
@@ -60,12 +65,14 @@ def test_the_slack_connector_writes_sections_into_one_canvas_within_its_size_and
         connector.limits,
         connector.writes,
         connector.carries_look,
+        connector.writes_look_as_words,
         connector.export_target,
     ) == (
         SlackTarget,
         (ContentLimit("item", 1_048_576, "characters of canvas Markdown"),),
         "section",
         False,
+        True,
         "slack",
     )
 
@@ -215,6 +222,57 @@ def test_a_changed_section_is_written_with_one_replace_of_the_canvas_body(tmp_pa
         [("canvases.edit", "replace")],
         True,
     )
+
+
+COVER_URL = "https://example.com/garden.png"
+LOOK = {"icon": "🌱", "cover": COVER_URL}
+COVER_LINE = f"[Cover image]({COVER_URL})"
+
+
+def _titles(slack: InMemorySlack) -> dict[str, str]:
+    return {canvas_id: canvas.title for canvas_id, canvas in slack.canvases.items()}
+
+
+def test_publishing_leads_each_canvas_title_with_the_icon_and_opens_only_the_document_with_the_cover_link(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+    save_slack(make_slack_credentials())
+    path = write_garden_report(
+        tmp_path, publish=_slack_publish(split=["tools"]), meta=make_garden_meta(**LOOK)
+    )
+
+    assert main(["publish", str(path), "--apply"], registry=_registry(slack)) == 0
+
+    assert (
+        _titles(slack),
+        COVER_LINE in slack.markdown_of(DOCUMENT_CANVAS),
+        COVER_LINE in slack.markdown_of(TOOLS_CANVAS),
+        slack.messages,
+    ) == (
+        {DOCUMENT_CANVAS: "🌱 Garden handbook", TOOLS_CANVAS: "🌱 Tools"},
+        True,
+        False,
+        [("C0EXAMPLE1", f"🌱 Garden handbook: {WORKSPACE_URL}docs/{TEAM_ID}/{DOCUMENT_CANVAS}")],
+    )
+
+
+def test_a_document_published_before_it_had_an_icon_and_cover_republishes_without_a_remote_edit(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    write_garden_report(tmp_path, publish=_slack_publish(split=["tools"]), meta=make_garden_meta(**LOOK))
+    slack.forget_requests()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (
+        exit_code,
+        _titles(slack),
+        COVER_LINE in slack.markdown_of(DOCUMENT_CANVAS),
+        main(["publish", str(path), "--apply"], registry=_registry(slack)),
+    ) == (0, {DOCUMENT_CANVAS: "🌱 Garden handbook", TOOLS_CANVAS: "🌱 Tools"}, True, 0)
 
 
 PLANTING_REWRITTEN = (

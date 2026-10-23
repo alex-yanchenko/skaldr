@@ -79,7 +79,13 @@ def test_skaldr_has_a_notion_and_a_jira_connector_installed() -> None:
 def test_the_notion_connector_writes_sections_within_one_creates_budget_and_carries_the_look() -> None:
     connector = NotionConnector()
 
-    assert (connector.target_type, connector.writes, connector.limits, connector.carries_look) == (
+    assert (
+        connector.target_type,
+        connector.writes,
+        connector.limits,
+        connector.carries_look,
+        connector.writes_look_as_words,
+    ) == (
         NotionTarget,
         "section",
         (
@@ -87,6 +93,7 @@ def test_the_notion_connector_writes_sections_within_one_creates_budget_and_carr
             ContentLimit("section", SECTION_JSON_BYTES, "bytes of JSON", json_string_bytes),
         ),
         True,
+        False,
     )
 
 

@@ -206,6 +206,29 @@ def test_the_cli_warns_when_the_adf_description_is_over_the_jira_limit(
     )
 
 
+def test_the_page_icon_leads_the_issue_summary_in_the_manifest_and_the_cover_is_a_link_paragraph(
+    tmp_path: Path,
+) -> None:
+    meta = {"title": "Test Report", "icon": "📊", "cover": "https://example.com/cover.png"}
+    report = load_report(write_report(tmp_path, make_report(meta=meta)))
+
+    export_adf(report, tmp_path / "out")
+
+    written = folder_texts(tmp_path / "out")
+    link = {"type": "link", "attrs": {"href": "https://example.com/cover.png"}}
+    assert (json.loads(written[EXPORT_MANIFEST])["title"], json.loads(written["page.adf.json"])) == (
+        "📊 Test Report",
+        {
+            "version": 1,
+            "type": "doc",
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "Cover image", "marks": [link]}]},
+                {"type": "paragraph", "content": [{"type": "text", "text": "Hello."}]},
+            ],
+        },
+    )
+
+
 def test_a_citation_carries_the_number_of_its_reference_in_the_ordered_list(tmp_path: Path) -> None:
     blocks = [
         {"type": "text", "body": "Soil first [^soil], then seeds [^seeds]."},

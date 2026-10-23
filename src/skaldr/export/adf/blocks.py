@@ -54,6 +54,7 @@ from skaldr.export.adf.nodes import (
 )
 from skaldr.export.apportion import apportioned, apportioned_at_least
 from skaldr.export.folds import folded, link_card_detail, reference_runs
+from skaldr.export.glyphs import cover_link_paragraph
 from skaldr.export.inline import bold, one_line, plain
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, StatusMark, export_visible_text
 from skaldr.export.swaps import (
@@ -103,7 +104,7 @@ from skaldr.export.tree import (
     nested_nodes,
 )
 from skaldr.models import MEDIA_KIND_LABELS
-from skaldr.richtext import Link, Plain
+from skaldr.richtext import Plain
 
 Container = Literal["doc", "panel", "expand", "nested_expand", "cell", "list item", "quote"]
 
@@ -134,7 +135,6 @@ UNSHARED_COLUMN_MINIMUM_SHARE: Final = 0.1
 MINIMUM_COLUMN_WIDTH: Final = 60
 DECISION_MARK_SEPARATOR: Final = " "
 MOST_TOGGLE_LEVELS_IN_A_CELL: Final = 1
-COVER_LABEL: Final = "Cover image"
 WHEN_COLUMN: Final = "When"
 STATE_COLUMN: Final = "State"
 WHAT_COLUMN: Final = "What"
@@ -721,7 +721,7 @@ def render_adf(nodes: Sequence[Node], issue_links: IssueLinks | None = None) -> 
 
 
 def _cover_link(cover: str | None) -> tuple[Paragraph, ...]:
-    return (Paragraph((Link((Plain(COVER_LABEL),), cover),)),) if cover else ()
+    return (cover_link_paragraph(cover),) if cover else ()
 
 
 def render_adf_document(document: LoweredDocument, issue_links: IssueLinks | None = None) -> AdfDoc:
