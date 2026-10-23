@@ -413,6 +413,17 @@ def uses_heading_level_1(nodes: Iterable[Node]) -> bool:
     return False
 
 
+def deepest_heading_level(nodes: Iterable[Node]) -> int:
+    levels = (
+        max(
+            heading.level if (heading := heading_of(node)) is not None else 0,
+            deepest_heading_level(nested_nodes(node)),
+        )
+        for node in nodes
+    )
+    return max(levels, default=0)
+
+
 def canvas_heading_shift(body: Iterable[Node]) -> int:
     return 0 if uses_heading_level_1(body) else 1
 

@@ -109,6 +109,58 @@ def test_publishing_again_writes_only_the_section_the_yaml_changed(tmp_path: Pat
     )
 
 
+def _garden_with_zone_and_bin_headings_in_planting() -> list[dict[str, Any]]:
+    tools, planting = make_garden_blocks()[1:]
+    deeper = {
+        **planting,
+        "blocks": [
+            {"type": "heading", "level": 3, "text": "Zone C"},
+            {"type": "heading", "level": 4, "text": "Bin 12"},
+        ],
+    }
+    return [make_garden_blocks()[0], tools, deeper]
+
+
+def test_a_document_that_gains_deep_headings_publishes_its_moved_headings_as_a_change_from_the_yaml(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(
+        tmp_path, transport, blocks=_garden_with_zone_and_bin_headings_in_planting()
+    )
+
+    outcome = _publish(path, transport)
+
+    assert (
+        outcome,
+        transport.writes(),
+        transport.items["page-1"].content,
+        _drafted(path).sections["planting"],
+    ) == (
+        Applied(("update   document: planting (blocks[2])",)),
+        [("write_section", "page-1", "planting")],
+        _drafted(path),
+        "# Planting\n### Zone C\n#### Bin 12\n",
+    )
+
+
+def test_publishing_again_after_the_headings_moved_changes_nothing(tmp_path: Path) -> None:
+    transport = FakeTransport()
+    path = _published_then_rewritten(
+        tmp_path, transport, blocks=_garden_with_zone_and_bin_headings_in_planting()
+    )
+    _publish(path, transport)
+    transport.forget_calls()
+
+    assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
+
+
+def test_a_split_sections_own_page_decides_its_heading_shift_on_what_that_page_holds(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path, blocks=_garden_with_zone_and_bin_headings_in_planting())
+
+    assert list(_drafted(path, "tools").sections.values()) == [LEGEND_TEXT, TOOLS_TEXT]
+
+
 def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(

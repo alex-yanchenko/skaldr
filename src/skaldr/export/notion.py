@@ -89,8 +89,10 @@ from skaldr.export.tree import (
     Tabs,
     Toggle,
     ToneName,
+    deepest_heading_level,
     heading_of,
     nested_nodes,
+    uses_heading_level_1,
 )
 from skaldr.mathml import NOTION_EQUATION_FENCE
 from skaldr.models import (
@@ -201,13 +203,18 @@ class TableRoom:
     sizes_every_table: bool
     in_a_column: bool = False
     enclosing: EnclosingContainers = field(default_factory=EnclosingContainers)
+    heading_shift: int = 0
 
     def inside(self, container: NotionContainer) -> "TableRoom":
         return replace(self, enclosing=self.enclosing.inside(container))
 
     @classmethod
-    def on_page(cls, page_width: NotionWidth) -> "TableRoom":
-        return cls(NOTION_PAGE_WIDTH_PX[page_width], sizes_every_table=page_width == "full")
+    def on_page(cls, page_width: NotionWidth, nodes: Iterable[Node]) -> "TableRoom":
+        return cls(
+            NOTION_PAGE_WIDTH_PX[page_width],
+            sizes_every_table=page_width == "full",
+            heading_shift=notion_heading_shift(tuple(nodes)),
+        )
 
     def within(self, ratio: int) -> "TableRoom":
         if not self.sizes_every_table:
@@ -667,14 +674,20 @@ def _quote_line(node: Quote) -> str:
     return f"> {body}"
 
 
-def _heading_marks(level: HeadingLevel) -> str:
-    return "#" * min(level, DEEPEST_NOTION_HEADING)
+def notion_heading_shift(nodes: Sequence[Node]) -> int:
+    goes_past_the_deepest = deepest_heading_level(nodes) > DEEPEST_NOTION_HEADING
+    return 1 if goes_past_the_deepest and not uses_heading_level_1(nodes) else 0
+
+
+def _heading_marks(level: HeadingLevel, shift: int) -> str:
+    return "#" * min(level - shift, DEEPEST_NOTION_HEADING)
 
 
 def _toggle_lines(node: Toggle, room: TableRoom) -> list[str]:
     if node.heading_level is not None:
+        marks = _heading_marks(node.heading_level, room.heading_shift)
         return [
-            f'{_heading_marks(node.heading_level)} {notion_inline(node.title)} {{toggle="true"}}',
+            f'{marks} {notion_inline(node.title)} {{toggle="true"}}',
             *_indent(_notion_blocks(node.children, room)),
         ]
     children = _indent(_notion_blocks(node.children, room.inside("details")))
@@ -831,7 +844,7 @@ def _notion_lines(node: NotionNode, room: TableRoom) -> list[str]:
         case Cards():
             return _column_strip_lines(_card_columns(node), room)
         case Heading():
-            return [f"{_heading_marks(node.level)} {notion_inline(node.text)}"]
+            return [f"{_heading_marks(node.level, room.heading_shift)} {notion_inline(node.text)}"]
         case Paragraph():
             text = _block_text(node.text)
             return [text + _trailing_color(node.tone)] if text else []
@@ -890,7 +903,7 @@ def _page(lines: Sequence[str]) -> str:
 
 
 def render_notion(nodes: Sequence[Node], page_width: NotionWidth = "normal") -> str:
-    return _page(_notion_blocks(nodes, TableRoom.on_page(page_width)))
+    return _page(_notion_blocks(nodes, TableRoom.on_page(page_width, nodes)))
 
 
 def _chunk_heading(node: Node) -> Heading | None:
@@ -898,9 +911,11 @@ def _chunk_heading(node: Node) -> Heading | None:
     return heading if heading is not None and heading.level <= CHUNK_BOUNDARY_LEVEL else None
 
 
-def _section_label(section: Sequence[Node]) -> str:
+def _section_label(section: Sequence[Node], heading_shift: int) -> str:
     heading = _chunk_heading(section[0]) if section else None
-    return f"{'#' * heading.level} {export_visible_text(heading.text)}" if heading else OPENING_SECTION_LABEL
+    if heading is None:
+        return OPENING_SECTION_LABEL
+    return f"{_heading_marks(heading.level, heading_shift)} {export_visible_text(heading.text)}"
 
 
 @dataclass(frozen=True)
@@ -931,7 +946,7 @@ def _sections(nodes: Sequence[Node], room: TableRoom) -> list[list[Node]]:
 
 
 def chunk_notion(nodes: Sequence[Node], budget: Budget, page_width: NotionWidth = "normal") -> NotionChunks:
-    room = TableRoom.on_page(page_width)
+    room = TableRoom.on_page(page_width, nodes)
     chunks: list[str] = []
     oversized: list[str] = []
     current_chunk = _Piece("", budget.nothing)
@@ -939,7 +954,7 @@ def chunk_notion(nodes: Sequence[Node], budget: Budget, page_width: NotionWidth 
         costed = [_CostedBlock(block, budget.cost(block)) for block in _rendered_blocks(section, room)]
         pieces = _section_pieces(costed, budget)
         if any(not budget.allows(piece.cost) for piece in pieces):
-            oversized.append(_section_label(section))
+            oversized.append(_section_label(section, room.heading_shift))
         for piece in pieces:
             if current_chunk.text and not budget.allows(current_chunk.cost + piece.cost):
                 chunks.append(current_chunk.text)
@@ -1000,7 +1015,7 @@ def notion_block_count(text: str) -> int:
 
 
 def render_notion_regions(document: LoweredDocument, page_width: NotionWidth = "normal") -> tuple[str, ...]:
-    room = TableRoom.on_page(page_width)
+    room = TableRoom.on_page(page_width, document.body)
     region_of_node = [
         position
         for position, region in enumerate(document.regions)

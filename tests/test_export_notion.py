@@ -1126,18 +1126,70 @@ def test_a_level_four_heading_is_four_hashes() -> None:
     assert notion_of([{"type": "heading", "level": 4, "text": "Bin detail"}]) == "#### Bin detail\n"
 
 
-def test_a_heading_deeper_than_notion_heading_4_is_written_as_heading_4() -> None:
-    section = {
+def _appendix_with_zone_and_bin_headings(*, collapsed: bool) -> dict[str, Any]:
+    return {
         "type": "section",
         "title": "Appendix",
-        "collapsed": False,
+        "collapsed": collapsed,
         "blocks": [
             {"type": "heading", "level": 3, "text": "Zone C"},
             {"type": "heading", "level": 4, "text": "Bin 12"},
         ],
     }
 
-    assert notion_of([section]) == "## Appendix\n#### Zone C\n#### Bin 12\n"
+
+def test_a_level_3_and_a_level_4_heading_inside_a_section_stay_apart_when_every_heading_moves_up_one() -> (
+    None
+):
+    section = _appendix_with_zone_and_bin_headings(collapsed=False)
+
+    assert notion_of([section]) == "# Appendix\n### Zone C\n#### Bin 12\n"
+
+
+def test_a_collapsed_sections_toggle_heading_moves_up_with_the_headings_inside_it() -> None:
+    section = _appendix_with_zone_and_bin_headings(collapsed=True)
+
+    assert notion_of([section]) == '# Appendix {toggle="true"}\n\t### Zone C\n\t#### Bin 12\n'
+
+
+def test_a_document_that_goes_no_deeper_than_heading_4_keeps_its_levels() -> None:
+    section = {
+        "type": "section",
+        "title": "Appendix",
+        "collapsed": False,
+        "blocks": [{"type": "heading", "level": 3, "text": "Zone C"}],
+    }
+
+    assert notion_of([section]) == "## Appendix\n#### Zone C\n"
+
+
+def test_a_deep_heading_nested_in_a_callout_moves_the_whole_document_up_one_level() -> None:
+    nodes = [
+        Heading(2, (Plain("Top"),)),
+        Heading(3, (Plain("Mid"),)),
+        Callout("info", (Heading(5, (Plain("Deep"),)),)),
+    ]
+
+    assert render_notion(nodes) == (
+        '# Top\n## Mid\n<callout icon="💡" color="blue_bg">\n\t#### Deep\n</callout>\n'
+    )
+
+
+def test_an_index_with_parts_has_no_level_1_to_spare_and_keeps_clamping_at_heading_4() -> None:
+    nodes = [
+        Heading(1, (Plain("Part"),)),
+        Heading(2, (Plain("Section"),)),
+        Heading(4, (Plain("Four"),)),
+        Heading(5, (Plain("Five"),)),
+    ]
+
+    assert render_notion(nodes) == "# Part\n## Section\n#### Four\n#### Five\n"
+
+
+def test_a_collapsed_part_is_a_level_1_heading_so_the_clamp_stays() -> None:
+    part = Toggle((Plain("Part"),), 1, (Heading(2, (Plain("Section"),)), Heading(5, (Plain("Five"),))))
+
+    assert render_notion([part]) == '# Part {toggle="true"}\n\t## Section\n\t#### Five\n'
 
 
 @pytest.mark.parametrize(
@@ -2871,6 +2923,48 @@ def test_a_heading_mid_section_moves_to_the_part_with_the_block_it_introduces() 
     split = _chunked(nodes, 80)
 
     assert split == NotionChunks(("## S\n" + "a" * 30 + "\n", "### H3\n#### H4\n" + "b" * 60 + "\n"), ())
+
+
+def test_chunk_boundaries_stay_at_the_same_headings_when_a_deep_heading_moves_the_document_up() -> None:
+    nodes = [
+        Heading(2, (Plain("A"),)),
+        Paragraph((Plain("a" * 30),)),
+        Heading(2, (Plain("B"),)),
+        Heading(5, (Plain("Deep"),)),
+        Paragraph((Plain("b" * 30),)),
+        Heading(2, (Plain("C"),)),
+        Paragraph((Plain("c" * 30),)),
+    ]
+
+    split = _chunked(nodes, 60)
+
+    assert split == NotionChunks(
+        ("# A\n" + "a" * 30 + "\n", "# B\n#### Deep\n" + "b" * 30 + "\n", "# C\n" + "c" * 30 + "\n"), ()
+    )
+
+
+def test_a_heading_mid_section_moves_with_its_block_when_a_deep_heading_moves_the_document_up() -> None:
+    nodes = [
+        Heading(2, (Plain("S"),)),
+        Paragraph((Plain("a" * 30),)),
+        Heading(3, (Plain("H3"),)),
+        Heading(5, (Plain("H5"),)),
+        Paragraph((Plain("b" * 60),)),
+    ]
+
+    split = _chunked(nodes, 80)
+
+    assert split == NotionChunks(("# S\n" + "a" * 30 + "\n", "## H3\n#### H5\n" + "b" * 60 + "\n"), ())
+
+
+def test_an_oversized_section_is_named_by_the_heading_marks_the_page_writes() -> None:
+    nodes = [
+        Heading(2, (Plain("Big"),)),
+        Paragraph((Plain("y" * 50),)),
+        Heading(5, (Plain("Deep"),)),
+    ]
+
+    assert _chunked(nodes, 20).oversized_sections == ("# Big",)
 
 
 def test_a_carried_heading_counts_toward_the_part_it_starts() -> None:
