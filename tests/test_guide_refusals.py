@@ -47,6 +47,7 @@ CANVAS_TABLE_ROW = "`table`, `comparison`, `matrix`, `swimlane`"
 
 PROSE_CELLS_THAT_REFUSE: dict[tuple[ExportTarget, str], tuple[Feature, ...]] = {
     ("notion", "a decimal `number` list's `start`"): ("numbered list starting past 1",),
+    ("notion", "`image` with a `data:` URI"): ("image from a data: URI",),
     ("markdown", "`[text]{tone=…}`"): ("colour span",),
     ("markdown", "`[text]{tone=… bg=…}`"): ("colour and highlight span",),
     ("notion", "`[text]{tone=… bg=…}`"): ("colour and highlight span",),
@@ -440,12 +441,17 @@ def test_each_target_names_in_its_list_exactly_the_features_the_table_rejects_fo
     assert named == rejected
 
 
-def test_every_export_refuses_a_range_and_an_image_from_a_data_uri() -> None:
+def test_every_export_refuses_a_range_and_every_one_but_github_refuses_an_image_from_a_data_uri() -> None:
     features: tuple[Feature, ...] = ("range", "image from a data: URI")
 
     not_refused = {target: features_the_table_does_not_refuse(target, features) for target in EXPORT_TARGETS}
 
-    assert not_refused == dict.fromkeys(EXPORT_TARGETS, ())
+    assert not_refused == {
+        "markdown": ("image from a data: URI",),
+        "notion": (),
+        "adf": (),
+        "slack": (),
+    }
 
 
 def test_every_prose_cell_that_says_refused_is_mapped_to_the_features_it_refuses() -> None:
