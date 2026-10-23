@@ -1167,3 +1167,26 @@ def test_a_decision_list_in_a_table_cell_is_a_decision_list() -> None:
     node = TableNode((cell("A"),), (TableRow((TableCell((), blocks=(SHIP_FRIDAY_LIST,)),)),))
 
     assert _rendered(node) == _doc(_table(_row(_header("A")), _row(_cell("tableCell", SHIP_FRIDAY_WRITTEN))))
+
+
+def test_section_fields_are_a_two_column_table_with_the_labels_as_header_cells() -> None:
+    node = FactStrip(
+        (LabelledValue("Status:", plain("Open")), LabelledValue("Owner", plain("ops"))),
+        of_section_fields=True,
+    )
+
+    assert _rendered(node) == _doc(
+        _table(_row(_header("Status"), _body("Open")), _row(_header("Owner"), _body("ops")))
+    )
+
+
+def test_section_fields_in_a_callout_stay_bullets_since_a_panel_holds_no_table() -> None:
+    node = Callout("info", (FactStrip((LabelledValue("Site", plain("West")),), of_section_fields=True),))
+
+    assert _rendered(node) == _doc(
+        {
+            "type": "panel",
+            "attrs": {"panelType": "info"},
+            "content": [_bullets(_item(_paragraph(_text("Site", STRONG), _text(": West"))))],
+        }
+    )

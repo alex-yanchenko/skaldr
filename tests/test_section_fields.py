@@ -222,7 +222,8 @@ def test_the_lowered_section_opens_with_a_fact_strip_of_its_fields() -> None:
                 LabelledValue("Labels", plain("onboarding, bins")),
                 LabelledValue("Estimate", plain("3")),
                 LabelledValue("Blocks", (SectionLink(plain("Relabel the aisles"), "st3"),)),
-            )
+            ),
+            of_section_fields=True,
         ),
     )
 
@@ -338,18 +339,13 @@ def test_a_generated_section_link_is_the_section_title_in_a_jira_description() -
                     {
                         "type": "tableHeader",
                         "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Blocks"}]}],
-                    }
-                ],
-            },
-            {
-                "type": "tableRow",
-                "content": [
+                    },
                     {
                         "type": "tableCell",
                         "content": [
                             {"type": "paragraph", "content": [{"type": "text", "text": "Relabel the aisles"}]}
                         ],
-                    }
+                    },
                 ],
             },
         ],

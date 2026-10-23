@@ -4336,98 +4336,14 @@
               ]
             },
             {
-              "type": "tableHeader",
+              "type": "tableCell",
               "content": [
                 {
                   "type": "paragraph",
                   "content": [
                     {
                       "type": "text",
-                      "text": "Priority"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "tableHeader",
-              "content": [
-                {
-                  "type": "paragraph",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "Assignee"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "tableHeader",
-              "content": [
-                {
-                  "type": "paragraph",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "Due"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "tableHeader",
-              "content": [
-                {
-                  "type": "paragraph",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "Labels"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "tableHeader",
-              "content": [
-                {
-                  "type": "paragraph",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "Estimate"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "tableHeader",
-              "content": [
-                {
-                  "type": "paragraph",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "Relates"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "tableHeader",
-              "content": [
-                {
-                  "type": "paragraph",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "team"
+                      "text": "In Progress"
                     }
                   ]
                 }
@@ -4439,14 +4355,14 @@
           "type": "tableRow",
           "content": [
             {
-              "type": "tableCell",
+              "type": "tableHeader",
               "content": [
                 {
                   "type": "paragraph",
                   "content": [
                     {
                       "type": "text",
-                      "text": "In Progress"
+                      "text": "Priority"
                     }
                   ]
                 }
@@ -4465,6 +4381,25 @@
                   ]
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Assignee"
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "tableCell",
@@ -4475,6 +4410,25 @@
                     {
                       "type": "text",
                       "text": "ada"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Due"
                     }
                   ]
                 }
@@ -4493,6 +4447,25 @@
                   ]
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Labels"
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "tableCell",
@@ -4503,6 +4476,25 @@
                     {
                       "type": "text",
                       "text": "recount, bins"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Estimate"
                     }
                   ]
                 }
@@ -4521,6 +4513,25 @@
                   ]
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Relates"
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "tableCell",
@@ -4531,6 +4542,25 @@
                     {
                       "type": "text",
                       "text": "Appendix: discrepancy-reason raw counts"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "team"
                     }
                   ]
                 }

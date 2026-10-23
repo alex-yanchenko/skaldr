@@ -595,6 +595,8 @@ class _AdfBlocks:
         self, node: FactStrip | KeyValueList | DefinitionList | Cards | Timeline
     ) -> list[AdfBlock]:
         match node:
+            case FactStrip() if node.of_section_fields:
+                return self.labelled_rows(node.facts)
             case FactStrip():
                 return self.fact_strip_blocks(node)
             case KeyValueList():
