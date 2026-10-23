@@ -85,6 +85,9 @@ class SlackTransport:
         self._warn = warn
         self._read = ReadLayouts()
 
+    def comparable_draft(self, content: ItemContent, /) -> ItemContent:
+        return self.comparable_form(content)
+
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
         return comparable_sections(content, comparable_text)
 

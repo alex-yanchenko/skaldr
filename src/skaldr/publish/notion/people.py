@@ -5,7 +5,11 @@ from typing import Final
 from skaldr.errors import ConnectorError, ItemNotFoundError
 from skaldr.publish.notion.api import NotionApi
 
-PERSON_MENTION: Final = re.compile(r'<mention-user url="user://([0-9A-Fa-f-]+)">(.*?)</mention-user>')
+CODE_OR_PERSON_MENTION: Final = re.compile(
+    r"(?P<code>(?P<fence>```|~~~).*?(?P=fence)|``.*?``|`[^`\n]*`)"
+    r'|<mention-user url="user://(?P<id>[0-9A-Fa-f-]+)">(?P<label>.*?)</mention-user>',
+    re.DOTALL,
+)
 
 
 class KnownPeople:
@@ -14,25 +18,31 @@ class KnownPeople:
         self._notion_knows: dict[str, bool] = {}
 
     def as_written(self, text: str) -> str:
-        return PERSON_MENTION.sub(self._mention_or_label, text)
+        return CODE_OR_PERSON_MENTION.sub(self._mention_or_label, text)
 
     def _mention_or_label(self, found: re.Match[str]) -> str:
-        user_id, label = found.group(1), found.group(2)
-        if user_id not in self._notion_knows:
-            self._notion_knows[user_id] = self._answers_for(user_id)
-            if not self._notion_knows[user_id]:
+        user_id = found.group("id")
+        if user_id is None:
+            return found.group(0)
+        label = found.group("label")
+        knows = self._notion_knows.get(user_id)
+        if knows is None:
+            knows = self._answers_for(user_id)
+            if knows is False:
                 print(
-                    f"warning: Notion has no user user://{user_id}, "
+                    f"warning: Notion has no user with id {user_id}, "
                     f"so the page shows {label} as text instead of a mention",
                     file=sys.stderr,
                 )
-        return found.group(0) if self._notion_knows[user_id] else label
+        return label if knows is False else found.group(0)
 
-    def _answers_for(self, user_id: str) -> bool:
+    def _answers_for(self, user_id: str) -> bool | None:
         try:
             self._api.user(user_id)
         except ItemNotFoundError:
+            self._notion_knows[user_id] = False
             return False
         except ConnectorError:
-            return True
+            return None
+        self._notion_knows[user_id] = True
         return True

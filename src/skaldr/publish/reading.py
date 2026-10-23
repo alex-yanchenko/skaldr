@@ -106,7 +106,7 @@ def _settled(
 ) -> tuple[PublishedItem, tuple[Part, ...]]:
     if item.writing is None:
         return item, edited
-    expected = transport.comparable_form(item.writing.rendered)
+    expected = transport.comparable_draft(item.writing.rendered)
     written = [part.part for part in item.writing.parts if part.part in edited]
     landed = [part for part in written if part_text(remote.comparable, part) == part_text(expected, part)]
     rest = tuple(part for part in edited if part not in landed)
@@ -177,7 +177,7 @@ def _read_or_none(transport: Transport, item_id: str, keyed_like: ItemContent) -
 
 
 def _rendered_where_it_matches(remote: ItemContent, draft: ItemContent, transport: Transport) -> ItemContent:
-    expected = transport.comparable_form(draft)
+    expected = transport.comparable_draft(draft)
     title = draft.title if expected.title == remote.title else remote.title
     fields = draft.fields if same_fields(expected.fields, remote.fields) else remote.fields
     sections = {
@@ -308,7 +308,8 @@ def _read_written_into(
         ) from exc
     refuse_another_documents_item(step.item, remote, prepared.doc_id)
     holds_this_draft = not differing_parts(
-        transport.comparable_form(step.draft.content), _owned_part_of(remote.comparable, [step.draft.content])
+        transport.comparable_draft(step.draft.content),
+        _owned_part_of(remote.comparable, [step.draft.content]),
     )
     if remote.doc_id is None and _has_content(remote) and not holds_this_draft:
         raise PublishError(

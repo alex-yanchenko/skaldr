@@ -248,6 +248,9 @@ class JiraTransport:
         self._last_reads: dict[str, _Read] = {}
         self._account_id: str | None = None
 
+    def comparable_draft(self, content: ItemContent, /) -> ItemContent:
+        return self.comparable_form(content)
+
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
         sections = {key: comparable_section(text) for key, text in content.sections.items()}
         return content.model_copy(update={"sections": {key: text for key, text in sections.items() if text}})

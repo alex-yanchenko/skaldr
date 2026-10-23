@@ -221,8 +221,11 @@ class NotionTransport:
         return {key: self._people.as_written(text) for key, text in sections.items()}
 
     def comparable_form(self, content: ItemContent, /) -> ItemContent:
+        return comparable_sections(content, comparable_text)
+
+    def comparable_draft(self, content: ItemContent, /) -> ItemContent:
         written = content.model_copy(update={"sections": self._sections_as_written(content.sections)})
-        return comparable_sections(written, comparable_text)
+        return self.comparable_form(written)
 
     def read_item(self, item_id: str, keyed_like: ItemContent, /) -> RemoteItem:
         page = self._live_page(item_id)
@@ -573,7 +576,7 @@ class NotionTransport:
             markdown = self._api.update_markdown(
                 item_id, _update_content(Replacement(stamp, joined([*batch, stamp])))
             ).markdown
-        layout = self.comparable_form(content).sections
+        layout = self.comparable_draft(content).sections
         self._read.note_written(_page_key(item_id), layout)
         return self._remote(item_id, self._live_page(item_id), markdown, layout)
 
