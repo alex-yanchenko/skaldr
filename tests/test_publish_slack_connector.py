@@ -266,13 +266,39 @@ def test_a_document_published_before_it_had_an_icon_and_cover_republishes_withou
     slack.forget_requests()
 
     exit_code = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    slack.forget_requests()
+    again = main(["publish", str(path), "--apply"], registry=_registry(slack))
 
     assert (
         exit_code,
         _titles(slack),
         COVER_LINE in slack.markdown_of(DOCUMENT_CANVAS),
-        main(["publish", str(path), "--apply"], registry=_registry(slack)),
-    ) == (0, {DOCUMENT_CANVAS: "🌱 Garden handbook", TOOLS_CANVAS: "🌱 Tools"}, True, 0)
+        again,
+        slack.writes(),
+    ) == (0, {DOCUMENT_CANVAS: "🌱 Garden handbook", TOOLS_CANVAS: "🌱 Tools"}, True, 0, [])
+
+
+def test_an_icon_and_cover_removed_from_the_yaml_leave_the_canvas_titles_and_the_cover_paragraph(
+    tmp_path: Path,
+) -> None:
+    slack = InMemorySlack()
+    save_slack(make_slack_credentials())
+    path = write_garden_report(
+        tmp_path, publish=_slack_publish(split=["tools"]), meta=make_garden_meta(**LOOK)
+    )
+    main(["publish", str(path), "--apply"], registry=_registry(slack))
+    with_the_look = (_titles(slack), COVER_LINE in slack.markdown_of(DOCUMENT_CANVAS))
+    write_garden_report(tmp_path, publish=_slack_publish(split=["tools"]))
+    slack.forget_requests()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (with_the_look, exit_code, _titles(slack), COVER_LINE in slack.markdown_of(DOCUMENT_CANVAS)) == (
+        ({DOCUMENT_CANVAS: "🌱 Garden handbook", TOOLS_CANVAS: "🌱 Tools"}, True),
+        0,
+        {DOCUMENT_CANVAS: "Garden handbook", TOOLS_CANVAS: "Tools"},
+        False,
+    )
 
 
 PLANTING_REWRITTEN = (

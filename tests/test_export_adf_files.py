@@ -251,6 +251,25 @@ def test_a_citation_carries_the_number_of_its_reference_in_the_ordered_list(tmp_
     )
 
 
+def test_a_second_references_block_continues_the_numbering_with_the_order_of_its_first_item(
+    tmp_path: Path,
+) -> None:
+    blocks = [
+        {"type": "text", "body": "One [^a], two [^b], three [^c]."},
+        {"type": "references", "items": [{"key": "a", "text": "Alpha"}, {"key": "b", "text": "Beta"}]},
+        {"type": "references", "items": [{"key": "c", "text": "Gamma"}]},
+    ]
+    report = load_report(write_report(tmp_path, make_report(blocks=blocks)))
+
+    export_adf(report, tmp_path / "out")
+
+    written = json.loads((tmp_path / "out" / "page.adf.json").read_text(encoding="utf-8"))
+    lists = [(block.get("attrs"), block["content"]) for block in written["content"][1:]]
+    assert [
+        (attrs, [item["content"][0]["content"][0]["text"] for item in items]) for attrs, items in lists
+    ] == [(None, ["Alpha", "Beta"]), ({"order": 3}, ["Gamma"])]
+
+
 def test_chunk_applies_only_to_notion(
     tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
