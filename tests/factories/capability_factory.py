@@ -1295,12 +1295,14 @@ DIAGRAM_REFUSALS: dict[str, RefusedCase] = {
         )
         for target, subject in MERMAID_SUBJECTS
     },
-    "markdown-data-image": RefusedCase(
+    "markdown-data-image-that-is-not-an-image": RefusedCase(
         "markdown",
-        "image from a data: URI",
-        [DATA_IMAGE],
-        "GitHub cannot show an image from a data: URI",
-        HOST_THE_IMAGE,
+        "image from a data: URI that GitHub cannot write as a file",
+        [{**DATA_IMAGE, "src": "data:text/html;base64,AA=="}],
+        "GitHub cannot write an image from a data: URI as a file, "
+        "since its media type 'text/html' is not a png, jpeg, gif, webp, svg+xml, avif or bmp image",
+        "give a data: URI holding a png, jpeg, gif, webp, svg+xml, avif or bmp image, "
+        "or host the image and give its https address",
         "at blocks.0.image",
     ),
     "notion-data-image": RefusedCase(

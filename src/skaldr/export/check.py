@@ -48,8 +48,10 @@ from skaldr.export.capabilities import (
     TextMarkFeature,
     TextNumbering,
     TonedCell,
+    UnwritableImage,
     character_without_a_unicode_form,
 )
+from skaldr.export.data_images import UnwritableDataImage, read_data_image
 from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import one_line
 from skaldr.export.markup import table_width
@@ -659,6 +661,13 @@ def _located_blocks(report: Report, document: LoweredDocument) -> list[tuple[str
     ]
 
 
+def _data_image_hits(path: str, image: Image) -> Iterator[LocatedDetails]:
+    yield path, Occurrence("image from a data: URI")
+    read = read_data_image(image.src)
+    if isinstance(read, UnwritableDataImage):
+        yield path, UnwritableImage(read.problem)
+
+
 def _block_hits(path: str, block: AnyBlock) -> Iterator[LocatedDetails]:
     match block:
         case Walkthrough():
@@ -672,7 +681,7 @@ def _block_hits(path: str, block: AnyBlock) -> Iterator[LocatedDetails]:
         case Range():
             yield path, Occurrence("range")
         case Image() if is_data_uri(block.src):
-            yield path, Occurrence("image from a data: URI")
+            yield from _data_image_hits(path, block)
         case _:
             return
 

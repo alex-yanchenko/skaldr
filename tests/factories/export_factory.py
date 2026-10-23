@@ -29,7 +29,7 @@ from tests.factories.example_factory import EXAMPLE, example_for
 from tests.factories.report_factory import make_index_report, make_report
 
 REFUSED_IN_THE_EXAMPLE: dict[ExportTarget, list[str]] = {
-    "markdown": ["range", "image"],
+    "markdown": ["range"],
     "notion": ["range", "image"],
     "adf": ["range", "flow", "image", "fan"],
     "slack": ["range", "flow", "image", "grid", "fan", "walkthrough"],

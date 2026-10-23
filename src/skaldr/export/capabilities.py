@@ -5,6 +5,7 @@ from typing import Final, Literal
 from typing_extensions import Self
 
 from skaldr.errors import ExportInvariantError
+from skaldr.export.data_images import ACCEPTED_IMAGE_TYPES_IN_WORDS
 from skaldr.export.tree import PanesKind, ToneName
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
@@ -65,6 +66,7 @@ OccurrenceFeature = Literal[
     "inline math",
     "image from a data: URI",
 ]
+UnwritableImageFeature = Literal["image from a data: URI that GitHub cannot write as a file"]
 Feature = Literal[
     PlacementFeature,
     ListItemFeature,
@@ -89,6 +91,7 @@ Feature = Literal[
     DividerInAStepFeature,
     PanesFeature,
     OccurrenceFeature,
+    UnwritableImageFeature,
 ]
 RICH_STEP_NOTE: Final[OccurrenceFeature] = (
     "link, citation, math or strikethrough in a flow or fan step's note"
@@ -270,6 +273,14 @@ class Occurrence:
     feature: OccurrenceFeature
 
 
+@dataclass(frozen=True)
+class UnwritableImage:
+    problem: str
+    feature: UnwritableImageFeature = field(
+        default="image from a data: URI that GitHub cannot write as a file", init=False
+    )
+
+
 Details = (
     Placement
     | HeldByAListItem
@@ -293,6 +304,7 @@ Details = (
     | DividerInAStep
     | Panes
     | Occurrence
+    | UnwritableImage
 )
 
 
@@ -410,6 +422,10 @@ GUIDE_SUBJECTS: Final[Mapping[ExportTarget, str]] = {
 _TARGETS_WITHOUT_DIAGRAMS_OR_MATH: Final[tuple[ExportTarget, ...]] = ("adf", "slack")
 _TARGETS_WITH_MERMAID_DIAGRAMS: Final[tuple[ExportTarget, ...]] = ("markdown", "notion")
 _HOST_THE_IMAGE: Final = "host the image and give its https address"
+_GIVE_AN_IMAGE_DATA_URI: Final = (
+    f"give a data: URI holding a {ACCEPTED_IMAGE_TYPES_IN_WORDS} image, "
+    "or host the image and give its https address"
+)
 _UPLOAD_THE_IMAGE: Final = "upload the image to Slack and give its permalink"
 _ADF_DATA_URI_WHY: Final = (
     "ADF cannot show an image from a data: URI, since Jira embeds only files attached to the issue"
@@ -783,8 +799,20 @@ CAPABILITIES: Final[Mapping[Feature, Mapping[ExportTarget, Capability]]] = {
     "inline math": _kept_except(
         dict.fromkeys(_TARGETS_WITHOUT_DIAGRAMS_OR_MATH, Swap("inline code holding the latex"))
     ),
+    "image from a data: URI that GitHub cannot write as a file": _kept_except(
+        {
+            "markdown": Rejection(
+                "GitHub cannot write an image from a data: URI as a file, since {problem}",
+                _GIVE_AN_IMAGE_DATA_URI,
+                in_the_guide="GitHub cannot write an image from a data: URI as a file when its media type "
+                f"is not a {ACCEPTED_IMAGE_TYPES_IN_WORDS} image or its payload does not decode; "
+                f"{_GIVE_AN_IMAGE_DATA_URI}",
+            )
+        }
+    ),
     "image from a data: URI": {
-        **_refused_by(("markdown", "notion"), "show an image from a data: URI", _HOST_THE_IMAGE),
+        "markdown": "keep",
+        **_refused_by(("notion",), "show an image from a data: URI", _HOST_THE_IMAGE),
         "adf": Rejection(
             _ADF_DATA_URI_WHY,
             _HOST_THE_IMAGE,

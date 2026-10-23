@@ -341,7 +341,10 @@ def _must_alternate_markers(family: MarkerFamily | None, after: _ListTail | None
 
 
 class _MarkdownWriter:
-    def __init__(self, heading_slugs: Mapping[str, str], footnotes: frozenset[int]) -> None:
+    def __init__(
+        self, heading_slugs: Mapping[str, str], footnotes: frozenset[int], image_names: Mapping[str, str]
+    ) -> None:
+        self.image_names = image_names
         self.runs = _MarkdownRuns(heading_slugs, footnotes)
         self.html = HtmlRuns(heading_slugs)
         self.container_depth = 0
@@ -433,7 +436,7 @@ class _MarkdownWriter:
         return quoted(lines)
 
     def media_lines(self, node: Media) -> list[str]:
-        url = web_address_of(node, "markdown")
+        url = self.image_names[node.url] if node.url in self.image_names else web_address_of(node, "markdown")
         if node.kind == "image":
             image = f"![{self.inline(node.description)}]({encode_url(url)})"
             caption = [styled("italic", self.inline(node.caption))] if node.caption else []
@@ -620,13 +623,14 @@ class _MarkdownWriter:
         return list(self.blocks_after(nodes, None).lines)
 
 
-def render_markdown(nodes: Sequence[Node]) -> str:
+def render_markdown(nodes: Sequence[Node], image_names: Mapping[str, str] | None = None) -> str:
     slugs = github_heading_slugs(nodes)
-    survey = _MarkdownWriter(slugs, frozenset())
+    names = image_names or {}
+    survey = _MarkdownWriter(slugs, frozenset(), names)
     lines = survey.blocks(nodes)
     footnotes = survey.defined_footnotes & survey.runs.cited
     if footnotes:
-        lines = _MarkdownWriter(slugs, frozenset(footnotes)).blocks(nodes)
+        lines = _MarkdownWriter(slugs, frozenset(footnotes), names).blocks(nodes)
     return "\n".join(lines) + "\n"
 
 
@@ -634,6 +638,6 @@ def _cover_image(cover: str | None) -> tuple[Media, ...]:
     return (Media("image", cover, plain("Cover")),) if cover else ()
 
 
-def render_markdown_document(document: LoweredDocument) -> str:
+def render_markdown_document(document: LoweredDocument, image_names: Mapping[str, str] | None = None) -> str:
     title = plain(f"{document.icon} {document.title}" if document.icon else document.title)
-    return render_markdown((Heading(1, title), *_cover_image(document.cover), *document.body))
+    return render_markdown((Heading(1, title), *_cover_image(document.cover), *document.body), image_names)
