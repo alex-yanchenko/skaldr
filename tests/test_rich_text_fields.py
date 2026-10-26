@@ -1,5 +1,7 @@
+import importlib
 import inspect
-from collections.abc import Callable
+import pkgutil
+from collections.abc import Callable, Iterator
 from typing import Any, get_args, get_type_hints
 
 import pytest
@@ -195,10 +197,18 @@ def _is_marked_rich(hint: object) -> bool:
     )
 
 
+def _classes_defined_in_the_models_package() -> Iterator[tuple[str, type]]:
+    for module_info in pkgutil.iter_modules(models.__path__, f"{models.__name__}."):
+        module = importlib.import_module(module_info.name)
+        for name, member in inspect.getmembers(module, inspect.isclass):
+            if member.__module__ == module.__name__:
+                yield name, member
+
+
 def _unmarked_text_fields() -> set[str]:
     unmarked: set[str] = set()
-    for name, model in inspect.getmembers(models, inspect.isclass):
-        if not issubclass(model, BaseModel) or model.__module__ != models.__name__:
+    for name, model in _classes_defined_in_the_models_package():
+        if not issubclass(model, BaseModel):
             continue
         hints = get_type_hints(model, include_extras=True)
         unmarked |= {

@@ -2994,7 +2994,7 @@ def test_include_chain_deeper_than_the_cap_is_a_report_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # a very deep non-cyclic chain must surface as a ReportError, not a raw RecursionError
-    monkeypatch.setattr("skaldr.models._MAX_INCLUDE_DEPTH", 1)
+    monkeypatch.setattr("skaldr.models.loading._MAX_INCLUDE_DEPTH", 1)
     (tmp_path / "a.yaml").write_text("!include b.yaml\n", encoding="utf-8")
     (tmp_path / "b.yaml").write_text("- type: text\n  body: x\n", encoding="utf-8")
 
