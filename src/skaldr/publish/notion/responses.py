@@ -263,7 +263,7 @@ class Database(NotionResponse):
 
 
 class OptionSet(NotionResponse):
-    options: list[SelectOption] = []
+    options: list[SelectOption] = Field(default_factory=list[SelectOption])
 
 
 class PropertySchema(NotionResponse):

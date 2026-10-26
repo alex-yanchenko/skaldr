@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol, runtime_checkable
@@ -17,8 +17,10 @@ __all__ = [
     "LinkedItem",
     "LinksWrite",
     "NewItem",
+    "PlacesItsCreates",
     "PublishedSections",
     "RawSections",
+    "RefusesFieldsAnItemCannotHold",
     "Release",
     "RemoteItem",
     "RemoveSection",
@@ -225,6 +227,16 @@ class FieldsWrite:
 @runtime_checkable
 class FillsAPageLeftEmpty(Protocol):
     def fill_a_page_left_empty(self, item_id: str, request: NewItem, /) -> RemoteItem: ...
+
+
+@runtime_checkable
+class PlacesItsCreates(Protocol):
+    def where_it_creates(self, request: NewItem, /) -> str | None: ...
+
+
+@runtime_checkable
+class RefusesFieldsAnItemCannotHold(Protocol):
+    def refuse_fields_the_item_cannot_hold(self, item_id: str, names: Sequence[str], /) -> None: ...
 
 
 class Transport(Protocol):

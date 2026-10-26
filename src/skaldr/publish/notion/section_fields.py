@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from typing import Final, Literal
 from uuid import UUID
@@ -8,6 +8,7 @@ from pydantic import JsonValue
 from skaldr.errors import WriteRejectedError
 from skaldr.models import FieldList, FieldScalar, Report, Section, SectionFields
 from skaldr.publish.connector import NO_SECTION_DEFAULTS, SectionDefaults
+from skaldr.publish.notion.parents import ParentLookup
 from skaldr.publish.notion.responses import DataSource, PropertySchema
 from skaldr.publish_block import NotionTarget, TargetBase
 from skaldr.publish_block.target import JsonFields
@@ -16,9 +17,10 @@ Shape = Literal["text", "texts", "number", "date", "person"]
 
 USER_URI_SCHEME: Final = "user://"
 TITLE_KIND: Final = "title"
+SELECT_KIND: Final = "select"
 STATUS_KIND: Final = "status"
 MULTI_SELECT_KIND: Final = "multi_select"
-OPTION_KINDS: Final = ("select", STATUS_KIND, MULTI_SELECT_KIND)
+OPTION_KINDS: Final = (SELECT_KIND, STATUS_KIND, MULTI_SELECT_KIND)
 KINDS_A_SHAPE_GOES_TO: Final[Mapping[Shape, tuple[str, ...]]] = {
     "text": ("select", STATUS_KIND, MULTI_SELECT_KIND, "rich_text"),
     "texts": (MULTI_SELECT_KIND,),
@@ -49,6 +51,13 @@ class _Property:
     schema: PropertySchema
 
 
+@dataclass(frozen=True)
+class _Outcome:
+    name: str | None = None
+    value: JsonValue = None
+    refusals: tuple[str, ...] = ()
+
+
 def _in_words(names: tuple[str, ...]) -> str:
     *earlier, last = names
     return f"{', '.join(earlier)} or {last}" if earlier else last
@@ -62,17 +71,25 @@ def _notion_user_id(report: Report, person_key: str) -> str | None:
     person = report.meta.people.get(person_key)
     if person is None or person.notion is None:
         return None
-    raw = person.notion.removeprefix(USER_URI_SCHEME)
     try:
-        return str(UUID(raw))
+        return str(UUID(person.notion.removeprefix(USER_URI_SCHEME)))
     except ValueError:
-        return raw.lower()
+        return None
 
 
-def _person_refusals(report: Report, authored: SectionFields, authored_path: str) -> tuple[str, ...]:
-    person_key = authored.assignee
-    if person_key is None or _notion_user_id(report, person_key) is not None:
+def _person_refusals(
+    report: Report, person_key: str | None, fields: list[_Field], authored_path: str
+) -> tuple[str, ...]:
+    if person_key is None or all(field.key != "assignee" for field in fields):
         return ()
+    if _notion_user_id(report, person_key) is not None:
+        return ()
+    person = report.meta.people.get(person_key)
+    if person is not None and person.notion is not None:
+        return (
+            f"{authored_path}.assignee is '{person_key}', but meta.people.{person_key}.notion is not a "
+            "Notion user id (a UUID); fix it, or remove the assignee",
+        )
     return (
         f"{authored_path}.assignee is '{person_key}', but that person has no notion user id in meta.people; "
         f"add one under meta.people.{person_key}.notion, or remove the assignee",
@@ -94,9 +111,7 @@ def _authored_fields(report: Report, authored: SectionFields) -> list[_Field]:
     if authored.priority is not None:
         fields.append(_Field("priority", "text", authored.priority, True))
     if authored.assignee is not None:
-        user_id = _notion_user_id(report, authored.assignee)
-        if user_id is not None:
-            fields.append(_Field("assignee", "person", user_id, True))
+        fields.append(_Field("assignee", "person", _notion_user_id(report, authored.assignee) or "", True))
     if authored.due is not None:
         fields.append(_Field("due", "date", authored.due.isoformat(), True))
     if authored.labels is not None:
@@ -105,6 +120,16 @@ def _authored_fields(report: Report, authored: SectionFields) -> list[_Field]:
         fields.append(_Field("estimate", "number", authored.estimate, True))
     fields.extend(_extra_field(key, value) for key, value in authored.extras.items())
     return fields
+
+
+def _left_to_the_section(fields: list[_Field], taken_by_the_target: Collection[str]) -> list[_Field]:
+    folded = {name.casefold() for name in taken_by_the_target}
+    return [
+        field
+        for field in fields
+        if field.key not in taken_by_the_target
+        and not (field.matches_in_any_capitalisation and field.key.casefold() in folded)
+    ]
 
 
 def _property_named(field: _Field, source: DataSource, database_id: str, field_path: str) -> _Property | str:
@@ -158,10 +183,10 @@ def _refusals_for_the_options(
 ) -> tuple[str, ...]:
     kind = held.schema.type
     texts = _texts_of(field)
-    if kind == MULTI_SELECT_KIND:
+    if kind in (SELECT_KIND, MULTI_SELECT_KIND):
         return tuple(
             f"{field_path}{f'.{position}' if field.shape == 'texts' else ''} is '{text}', but a Notion "
-            "multi-select option cannot hold a comma; remove the comma"
+            "select or multi-select option cannot hold a comma; remove the comma"
             for position, text in enumerate(texts)
             if "," in text
         )
@@ -182,15 +207,34 @@ def _as_the_database_holds_it(text: str, options: tuple[str, ...]) -> str:
     return next((option for option in options if option.casefold() == text.casefold()), text)
 
 
+def _once_each_ignoring_case(names: list[str]) -> list[JsonValue]:
+    first_of_each = {name.casefold(): name for name in reversed(names)}
+    return [first_of_each[name.casefold()] for name in dict.fromkeys(name.casefold() for name in names)]
+
+
 def _value_for(field: _Field, held: _Property) -> JsonValue:
     kind = held.schema.type
-    options = held.schema.option_names if kind in OPTION_KINDS else ()
     if field.shape == "person":
         return [field.value]
-    if kind in OPTION_KINDS:
-        names: list[JsonValue] = [_as_the_database_holds_it(text, options) for text in _texts_of(field)]
-        return names if kind == MULTI_SELECT_KIND else names[0]
-    return field.value
+    if kind not in OPTION_KINDS:
+        return field.value
+    options = held.schema.option_names
+    names = _once_each_ignoring_case([_as_the_database_holds_it(text, options) for text in _texts_of(field)])
+    return names if kind == MULTI_SELECT_KIND else names[0]
+
+
+def _outcome_of(field: _Field, source: DataSource, database_id: str, authored_path: str) -> _Outcome:
+    field_path = f"{authored_path}.{field.key}"
+    held = _property_named(field, source, database_id, field_path)
+    if isinstance(held, str):
+        return _Outcome(refusals=(held,))
+    kind_refusal = _refusal_for_the_kind(field, held, database_id, field_path)
+    if kind_refusal is not None:
+        return _Outcome(refusals=(kind_refusal,))
+    option_refusals = _refusals_for_the_options(field, held, database_id, field_path)
+    if option_refusals:
+        return _Outcome(refusals=option_refusals)
+    return _Outcome(held.name, _value_for(field, held))
 
 
 def _mapped(
@@ -199,19 +243,10 @@ def _mapped(
     values: JsonFields = {}
     refusals: list[str] = []
     for field in fields:
-        field_path = f"{authored_path}.{field.key}"
-        held = _property_named(field, source, database_id, field_path)
-        if isinstance(held, str):
-            refusals.append(held)
-            continue
-        refusal = _refusal_for_the_kind(field, held, database_id, field_path)
-        option_refusals = (
-            () if refusal is not None else _refusals_for_the_options(field, held, database_id, field_path)
-        )
-        if refusal is not None or option_refusals:
-            refusals.extend([refusal] if refusal is not None else option_refusals)
-            continue
-        values[held.name] = _value_for(field, held)
+        outcome = _outcome_of(field, source, database_id, authored_path)
+        refusals.extend(outcome.refusals)
+        if outcome.name is not None:
+            values[outcome.name] = outcome.value
     return values, tuple(refusals)
 
 
@@ -227,24 +262,25 @@ def notion_section_defaults(
     section: Section,
     source_index: int,
     target: TargetBase,
-    load_data_source: Callable[[str], DataSource | None],
+    look_up_parent: Callable[[str], ParentLookup],
 ) -> SectionDefaults:
     authored = section.fields
     if authored is None or not isinstance(target, NotionTarget) or not target.where.fields_from_sections:
         return NO_SECTION_DEFAULTS
     authored_path = f"blocks[{source_index}].fields"
-    person_refusals = _person_refusals(report, authored, authored_path)
-    if person_refusals:
-        return SectionDefaults({}, authored_path, person_refusals)
-    fields = _authored_fields(report, authored)
+    taken = target.fields_for(section.id).keys()
+    fields = _left_to_the_section(_authored_fields(report, authored), taken)
     if not fields:
         return NO_SECTION_DEFAULTS
+    person_refusals = _person_refusals(report, authored.assignee, fields, authored_path)
+    if person_refusals:
+        return SectionDefaults({}, authored_path, person_refusals)
     database_id = target.where.page_id
     try:
-        source = load_data_source(database_id)
+        parent = look_up_parent(database_id)
     except WriteRejectedError as refused:
         return SectionDefaults({}, authored_path, (str(refused),))
-    if source is None:
+    if parent.data_source is None:
         return SectionDefaults({}, authored_path, (_page_parent_refusal(fields, database_id, authored_path),))
-    values, refusals = _mapped(fields, source, database_id, authored_path)
+    values, refusals = _mapped(fields, parent.data_source, database_id, authored_path)
     return SectionDefaults(values, authored_path, refusals)

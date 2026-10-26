@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Final
 
 from skaldr.errors import WriteRejectedError
@@ -8,14 +9,23 @@ DATABASE_BLOCK: Final = "child_database"
 PAGE_BLOCK: Final = "child_page"
 
 
-def data_source_under(api: NotionApi, parent_id: str) -> DataSource | None:
+@dataclass(frozen=True)
+class ParentLookup:
+    data_source: DataSource | None
+
+    @property
+    def is_a_page(self) -> bool:
+        return self.data_source is None
+
+
+def look_up_parent(api: NotionApi, parent_id: str) -> ParentLookup:
     block = api.block(parent_id)
     if block.in_trash:
         raise WriteRejectedError(
             f"Notion page {parent_id} is in the trash, so skaldr cannot create a page under it"
         )
     if block.type == PAGE_BLOCK:
-        return None
+        return ParentLookup(None)
     if block.type != DATABASE_BLOCK:
         raise WriteRejectedError(
             f"Notion block {parent_id} is a {block.type}, not a page or a database, so skaldr cannot "
@@ -27,4 +37,4 @@ def data_source_under(api: NotionApi, parent_id: str) -> DataSource | None:
             f"Notion database {parent_id} has {len(sources)} data sources; skaldr adds rows only to a "
             "database with one"
         )
-    return api.data_source(sources[0].id)
+    return ParentLookup(api.data_source(sources[0].id))

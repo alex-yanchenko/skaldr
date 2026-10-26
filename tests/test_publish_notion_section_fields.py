@@ -5,18 +5,20 @@ from typing import Any
 import pytest
 from pydantic import JsonValue
 
-from skaldr.errors import PublishError
+from skaldr.errors import ConnectorError, PublishError
 from skaldr.publish import ConnectorRegistry
 from skaldr.publish.content import FIELDS
 from skaldr.publish.drafts import ItemDraft, draft_targets
 from skaldr.publish.engine import Applied, ApplyOutcome, apply_publish, diff_publish, prepare_publish
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.output import diff_lines
+from skaldr.publish.state import state_path_for
 from skaldr.publish_block import NotionTarget
 from tests.factories import NOTION_PAGE_ID, NOTION_PAGE_URL, make_notion_target
 from tests.factories.auth_factory import make_notion_credentials, seed_notion
-from tests.factories.notion_factory import InMemoryNotion, numbered_id
+from tests.factories.notion_factory import InMemoryNotion, Scripted, numbered_id
 from tests.factories.publish_factory import (
+    DOC_ID,
     TARGET_LABEL,
     authored_garden,
     make_garden_blocks,
@@ -530,22 +532,23 @@ def test_a_status_property_without_options_refuses_every_status() -> None:
         pytest.param({"priority": "a,b"}, "blocks[1].fields.priority"),
     ],
 )
-def test_a_value_with_a_comma_for_a_multi_select_is_refused(fields: JsonObject, position: str) -> None:
-    schema = {"Name": "title", "Labels": "multi_select", "Priority": "multi_select"}
+@pytest.mark.parametrize("priority_kind", ["multi_select", "select"])
+def test_a_value_with_a_comma_for_a_select_or_multi_select_is_refused(
+    fields: JsonObject, position: str, priority_kind: str
+) -> None:
+    schema = {"Name": "title", "Labels": "multi_select", "Priority": priority_kind}
     expected = _reason(
-        f"{position} is 'a,b', but a Notion multi-select option cannot hold a comma; remove the comma"
+        f"{position} is 'a,b', but a Notion select or multi-select option cannot hold a comma; remove the "
+        "comma"
     )
 
     assert _refusal_of(_database(schema, {}), fields) == expected
 
 
-def test_a_comma_is_fine_in_a_select_a_status_or_a_text() -> None:
-    notion = _database({"Name": "title", "Priority": "select", "Area": "rich_text"}, {})
+def test_a_comma_is_fine_in_a_text() -> None:
+    notion = _database({"Name": "title", "Area": "rich_text"}, {})
 
-    assert _tools_draft({"priority": "a,b", "Area": "c,d"}, notion=notion).content.fields == {
-        "Priority": "a,b",
-        "Area": "c,d",
-    }
+    assert _tools_draft({"Area": "c,d"}, notion=notion).content.fields == {"Area": "c,d"}
 
 
 @pytest.mark.parametrize(
@@ -807,7 +810,7 @@ def test_publishing_a_property_the_database_lacks_sends_nothing(tmp_path: Path) 
     assert notion.writes() == []
 
 
-def test_a_section_already_published_as_a_page_under_the_document_cannot_take_properties_later(
+def test_a_section_already_published_as_a_page_under_the_document_is_refused_before_anything_is_written(
     tmp_path: Path,
 ) -> None:
     notion = _database()
@@ -818,8 +821,167 @@ def test_a_section_already_published_as_a_page_under_the_document_cannot_take_pr
     )
     _publish(path, notion)
     write_garden_report(
-        tmp_path, publish=_notion_publish(), blocks=_blocks_with_fields("tools", {"priority": "High"})
+        tmp_path,
+        publish=_notion_publish(),
+        blocks=_blocks_with_fields("tools", {"priority": "High"}),
+        meta=_meta() | {"title": "Garden handbook, second edition"},
+    )
+    notion.requests.clear()
+    expected = (
+        f"{TARGET_LABEL}, section tools: Notion page {TOOLS_PAGE} has no property 'Priority'. A section "
+        "published as a child page has none, so `fields_from_sections` has to be on from the first publish, "
+        "or the target has to be a new one"
     )
 
-    with pytest.raises(Exception, match=f"Notion page {TOOLS_PAGE} has no property 'Priority'"):
+    with pytest.raises(PublishError) as raised:
         _publish(path, notion)
+
+    assert (str(raised.value), notion.writes()) == (expected, [])
+
+
+def test_turning_the_opt_in_off_clears_the_properties_it_set_and_keeps_the_rows(tmp_path: Path) -> None:
+    notion = _database()
+    path = _publish_a_high_priority_tools_section(tmp_path, notion)
+    write_garden_report(
+        tmp_path,
+        publish=_notion_publish(from_sections=False, split=("tools", "planting")),
+        blocks=_blocks_with_fields("tools", {"priority": "High"}),
+    )
+
+    outcome = _publish(path, notion)
+
+    created_in_the_second_run = _created_pages(notion)[2:]
+    assert (
+        outcome,
+        notion.pages[TOOLS_PAGE].properties["Priority"],
+        [(body["parent"], body["properties"]) for body in created_in_the_second_run],
+    ) == (
+        Applied(
+            (
+                'create   section planting "Planting"',
+                "remove   document: planting",
+                "update   section tools: fields",
+            )
+        ),
+        ("select", None),
+        [({"page_id": DOCUMENT_PAGE}, {"title": _title("Planting")})],
+    )
+
+
+def test_a_value_the_target_sets_is_not_checked_against_the_database_for_its_section_default() -> None:
+    notion = _database({"Name": "title", "Priority": "select"}, {})
+    publish = _notion_publish(overrides={"tools": {"fields": {"Assignee": None}}})
+
+    draft = _tools_draft(
+        {"priority": "High", "assignee": "ada"}, notion=notion, publish=publish, people=ADA_HAS_A_NOTION_ID
+    )
+
+    assert draft.content.fields == {"Priority": "High", "Assignee": None}
+
+
+@pytest.mark.parametrize("key", ["Assignee", "assignee"])
+def test_a_null_for_a_field_in_any_capitalisation_keeps_its_default_unchecked(key: str) -> None:
+    notion = _database({"Name": "title"}, {})
+    publish = _notion_publish(where_fields={key: None})
+
+    draft = _tools_draft({"assignee": "ada"}, notion=notion, publish=publish, people={"ada": {}})
+
+    assert (draft.content.fields, notion.requests) == ({key: None}, [])
+
+
+def test_the_page_parent_refusal_names_the_first_field_the_target_leaves_to_the_section() -> None:
+    notion = InMemoryNotion()
+    notion.add_page(NOTION_PAGE_ID, "Team plans")
+    publish = _notion_publish(where_fields={"Priority": None})
+    expected = _reason(
+        f"blocks[1].fields.due has no property to go to: the target's `parent_page` {NOTION_PAGE_ID} is a "
+        "page, not a database; point `parent_page` at a database, or remove `fields_from_sections`"
+    )
+    report = authored_garden(
+        publish=publish, blocks=_blocks_with_fields("tools", {"priority": "High", "due": "2026-10-15"})
+    )
+
+    with pytest.raises(PublishError) as raised:
+        draft_targets(report, _registry(notion))
+
+    assert str(raised.value) == expected
+
+
+def test_a_page_parent_takes_a_section_whose_every_field_the_target_sets() -> None:
+    notion = InMemoryNotion()
+    notion.add_page(NOTION_PAGE_ID, "Team plans")
+    publish = _notion_publish(where_fields={"Priority": "Low"})
+
+    draft = _tools_draft({"priority": "High"}, notion=notion, publish=publish)
+
+    assert draft.content.fields == {"Priority": "Low"}
+
+
+def test_an_interrupted_create_of_a_section_row_names_the_database_it_was_created_in(tmp_path: Path) -> None:
+    notion = _database()
+    path = write_garden_report(
+        tmp_path, publish=_notion_publish(split=()), blocks=_blocks_with_fields("tools", {"priority": "High"})
+    )
+    _publish(path, notion)
+    write_garden_report(
+        tmp_path, publish=_notion_publish(), blocks=_blocks_with_fields("tools", {"priority": "High"})
+    )
+    notion.scripted = [Scripted(500, {"object": "error"}, method="POST", path="/v1/pages")]
+    with pytest.raises(ConnectorError):
+        _publish(path, notion)
+    expected = (
+        f'{TARGET_LABEL}, section tools: skaldr stopped while creating "Tools" under Notion database '
+        f"{NOTION_PAGE_ID}, so it cannot tell whether that item exists. Look under Notion database "
+        f"{NOTION_PAGE_ID} for an item titled \"Tools\" stamped with doc_id '{DOC_ID}' and archive it if it "
+        f"is there; then delete its entry from `pending_creates` in {state_path_for(path)} and publish again"
+    )
+
+    with pytest.raises(PublishError) as raised:
+        _publish(path, notion)
+
+    assert str(raised.value) == expected
+
+
+def test_the_parent_is_read_once_for_the_documents_row_and_every_section_row(tmp_path: Path) -> None:
+    notion = _database()
+    path = write_garden_report(
+        tmp_path,
+        publish=_notion_publish(split=("tools", "planting")),
+        blocks=[
+            {**block, "fields": {"priority": "High"}} if block.get("type") == "section" else block
+            for block in make_garden_blocks()
+        ],
+    )
+
+    _publish(path, notion)
+
+    reads = [request.url.path for request in notion.requests if request.method == "GET"]
+    assert [
+        reads.count(f"/v1/blocks/{NOTION_PAGE_ID}"),
+        reads.count(f"/v1/databases/{NOTION_PAGE_ID}"),
+        reads.count(f"/v1/data_sources/{SOURCE_ID}"),
+    ] == [2, 2, 2]
+
+
+def test_an_assignee_whose_notion_id_is_not_a_user_id_is_refused() -> None:
+    expected = _reason(
+        "blocks[1].fields.assignee is 'ada', but meta.people.ada.notion is not a Notion user id (a UUID); "
+        "fix it, or remove the assignee"
+    )
+
+    assert _refusal_of(_database(), {"assignee": "ada"}, people={"ada": {"notion": "user://abc"}}) == expected
+
+
+@pytest.mark.parametrize(
+    ("labels", "options", "expected"),
+    [
+        pytest.param(["Garden", "garden"], {"Labels": ["garden"]}, ["garden"], id="matching-an-option"),
+        pytest.param(["a", "A", "b"], {}, ["a", "b"], id="matching-each-other"),
+    ],
+)
+def test_multi_select_values_that_match_after_casefolding_are_written_once(
+    labels: list[JsonValue], options: dict[str, list[str]], expected: list[str]
+) -> None:
+    notion = _database({"Name": "title", "Labels": "multi_select"}, options)
+
+    assert _tools_draft({"labels": labels}, notion=notion).content.fields == {"Labels": expected}
