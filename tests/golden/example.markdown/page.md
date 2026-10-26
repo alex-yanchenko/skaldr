@@ -248,6 +248,10 @@ function pickWinner(a, b) {
 }
 ```
 
+![Discrepancy volume by zone](image-1.svg)
+
+*Fig 1: discrepancy volume by zone.*
+
 ![Aisle 12 with overflow bins](https://example.com/photos/aisle-12.png)
 
 *Fig 2: aisle 12 before the count (named by URL, so the page shows a link card).*

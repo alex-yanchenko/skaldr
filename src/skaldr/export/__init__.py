@@ -1,6 +1,6 @@
 import os
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Final
 
@@ -11,6 +11,7 @@ from skaldr.errors import ReportError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document
 from skaldr.export.budget import character_budget
 from skaldr.export.check import reject_what_the_target_cannot_show
+from skaldr.export.data_images import data_image_files
 from skaldr.export.glyphs import title_led_by_its_icon
 from skaldr.export.lower import lower_report
 from skaldr.export.markdown import render_markdown_document
@@ -20,7 +21,7 @@ from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.frozen_model import FrozenModel
 from skaldr.models import Report
-from skaldr.replace_file import replace_file
+from skaldr.replace_file import replace_bytes, replace_file
 
 __all__ = [
     "EXPORT_MANIFEST",
@@ -38,14 +39,17 @@ __all__ = [
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
 MARKDOWN_PAGE_NAME: Final = "page.md"
 ADF_PAGE_NAME: Final = "page.adf.json"
-ExportedPageName = Annotated[
-    str, StringConstraints(pattern=r"^(?:page(?:\.[0-9]{2,})?\.md|page\.adf\.json)$")
+ExportedFileName = Annotated[
+    str,
+    StringConstraints(
+        pattern=r"^(?:page(?:\.[0-9]{2,})?\.md|page\.adf\.json|image-[1-9][0-9]*\.(?:png|jpg|gif|webp|svg|avif|bmp))$"
+    ),
 ]
 
 
 class ExportManifest(FrozenModel):
     title: str
-    files: tuple[ExportedPageName, ...]
+    files: tuple[ExportedFileName, ...]
     icon: str | None = None
     cover: str | None = None
 
@@ -74,6 +78,7 @@ class RenderedExport:
     oversized_sections: tuple[str, ...] = ()
     icon: str | None = None
     cover: str | None = None
+    files: Mapping[str, bytes] = field(default_factory=dict[str, bytes])
 
 
 @dataclass(frozen=True)
@@ -133,21 +138,28 @@ def _export_pages(
     pages: Mapping[str, str],
     oversized_sections: tuple[str, ...] = (),
     chrome: PageChrome = NO_PAGE_CHROME,
+    image_files: Mapping[str, bytes] | None = None,
 ) -> ExportResult:
+    images = image_files or {}
+    names = [*images, *pages]
     out_dir.mkdir(parents=True, exist_ok=True)
     earlier = _earlier_export(out_dir / EXPORT_MANIFEST)
-    _refuse_to_overwrite_what_skaldr_did_not_write(out_dir, pages.keys(), earlier)
+    _refuse_to_overwrite_what_skaldr_did_not_write(out_dir, names, earlier)
     written: list[Path] = []
-    for name, text in pages.items():
+    contents: Mapping[str, str | bytes] = {**images, **pages}
+    for name, content in contents.items():
         path = out_dir / name
-        replace_file(path, text)
+        if isinstance(content, bytes):
+            replace_bytes(path, content)
+        else:
+            replace_file(path, content)
         written.append(path)
         _write_manifest(out_dir, title, earlier.pages | {page.name for page in written}, chrome)
-    for stale in sorted(earlier.pages - set(pages)):
+    for stale in sorted(earlier.pages - set(names)):
         path = out_dir / stale
         if path.is_file():
             path.unlink()
-    _write_manifest(out_dir, title, pages, chrome)
+    _write_manifest(out_dir, title, names, chrome)
     return ExportResult(title, tuple(written), oversized_sections, earlier.unreadable_manifest)
 
 
@@ -183,7 +195,13 @@ def render_export(report: Report, target: ExportTarget) -> RenderedExport:
                 document.title, {MARKDOWN_PAGE_NAME: page}, icon=document.icon, cover=document.cover
             )
         case "markdown":
-            return RenderedExport(document.title, {MARKDOWN_PAGE_NAME: render_markdown_document(document)})
+            images = data_image_files(document.body)
+            page = render_markdown_document(document, {src: image.name for src, image in images.items()})
+            return RenderedExport(
+                document.title,
+                {MARKDOWN_PAGE_NAME: page},
+                files={image.name: image.content for image in images.values()},
+            )
         case "adf":
             return _adf_pages(document)
         case "slack":
@@ -196,7 +214,9 @@ def render_export(report: Report, target: ExportTarget) -> RenderedExport:
 
 def _write_rendered(out_dir: Path, rendered: RenderedExport) -> ExportResult:
     chrome = PageChrome(rendered.icon, rendered.cover)
-    return _export_pages(out_dir, rendered.title, rendered.pages, rendered.oversized_sections, chrome)
+    return _export_pages(
+        out_dir, rendered.title, rendered.pages, rendered.oversized_sections, chrome, rendered.files
+    )
 
 
 def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
