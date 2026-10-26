@@ -21,7 +21,7 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import AnchorLink, Citation, InlineMath, Link, Plain, Rich, ScriptText, Styled, Tinted
 from tests.factories import API_BADGES, lowered
-from tests.factories.lower_factory import API_LEGEND, cell_texts_of
+from tests.factories.export_factory import API_LEGEND, cell_texts_of
 
 
 def test_a_flow_step_label_with_a_line_break_stays_one_mermaid_label() -> None:

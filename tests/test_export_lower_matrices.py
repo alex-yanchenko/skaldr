@@ -7,7 +7,7 @@ from skaldr.export.tree import Paragraph, TableCell, TableNode, TableRow
 from skaldr.models import SwimlaneStepState
 from skaldr.richtext import Link, Plain
 from tests.factories import API_BADGES, HAVE_BADGE, MATRIX_OF_EVERY_CELL_SHAPE, lowered
-from tests.factories.lower_factory import API_LEGEND, cell_texts_of
+from tests.factories.export_factory import API_LEGEND, cell_texts_of
 
 
 @pytest.mark.parametrize(

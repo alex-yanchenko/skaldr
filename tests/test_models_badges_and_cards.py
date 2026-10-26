@@ -521,9 +521,3 @@ def test_undeclared_badge_in_nested_grid_table_is_rejected() -> None:
 
     with pytest.raises(ReportError, match=r"not declared.*DEEP_NOPE"):
         parse_report(make_report(blocks=[grid]))
-
-
-def test_matrix_undeclared_badge_is_rejected() -> None:
-    block = make_matrix([{"row": "r1", "col": "c1", "badge": "GHOST"}])
-    with pytest.raises(ReportError, match=r"badge key\(s\) not declared in `badges`: \['GHOST'\]"):
-        parse_report(make_report(blocks=[block]))

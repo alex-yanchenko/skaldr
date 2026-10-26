@@ -34,7 +34,7 @@ from skaldr.export.tree import (
 from skaldr.models import parse_report
 from skaldr.richtext import AnchorLink, Code, InlineMath, Link, Plain, Rich, Styled, Tinted
 from tests.factories import API_BADGES, lowered, lowered_as_written_today, make_report
-from tests.factories.lower_factory import API_LEGEND
+from tests.factories.export_factory import API_LEGEND
 
 
 def test_a_report_lowers_to_its_title_and_body() -> None:

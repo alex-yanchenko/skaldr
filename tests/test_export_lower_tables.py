@@ -7,7 +7,7 @@ from skaldr.export.runs import Break, Chip, ExportRich, IndicatorMark
 from skaldr.export.tree import Paragraph, TableCell, TableColumn, TableNode, TableRow, ToneName
 from skaldr.richtext import Code, Plain
 from tests.factories import API_BADGES, lowered, make_table
-from tests.factories.lower_factory import API_LEGEND, cell_texts_of
+from tests.factories.export_factory import API_LEGEND, cell_texts_of
 
 
 def test_a_grouped_table_sums_each_group_and_marks_an_empty_one() -> None:

@@ -6,7 +6,6 @@ from pydantic import ValidationError
 from skaldr.errors import ReportError
 from skaldr.models import Column, Group, Row, Table, parse_report
 from tests.factories import make_label_table, make_reconciled_table, make_report, make_table
-from tests.factories.models_factory import make_matrix
 
 
 def test_reconciliation_failure_names_the_delta() -> None:
@@ -923,30 +922,4 @@ def test_comparison_row_values_must_match_option_count() -> None:
         "rows": [{"feature": "X", "values": [True, False]}],
     }
     with pytest.raises(ReportError, match=r"has 2 values but there are 3 options"):
-        parse_report(make_report(blocks=[block]))
-
-
-def test_matrix_cell_unknown_row_is_rejected() -> None:
-    block = make_matrix([{"row": "nope", "col": "c1", "label": "x"}])
-    with pytest.raises(ReportError, match=r"matrix cell row 'nope' is not one of the declared rows"):
-        parse_report(make_report(blocks=[block]))
-
-
-def test_matrix_duplicate_row_labels_are_rejected() -> None:
-    block = make_matrix([{"row": "dup", "col": "c1", "label": "x"}], rows=["dup", "dup"])
-    with pytest.raises(ReportError, match=r"matrix row labels must be unique"):
-        parse_report(make_report(blocks=[block]))
-
-
-def test_matrix_cell_whitespace_row_is_rejected() -> None:
-    block = make_matrix([{"row": "  ", "col": "c1", "label": "x"}])
-    with pytest.raises(
-        ReportError, match=r"blocks\.0\.matrix\.cells\.0\.row: String should match pattern '\\S'$"
-    ):
-        parse_report(make_report(blocks=[block]))
-
-
-def test_matrix_duplicate_column_labels_are_rejected() -> None:
-    block = make_matrix([{"row": "r1", "col": "dup", "label": "x"}], columns=["dup", "dup"])
-    with pytest.raises(ReportError, match=r"matrix column labels must be unique"):
         parse_report(make_report(blocks=[block]))

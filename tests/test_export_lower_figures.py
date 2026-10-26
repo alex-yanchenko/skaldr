@@ -23,7 +23,7 @@ from skaldr.export.tree import (
 from skaldr.models import ToneLiteral
 from skaldr.richtext import Plain, Styled
 from tests.factories import API_BADGES, lowered, lowered_as_written_today
-from tests.factories.lower_factory import API_LEGEND, cell_texts_of
+from tests.factories.export_factory import API_LEGEND, cell_texts_of
 
 
 def test_a_card_shows_its_share_delta_badges_and_note() -> None:

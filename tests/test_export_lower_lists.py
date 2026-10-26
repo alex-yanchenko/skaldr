@@ -18,7 +18,7 @@ from skaldr.export.tree import (
 )
 from skaldr.richtext import Plain
 from tests.factories import API_BADGES, lowered, lowered_as_written_today, make_table
-from tests.factories.lower_factory import cell_texts_of
+from tests.factories.export_factory import cell_texts_of
 
 
 def test_a_definition_list_lowers_to_each_term_over_the_prose_of_its_body() -> None:
