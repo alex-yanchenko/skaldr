@@ -17,7 +17,11 @@ from skaldr.publish.jira import JiraConnector
 from skaldr.publish.jira.description import description_length, section_text, validated_blocks
 from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories import make_jira_target, make_notion_target
-from tests.factories.auth_factory import basic_auth_header, make_jira_credentials
+from tests.factories.auth_factory import (
+    basic_auth_header,
+    make_jira_credentials,
+    refuse_outside_the_tests_setup,
+)
 from tests.factories.jira_factory import DONE, SITE, FakeJira, Reply
 from tests.factories.publish_factory import (
     DOC_ID,
@@ -144,6 +148,7 @@ OTHER_SITE = "https://other.atlassian.net"
 
 
 def _signed_in_to(*sites: str) -> None:
+    refuse_outside_the_tests_setup("_signed_in_to")
     for site in sites:
         save_jira(make_jira_credentials(site=site, api_token=f"token-for-{site.removeprefix('https://')}"))
 

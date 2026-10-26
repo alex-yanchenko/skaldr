@@ -1150,7 +1150,7 @@ def test_a_refused_jira_site_in_the_environment_keeps_its_password_out_of_the_tr
 @pytest.mark.parametrize(
     "operation",
     [
-        lambda: seed_notion(make_notion_credentials()),
+        lambda: store.save_notion_returning_the_replaced(make_notion_credentials()),
         load_jira,
         lambda: forget(AN_ENTRY),
         refuse_an_unusable_keychain,
