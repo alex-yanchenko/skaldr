@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 
 from typing_extensions import assert_never
 
-from skaldr.errors import ItemNotFoundError, PublishError
+from skaldr.errors import ItemNotFoundError, PublishError, WriteRejectedError
 from skaldr.publish.content import (
     ItemContent,
     Part,
@@ -17,11 +17,19 @@ from skaldr.publish.content import (
     with_look_owned_by,
     with_parts,
 )
-from skaldr.publish.drafts import ItemDraft
+from skaldr.publish.drafts import ItemDraft, item_label
 from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
-from skaldr.publish.transport import FillsAPageLeftEmpty, NewItem, RemoteItem, Stamp, Transport
+from skaldr.publish.transport import (
+    FillsAPageLeftEmpty,
+    NewItem,
+    RefusesFieldsAnItemCannotHold,
+    RemoteItem,
+    Stamp,
+    Transport,
+    is_unset,
+)
 from skaldr.publish_block import TargetBase
 from skaldr.services import SERVICE_NAMES, Service
 
@@ -250,6 +258,18 @@ class PublishedReadings:
     missing: list[MissingItem]
 
 
+def _refuse_fields_the_item_cannot_hold(
+    ref: ItemRef, transport: Transport, item_id: str, draft: ItemDraft | None
+) -> None:
+    if draft is None or not isinstance(transport, RefusesFieldsAnItemCannotHold):
+        return
+    names = [name for name, value in draft.content.fields.items() if not is_unset(value)]
+    try:
+        transport.refuse_fields_the_item_cannot_hold(item_id, names)
+    except WriteRejectedError as refused:
+        raise PublishError(f"{ref.target}, {item_label(ref.section_id)}: {refused}") from None
+
+
 def read_published(prepared: Prepared, transports: Transports) -> PublishedReadings:
     readings: list[Reading] = []
     missing: list[MissingItem] = []
@@ -271,6 +291,7 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
                 missing.append(MissingItem(ref, item.item_id))
                 continue
             refuse_another_documents_item(ref, read, prepared.doc_id)
+            _refuse_fields_the_item_cannot_hold(ref, transport, item.item_id, draft)
             remote = replace(read, comparable=_owned_part_of(read.comparable, owners))
             if item.retiring is not None:
                 readings.append(Reading(ref, item, remote, (), ()))

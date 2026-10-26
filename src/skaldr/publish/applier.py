@@ -43,6 +43,7 @@ from skaldr.publish.transport import (
     ContentWrite,
     FieldsWrite,
     NewItem,
+    PlacesItsCreates,
     RawSections,
     Release,
     RemoteItem,
@@ -300,30 +301,32 @@ class Applier:
     def _created(self, target_plan: TargetPlan, step: CreateStep) -> PublishState:
         parent = None if step.item.section_id is None else self._item(ItemRef(step.item.target, None))
         parent_id = None if parent is None else parent.item_id
+        transport = self.transports.for_target(target_plan.label)
+        written_into = self.remote.get(step.item)
+        request = NewItem(
+            target_plan.target,
+            self._stamp(step.item),
+            step.draft.content,
+            parent_id=parent_id,
+            into_id=step.into_id,
+            into_raw_sections=NO_SECTIONS if written_into is None else written_into.raw_sections,
+        )
+        placed_under = (
+            transport.where_it_creates(request) if isinstance(transport, PlacesItsCreates) else parent_id
+        )
         pending = PendingCreate(
             target=target_plan.label,
             section_id=step.item.section_id,
-            parent_id=parent_id,
+            parent_id=placed_under,
             title=step.draft.content.title,
             into_id=step.into_id,
             service=target_plan.target.service(),
             target_as_written=target_plan.target.model_dump(mode="json"),
         )
-        transport = self.transports.for_target(target_plan.label)
         before = self.state
         self._save(before.model_copy(update={"pending_creates": [*before.pending_creates, pending]}))
-        written_into = self.remote.get(step.item)
         try:
-            remote = transport.create_item(
-                NewItem(
-                    target_plan.target,
-                    self._stamp(step.item),
-                    step.draft.content,
-                    parent_id=parent_id,
-                    into_id=step.into_id,
-                    into_raw_sections=NO_SECTIONS if written_into is None else written_into.raw_sections,
-                )
-            )
+            remote = transport.create_item(request)
         except WriteRejectedError:
             self._save(before)
             raise

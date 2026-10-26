@@ -39,6 +39,7 @@ from skaldr.publish.notion.page_markdown import (
     section_replacement,
     stamp_line,
 )
+from skaldr.publish.notion.parents import DATABASE_BLOCK, ParentLookup, look_up_parent
 from skaldr.publish.notion.people import KnownPeople
 from skaldr.publish.notion.properties import (
     TITLE_PROPERTY_ID,
@@ -66,7 +67,7 @@ from skaldr.publish.transport import (
     ShownLink,
     Stamp,
 )
-from skaldr.publish_block import NotionTarget, notion_page_id
+from skaldr.publish_block import NotionTarget, TargetBase, notion_page_id
 from skaldr.publish_block.notion import NO_TEMPLATE
 from skaldr.publish_block.target import JsonFields
 
@@ -77,8 +78,6 @@ MARKDOWN_JSON_BYTES: Final = REQUEST_JSON_BYTES - REQUEST_WRAPPER_BYTES
 STAMP_BLOCKS: Final = 1
 SECTION_BLOCKS: Final = REQUEST_BLOCKS - STAMP_BLOCKS
 SECTION_JSON_BYTES: Final = MARKDOWN_JSON_BYTES // 2
-DATABASE_BLOCK: Final = "child_database"
-PAGE_BLOCK: Final = "child_page"
 STAMP_KEY: Final = "skaldr stamp"
 TEMPLATE_FIELD: Final = "template"
 NOTION_PAGE_ADDRESS: Final = "https://www.notion.so/"
@@ -193,6 +192,10 @@ class _Parent:
         )
 
 
+def _makes_its_sections_rows(target: TargetBase) -> bool:
+    return isinstance(target, NotionTarget) and target.where.fields_from_sections
+
+
 def _no_workspace_template() -> str | None:
     return None
 
@@ -212,6 +215,8 @@ class NotionTransport:
         self._editor_names: dict[str, str] = {}
         self._templates_found_empty: set[str] = set()
         self._parents_that_are_databases: dict[str, bool] = {}
+        self._parents_looked_up: dict[str, ParentLookup] = {}
+        self._property_names_read: dict[str, tuple[str, ...]] = {}
 
     @cached_property
     def _workspace_template_page(self) -> str | None:
@@ -400,6 +405,7 @@ class NotionTransport:
     def _remote(self, item_id: str, page: Page, markdown: str, layout: Mapping[str, str]) -> RemoteItem:
         keyed = keyed_page(markdown, layout)
         self._read.layouts[_page_key(item_id)] = keyed.sections
+        self._property_names_read[_page_key(item_id)] = tuple(page.properties)
         edited_at = page.last_edited_time.isoformat()
         return RemoteItem(
             item_id,
@@ -471,35 +477,44 @@ class NotionTransport:
         return _property_requests(kinds, values, f"Notion page {_page_key(page.id)}")
 
     def _parent(self, request: NewItem) -> _Parent:
-        if request.parent_id is not None:
-            return _Parent(
+        target = request.target
+        nested_page = (
+            None
+            if request.parent_id is None
+            else _Parent(
                 {"page_id": request.parent_id}, {}, names_a_database=False, page_id=request.parent_id
             )
-        target = request.target
+        )
+        if nested_page is not None and not _makes_its_sections_rows(target):
+            return nested_page
         if not isinstance(target, NotionTarget):
             raise WriteRejectedError(f"the Notion connector cannot publish to {target.place_label()}")
         parent_id = target.where.page_id
-        block = self._api.block(parent_id)
-        if block.in_trash:
-            raise WriteRejectedError(
-                f"Notion page {parent_id} is in the trash, so skaldr cannot create a page under it"
+        if parent_id not in self._parents_looked_up:
+            self._parents_looked_up[parent_id] = look_up_parent(self._api, parent_id)
+        source = self._parents_looked_up[parent_id].data_source
+        if source is None:
+            return nested_page or _Parent(
+                {"page_id": parent_id}, {}, names_a_database=False, page_id=parent_id
             )
-        if block.type == PAGE_BLOCK:
-            return _Parent({"page_id": parent_id}, {}, names_a_database=False, page_id=parent_id)
-        if block.type != DATABASE_BLOCK:
-            raise WriteRejectedError(
-                f"Notion block {parent_id} is a {block.type}, not a page or a database, so skaldr cannot "
-                "create a page under it"
-            )
-        sources = self._api.database(parent_id).data_sources
-        if len(sources) != 1:
-            raise WriteRejectedError(
-                f"Notion database {parent_id} has {len(sources)} data sources; skaldr adds rows only to a "
-                "database with one"
-            )
-        source = self._api.data_source(sources[0].id)
         kinds = {name: schema.type for name, schema in source.properties.items()}
         return _Parent({"data_source_id": source.id}, kinds, names_a_database=True, page_id=parent_id)
+
+    def where_it_creates(self, request: NewItem, /) -> str | None:
+        parent = _with_nothing_sent(lambda: self._parent(request))
+        return f"Notion database {parent.page_id}" if parent.names_a_database else request.parent_id
+
+    def refuse_fields_the_item_cannot_hold(self, item_id: str, names: Sequence[str], /) -> None:
+        held = self._property_names_read.get(_page_key(item_id))
+        if held is None:
+            return
+        for name in names:
+            if name not in held:
+                raise WriteRejectedError(
+                    f"{_page_named(item_id)} has no property '{name}'. A section published as a child page "
+                    "has none, so `fields_from_sections` has to be on from the first publish, or the target "
+                    "has to be a new one"
+                )
 
     def _create_body(self, request: NewItem, first_batch: Sequence[str], stamp: str) -> JsonFields:
         parent = self._parent(request)

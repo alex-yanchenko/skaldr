@@ -127,6 +127,8 @@ def _property_json(kind: str, value: Any) -> dict[str, Any]:
     if kind == "select":
         option = None if value is None else {"id": "option", "name": value, "color": "default"}
         return {"id": "select", "type": "select", "select": option}
+    if kind in ("multi_select", "people", "relation", "files") and value is None:
+        return {"id": kind, "type": kind, kind: []}
     return {"id": kind, "type": kind, kind: value}
 
 
@@ -168,6 +170,7 @@ class _FailedTask:
 class InMemoryNotion:
     pages: dict[str, StoredPage] = field(default_factory=dict[str, StoredPage])
     databases: dict[str, dict[str, str]] = field(default_factory=dict[str, dict[str, str]])
+    options: dict[str, dict[str, list[str]]] = field(default_factory=dict[str, dict[str, list[str]]])
     tasks: dict[str, Any] = field(default_factory=dict[str, Any])
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
     scripted: list[Scripted] = field(default_factory=list[Scripted])
@@ -198,8 +201,15 @@ class InMemoryNotion:
     def mock(self) -> httpx2.MockTransport:
         return _CountingCloses(self)
 
-    def add_database(self, database_id: str, schema: dict[str, str] | None = None) -> None:
-        self.databases[notion_page_id(database_id) or database_id] = dict(schema or DATABASE_SCHEMA)
+    def add_database(
+        self,
+        database_id: str,
+        schema: dict[str, str] | None = None,
+        options: dict[str, list[str]] | None = None,
+    ) -> None:
+        key = notion_page_id(database_id) or database_id
+        self.databases[key] = dict(schema or DATABASE_SCHEMA)
+        self.options[key] = dict(options or {})
 
     def add_page(
         self,
@@ -497,10 +507,24 @@ class InMemoryNotion:
         return httpx2.Response(200, json={"object": "database", "id": dashed(key), "data_sources": sources})
 
     def _data_source(self, _method: str, data_source_id: str, _body: dict[str, Any]) -> httpx2.Response:
-        schema = self.databases.get(data_source_id.removeprefix("source-"))
+        database_key = data_source_id.removeprefix("source-")
+        schema = self.databases.get(database_key)
         if schema is None:
             return _error(404, "object_not_found", "Could not find data source.")
-        properties = {name: {"id": name.lower(), "name": name, "type": kind} for name, kind in schema.items()}
+        options = self.options.get(database_key, {})
+        properties = {
+            name: {
+                "id": name.lower(),
+                "name": name,
+                "type": kind,
+                **(
+                    {kind: {"options": [{"name": option} for option in options[name]]}}
+                    if name in options
+                    else {}
+                ),
+            }
+            for name, kind in schema.items()
+        }
         return httpx2.Response(
             200, json={"object": "data_source", "id": data_source_id, "properties": properties}
         )
