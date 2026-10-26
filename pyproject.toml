@@ -1,6 +1,6 @@
 [project]
 name = "skaldr"
-version = "4.1.0"
+version = "4.2.0"
 description = "Component framework that renders one YAML content file into a self-contained HTML report page"
 readme = "README.md"
 license = "MIT"
