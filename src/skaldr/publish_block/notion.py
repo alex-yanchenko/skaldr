@@ -72,6 +72,14 @@ class NotionWhere(FrozenModel):
         description="Database property values when the target page is a database row; `overrides` changes "
         "them for one item.",
     )
+    fields_from_sections: bool = Field(
+        default=False,
+        exclude_if=lambda opted_in: not opted_in,
+        description="Whether each split section's own `fields` (status, priority, assignee, due, labels, "
+        "estimate and extra keys) set the properties of its row, under this target's `fields` and the "
+        "section's `overrides`. Off by default; turning it on makes every split section a row of the "
+        "database `parent_page` names, and makes skaldr own those properties on every row.",
+    )
     template: str | None = Field(
         default=None,
         exclude_if=lambda template: template is None,
@@ -88,7 +96,15 @@ class NotionWhere(FrozenModel):
             raise ValueError("a notion target names exactly one of `parent_page` or `page`")
         required_page_id(self._page_reference)
         self._validate_template()
+        self._validate_fields_from_sections()
         return self
+
+    def _validate_fields_from_sections(self) -> None:
+        if self.fields_from_sections and self.page is not None:
+            raise ValueError(
+                "`fields_from_sections` makes each split section a row of the database `parent_page` names, "
+                "so it does not go with `page`"
+            )
 
     def _validate_template(self) -> None:
         if self.template is None:

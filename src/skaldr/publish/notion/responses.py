@@ -262,9 +262,23 @@ class Database(NotionResponse):
     data_sources: list[DataSourceReference]
 
 
+class OptionSet(NotionResponse):
+    options: list[SelectOption] = []
+
+
 class PropertySchema(NotionResponse):
     id: str
     type: str
+    select: OptionSet | None = None
+    status: OptionSet | None = None
+    multi_select: OptionSet | None = None
+
+    @property
+    def option_names(self) -> tuple[str, ...]:
+        held = {"select": self.select, "status": self.status, "multi_select": self.multi_select}.get(
+            self.type
+        )
+        return () if held is None else tuple(option.name for option in held.options)
 
 
 class DataSource(NotionResponse):

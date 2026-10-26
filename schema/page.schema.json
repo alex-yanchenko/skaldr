@@ -3319,6 +3319,12 @@
           "title": "Fields",
           "type": "object"
         },
+        "fields_from_sections": {
+          "default": false,
+          "description": "Whether each split section's own `fields` (status, priority, assignee, due, labels, estimate and extra keys) set the properties of its row, under this target's `fields` and the section's `overrides`. Off by default; turning it on makes every split section a row of the database `parent_page` names, and makes skaldr own those properties on every row.",
+          "title": "Fields From Sections",
+          "type": "boolean"
+        },
         "template": {
           "anyOf": [
             {
