@@ -11,8 +11,18 @@ from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_item_page, lower_regions, lower_report, lowering_for
 from skaldr.export.markdown import render_markdown
 from skaldr.export.notion import render_notion
+from skaldr.export.runs import Chip
 from skaldr.export.slack import render_slack
-from skaldr.export.tree import BlockRegion, ListEntry, ListNode, LoweredDocument, Node, Paragraph, TableCell
+from skaldr.export.tree import (
+    BlockRegion,
+    ListEntry,
+    ListNode,
+    LoweredDocument,
+    Node,
+    Paragraph,
+    TableCell,
+    Toggle,
+)
 from skaldr.export_targets import ExportTarget
 from skaldr.models import (
     BUILT_BY_AN_INDEX,
@@ -266,3 +276,14 @@ def write_index_document(directory: Path, parts: dict[str, dict[str, Any]], **ov
     for name, part in parts.items():
         write_report(directory, part, name)
     return write_report(directory, make_index_report(list(parts), **overrides), "index.yaml")
+
+
+API_LEGEND = Toggle(
+    (Plain("Legend: badges used on this page"),),
+    None,
+    (ListNode("bullet", (ListEntry((Chip("api", "blue"), Plain(" "), Plain("the API"))),)),),
+)
+
+
+def cell_texts_of(*texts: str) -> tuple[TableCell, ...]:
+    return tuple(TableCell((Plain(text),) if text else ()) for text in texts)

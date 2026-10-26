@@ -226,7 +226,7 @@ uv run skaldr data/example.yaml -o out/example.html   # run from a checkout
 uv run pytest                                          # tests
 ```
 
-- [`src/skaldr/models.py`](src/skaldr/models.py): the content-file contract (pydantic).
-- [`src/skaldr/compute.py`](src/skaldr/compute.py): derived values (legend, TOC, subtotals, footer).
+- [`src/skaldr/models/`](src/skaldr/models): the content-file contract (pydantic), one module per block family plus the loader.
+- [`src/skaldr/compute/`](src/skaldr/compute): derived values (legend, TOC, subtotals, footer, swimlane layout, request views).
 - [`src/skaldr/render.py`](src/skaldr/render.py) + [`components/`](src/skaldr/components): Jinja rendering.
 - [`src/skaldr/styles.css`](src/skaldr/styles.css): the single tokenised stylesheet.
