@@ -130,7 +130,6 @@ SWAPPED_FORMS: dict[Feature, dict[ExportTarget, Any]] = {
     },
 }
 STACKED_TABLE = f"{TWO_SERIES_TABLE}| **Total** | **5** | **8** |\n"
-ONE_BAR_MERMAID = '```mermaid\nxychart-beta\n    x-axis ["Mon", "Tue"]\n    bar [4, 6]\n```\n'
 ONE_BAR_MERMAID_WITH_PAGE_PALETTE = (
     '```mermaid\n%%{init: {"theme": "base", '
     '"themeVariables": {"xyChart": {"plotColorPalette": "#1d4ed8"}}}}%%\n'
@@ -369,7 +368,7 @@ def test_a_stacked_chart_with_several_series_adds_a_total_row_holding_the_stack_
     ("target", "chart_fence"),
     [
         pytest.param("markdown", ONE_BAR_MERMAID_WITH_PAGE_PALETTE, id="markdown"),
-        pytest.param("notion", ONE_BAR_MERMAID, id="notion"),
+        pytest.param("notion", ONE_BAR_MERMAID_WITH_PAGE_PALETTE, id="notion"),
     ],
 )
 def test_a_stacked_bar_chart_with_one_series_is_drawn_as_the_same_mermaid_chart_as_an_unstacked_one(

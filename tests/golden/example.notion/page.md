@@ -419,6 +419,7 @@ Zone C holds most of the mislabeled bins, so it is recounted first.
 </table>
 **Open discrepancies over the count window**
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"xyChart": {"plotColorPalette": "#1d4ed8"}}}}%%
 xychart-beta
     x-axis ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"]
     line [1500, 1180, 760, 410, 150]
@@ -443,6 +444,7 @@ xychart-beta
 </table>
 **How discrepancies resolved**
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"pie1": "#15803d", "pie2": "#b45309", "pie3": "#b91c1c", "pieTitleTextColor": "#768390", "pieLegendTextColor": "#768390", "pieSectionTextColor": "#ffffff", "pieStrokeColor": "#768390", "pieOuterStrokeColor": "#768390"}}}%%
 pie
     "Fixed on floor" : 900
     "System defect" : 760

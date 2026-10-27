@@ -93,7 +93,7 @@ from tests.factories import (
     refused_block_types,
     rendered_block_count,
 )
-from tests.factories.capability_factory import toned_step_titled
+from tests.factories.capability_factory import PIE_TEXT_VARIABLES_JSON, toned_step_titled
 from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
@@ -1394,7 +1394,26 @@ def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
     )
 
 
-def test_a_toned_donut_is_a_pie_with_mermaid_default_colours() -> None:
+def test_a_single_series_line_chart_is_an_xy_chart_in_the_series_colour_of_the_page() -> None:
+    line = {
+        "type": "chart",
+        "variant": "line",
+        "categories": ["Q1", "Q2"],
+        "series": [{"label": "x", "tone": "danger", "values": [1, 2]}],
+    }
+
+    assert notion_of([line]) == (
+        '```mermaid\n%%{init: {"theme": "base", '
+        '"themeVariables": {"xyChart": {"plotColorPalette": "#b91c1c"}}}}%%\n'
+        'xychart-beta\n    x-axis ["Q1", "Q2"]\n    line [1, 2]\n```\n'
+        '<table fit-page-width="true" header-row="true">\n'
+        "\t<tr>\n\t\t<td>**Series**</td>\n\t\t<td>**Q1**</td>\n\t\t<td>**Q2**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td color="red_bg">x</td>\n\t\t<td>1</td>\n\t\t<td>2</td>\n\t</tr>\n'
+        "</table>\n"
+    )
+
+
+def test_a_toned_donut_is_a_pie_in_the_slice_colours_of_the_page() -> None:
     donut = {
         "type": "chart",
         "variant": "donut",
@@ -1402,7 +1421,9 @@ def test_a_toned_donut_is_a_pie_with_mermaid_default_colours() -> None:
     }
 
     assert notion_of([donut]) == (
-        '```mermaid\npie\n    "A" : 3\n    "B" : 1\n```\n'
+        '```mermaid\n%%{init: {"theme": "base", '
+        '"themeVariables": {"pie1": "#15803d", "pie2": "#15803d", ' + PIE_TEXT_VARIABLES_JSON + "}}}%%\n"
+        'pie\n    "A" : 3\n    "B" : 1\n```\n'
         '<table fit-page-width="true" header-row="true">\n'
         "\t<tr>\n\t\t<td>**Slice**</td>\n\t\t<td>**Value**</td>\n\t\t<td>**Share**</td>\n\t</tr>\n"
         '\t<tr>\n\t\t<td color="green_bg">A</td>\n\t\t<td>3</td>\n\t\t<td>75%</td>\n\t</tr>\n'
