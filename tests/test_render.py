@@ -43,6 +43,7 @@ UNLAYERED_ESSENTIALS = (
     *COLOR_SCHEME_RULES,
     "*,*::before,*::after{box-sizing:border-box}",
     "body{font-family:var(--sans); color:var(--ink); background:var(--page)",
+    "body{background-image:var(--page-wash); background-repeat:no-repeat}",
     # print forces white --paper; unlayered so it beats the base body rule above (a layered one wouldn't)
     "@media print{body{background:var(--paper)}}",
 )
@@ -217,7 +218,15 @@ def test_palette_is_theme_aware_via_light_dark() -> None:
 
     assert COLOR_SCHEME_RULES[0] in html
     assert "--ink:light-dark(#1e293b,#e8ecf3);" in html
-    assert "--page:light-dark(#f5f7fa,#0e1116);" in html
+    assert "--page:light-dark(#f3f5fb,#0b0e15);" in html
+
+
+def test_the_page_wash_is_dropped_on_paper() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert html.index("body{background-image:var(--page-wash)") < html.index(
+        "@media print{body{background:var(--paper)}}"
+    )
 
 
 def test_explicit_theme_overrides_win_over_the_os_default() -> None:

@@ -311,10 +311,10 @@ def test_heading_in_nested_grid_gets_an_id() -> None:
 def test_panel_family_shadow_and_surface_tokens_are_in_the_stylesheet() -> None:
     html = render_html(parse_report(make_report()))
 
-    assert "--surface:light-dark(#ffffff,#171d28);" in html
+    assert "--surface:light-dark(#ffffff,#141a26);" in html
     assert (
-        "--shadow:0 1px 2px light-dark(rgba(20,26,40,0.05),rgba(0,0,0,0.5)), "
-        "0 4px 16px light-dark(rgba(20,26,40,0.04),rgba(0,0,0,0.35));" in html
+        "--shadow:0 1px 2px light-dark(rgba(40,40,90,0.06),rgba(0,0,0,0.55)), "
+        "0 10px 30px light-dark(rgba(60,60,140,0.08),rgba(0,0,0,0.45));" in html
     )
     assert (
         ".table-wrap{margin-block:var(--s3); border:1px solid var(--line); "

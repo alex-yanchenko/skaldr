@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;4.1.0&#34;}">
+<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;4.2.0&#34;}">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
      (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
@@ -40,8 +40,12 @@
 *,*::before,*::after{box-sizing:border-box}
 body{font-family:var(--sans); color:var(--ink); background:var(--page); font-size:14px;
 	line-height:1.5; -webkit-font-smoothing:antialiased}
+/* The tinted wash behind the page belongs to the body surface, so it is unlayered for the same reason
+   as the body colours above. It is an image layer only: the --page colour underneath stays the fallback. */
+body{background-image:var(--page-wash); background-repeat:no-repeat}
 /* On paper the body background is the forced-white --paper, not --page. Unlayered too, so it still
-   beats the base body rule above during print (a layered @layer print rule would lose to it). */
+   beats the base body rule above during print (a layered @layer print rule would lose to it). The
+   shorthand also resets the wash image, which is why this rule comes after it. */
 @media print{body{background:var(--paper)}}
 
 @layer reset {
@@ -59,11 +63,20 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	:root{
 		--ink:light-dark(#1e293b,#e8ecf3); --muted:light-dark(#64748b,#97a1b2);
 		--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
-		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f5f7fa,#0e1116);
-		--surface:light-dark(#ffffff,#171d28); --hover:light-dark(#f8fafc,#1f2733);
+		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f3f5fb,#0b0e15);
+		--surface:light-dark(#ffffff,#141a26); --hover:light-dark(#f8fafc,#1f2733);
+		--edge:light-dark(#e3e6f2,#252c3d);
+		/* The violet and blue the page wash and the hero are tinted with: a saturated pair that stays
+		   the same hue in both themes (the --accent-fg / --info-fg tones turn pastel in dark). */
+		--wash-violet:light-dark(rgba(122,53,240,0.10),rgba(122,53,240,0.18));
+		--wash-blue:light-dark(rgba(36,87,230,0.10),rgba(36,87,230,0.16));
+		--page-wash:radial-gradient(1200px 520px at 8% -8%, var(--wash-violet), transparent 70%),
+			radial-gradient(900px 480px at 100% 0%, var(--wash-blue), transparent 70%);
+		--hero-a:light-dark(#ffffff,#161c2b); --hero-b:light-dark(#f4efff,#1d1834); --hero-c:light-dark(#eaf1ff,#15213a);
+		--hero-edge:light-dark(#e4dcff,#2c2650);
 		--row-hover:light-dark(color-mix(in srgb, var(--ink) 3%, transparent), color-mix(in srgb, var(--ink) 5%, transparent));
 		--paper:#ffffff; /* the forced page colour when printing — physical paper, not theme-aware */
-		--hdr:light-dark(#475569,#2c3543); --hdr-fg:#ffffff; --hdr-h:41px;
+		--hdr:light-dark(#3b3f8f,#262b5c); --hdr-fg:#ffffff; --hdr-h:41px;
 		--neutral-fg:light-dark(#475569,#cbd5e1); --neutral-bg:light-dark(#f1f5f9,#2b3441);
 		--info-fg:light-dark(#1d4ed8,#93c5fd); --info-bg:light-dark(#eff6ff,#15243c);
 		--success-fg:light-dark(#15803d,#86efac); --success-bg:light-dark(#ecfdf5,#122a1e);
@@ -102,7 +115,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		/* Soft elevation for the bounded-panel family (cards/table/code/image/section); flow and
 		   tinted blocks stay flat so the lift keeps meaning "discrete panel". Reads only against the
 		   tinted --page, not pure white. */
-		--shadow:0 1px 2px light-dark(rgba(20,26,40,0.05),rgba(0,0,0,0.5)), 0 4px 16px light-dark(rgba(20,26,40,0.04),rgba(0,0,0,0.35));
+		--shadow:0 1px 2px light-dark(rgba(40,40,90,0.06),rgba(0,0,0,0.55)), 0 10px 30px light-dark(rgba(60,60,140,0.08),rgba(0,0,0,0.45));
 		--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 		--mono:ui-monospace,"SF Mono",Menlo,monospace;
 	}
@@ -126,8 +139,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 	h1{font-size:26px; font-weight:650; letter-spacing:-0.01em; margin-block-end:6px; text-wrap:balance}
 	.subtitle{color:var(--muted); font-size:14px}
-	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
-		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
+	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); scroll-margin-top:var(--hdr-h)}
+	h2:not(.part-title)::after{content:""; display:block; height:3px; width:56px; margin-top:10px;
+		border-radius:3px; background:linear-gradient(90deg, var(--accent-fg), var(--info-fg))}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
 	h4:not(.tab-pane-hd){font-size:14px; font-weight:650; margin:var(--s4) 0 var(--s2)}
 	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
@@ -146,22 +160,28 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 	/* Opt-in hero header (meta.hero): a larger display title in a tinted band, for a page that opens
 	   by selling an idea. Flat by design (tinted block). */
-	.hero{margin:0 0 var(--s6); padding:var(--s8) var(--s6); background:var(--panel);
-		border:1px solid var(--line); border-radius:var(--r-lg)}
-	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3)}
+	.hero{margin:0 0 var(--s6); padding:var(--s8) var(--s6);
+		background:linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 55%, var(--hero-c) 100%);
+		border:1px solid var(--hero-edge); border-radius:var(--r-lg); box-shadow:var(--shadow)}
+	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3);
+		background:linear-gradient(90deg, var(--ink) 0%, var(--accent-fg) 60%, var(--info-fg) 100%);
+		-webkit-background-clip:text; background-clip:text; color:transparent}
+	.hero h1 .title-icon{-webkit-text-fill-color:initial; color:var(--ink)}
 	.hero .subtitle{font-size:16px}
 	.hero .subtitle:not(:last-child){margin-block-end:var(--s1)}
 	.title-icon{margin-inline-end:0.4em}
 	.cover{font-size:13px; margin-block-start:var(--s2)}
 	.toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
-	.toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
+	.toc a{color:var(--info-fg); text-decoration:none; padding:3px 10px; border-radius:var(--r-pill);
+		background:color-mix(in srgb, var(--info-fg) 9%, var(--surface));
+		box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--info-fg) 18%, transparent)}
 }
 
 @layer components {
 	.facts{display:flex; flex-wrap:wrap; gap:var(--s1) 0; font-size:12.5px; color:var(--muted); margin-block:var(--s3)}
 	.facts .fact{display:inline-flex; gap:6px}
 	.facts .fact:not(:last-child)::after{content:"·"; margin-inline:var(--s3); color:var(--rule)}
-	.facts .fact .k{font-weight:600; color:var(--ink)}
+	.facts .fact .k{font-weight:600; color:var(--accent-fg)}
 
 	.sfields{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); align-items:center; font-size:12.5px; color:var(--muted); margin-block:var(--s3);
 		& .sf{display:inline-flex; flex-wrap:wrap; gap:var(--s1) 6px; align-items:center}
@@ -192,6 +212,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .cbadge{display:inline-block}
 		& .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
 		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:var(--s2); letter-spacing:-0.01em;
+			color:color-mix(in srgb, var(--t,var(--ink)) 70%, var(--ink));
 			&.neg{color:var(--danger-fg)} &.str{font-size:20px; font-weight:600}
 			& .pct{font-size:13px; font-weight:500; color:var(--muted); margin-inline-start:6px}
 			/* delta trend chip beside the value; author-chosen tone (up isn't always good). */
@@ -203,9 +224,18 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			& .delta.accent{--dt:var(--accent-fg); --db:var(--accent-bg)} & .delta.neutral{--dt:var(--neutral-fg); --db:var(--neutral-bg)}
 			& .delta.teal{--dt:var(--teal-fg); --db:var(--teal-bg)} & .delta.sky{--dt:var(--sky-fg); --db:var(--sky-bg)}}
 		& .note{font-size:11px; color:var(--muted); margin-top:var(--s2); line-height:1.35}}
+	/* A metric card in a card row carries its tone as a gradient bar laid over its own top border and a
+	   faint tint of that tone. The bar has the card's corner radius and nothing clips it, so the hover
+	   border drawn over the same edge follows the same corners. Flow step cards stay flat. */
+	.cards > .card{position:relative; border-block-start:1px solid var(--line);
+		background:linear-gradient(180deg, color-mix(in srgb, var(--t,var(--line)) 12%, var(--surface)) 0%, var(--surface) 60%);
+		&::before{content:""; position:absolute; inset:-1px -1px auto -1px; height:4px;
+			border-start-start-radius:var(--r-md); border-start-end-radius:var(--r-md);
+			background:linear-gradient(90deg, var(--t,var(--line)), color-mix(in srgb, var(--t,var(--line)) 40%, transparent))}}
 
 	.chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
-		padding:2px 9px; border-radius:var(--r-sm); white-space:nowrap;
+		padding:3px 10px; border-radius:var(--r-pill); white-space:nowrap;
+		box-shadow:inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
 		&.slate{background:var(--neutral-bg); color:var(--neutral-fg)} &.blue{background:var(--info-bg); color:var(--info-fg)}
 		&.green{background:var(--success-bg); color:var(--success-fg)} &.amber{background:var(--warning-bg); color:var(--warning-fg)}
 		&.red{background:var(--danger-bg); color:var(--danger-fg)} &.violet{background:var(--accent-bg); color:var(--accent-fg)}
@@ -235,7 +265,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	/* Chips attached to a container (card / timeline entry / flow node), decoupled from the table. */
 	.chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:var(--s2)}
 
-	.callout{border-inline-start:4px solid var(--c); background:var(--cb); border-radius:var(--r-md); padding:14px 18px; margin-block:var(--s4);
+	.callout{box-shadow:inset 4px 0 0 var(--c), var(--shadow);
+		background:linear-gradient(100deg, var(--cb) 0%, color-mix(in srgb, var(--cb) 40%, var(--surface)) 100%);
+		border-radius:var(--r-md); padding:14px 18px; margin-block:var(--s4);
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
 		&.warning{--c:var(--warning-fg); --cb:var(--warning-bg)} &.danger{--c:var(--danger-fg); --cb:var(--danger-bg)}
 		& .title{font-weight:600; color:var(--c); margin-block-end:var(--s1)}}
@@ -257,8 +289,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	   still aligns — adapts cleanly whether the meter is full-width or in a narrow grid cell. */
 	.meter{display:grid; grid-template-columns:max-content 1fr auto; gap:var(--s3) var(--s4); align-items:center; margin-block:var(--s4); max-width:900px;
 		& .m-label{font-size:13px}
-		& .track{background:var(--neutral-bg); border-radius:var(--r-pill); height:12px; overflow:hidden}
-		& .fill{height:100%; border-radius:var(--r-pill); background:var(--m,var(--neutral-fg));
+		& .track{background:color-mix(in srgb, var(--neutral-bg) 80%, var(--surface)); border-radius:var(--r-pill); height:14px; overflow:hidden}
+		& .fill{height:100%; border-radius:var(--r-pill);
+			background:linear-gradient(90deg, color-mix(in srgb, var(--m,var(--neutral-fg)) 65%, white), var(--m,var(--neutral-fg)));
 			&.info{--m:var(--info-fg)} &.success{--m:var(--success-fg)} &.warning{--m:var(--warning-fg)}
 			&.danger{--m:var(--danger-fg)} &.neutral{--m:var(--neutral-fg)} &.accent{--m:var(--accent-fg)}
 			&.teal{--m:var(--teal-fg)} &.sky{--m:var(--sky-fg)}}
@@ -502,7 +535,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	   ignore border-radius. border-spacing:0 keeps the row rules looking like collapsed borders. */
 	table.rep{width:100%; table-layout:fixed; font-size:14px; border-collapse:separate; border-spacing:0;
 		& thead th{position:sticky; top:0; z-index:3; text-align:start; font-size:11px; font-weight:700;
-			text-transform:uppercase; letter-spacing:0.06em; color:var(--hdr-fg); background:var(--hdr); padding:12px 16px; vertical-align:bottom}
+			text-transform:uppercase; letter-spacing:0.06em; color:var(--hdr-fg);
+			background:linear-gradient(180deg, color-mix(in srgb, var(--hdr) 88%, white) 0%, var(--hdr) 100%);
+			padding:12px 16px; vertical-align:bottom}
 		/* --r-inner = the wrapper's radius minus its 1px border, so the header sits flush in the corner. */
 		& thead th:first-child{border-start-start-radius:var(--r-inner)}
 		& thead th:last-child{border-start-end-radius:var(--r-inner)}
@@ -802,6 +837,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.panel-card{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow)}
 	.panel-card .panel-card-hd{padding:var(--s3) var(--s4); font-weight:650; font-size:14px; border-block-end:1px solid var(--line)}
 	.panel-card .panel-card-body{padding:var(--s2) var(--s4) var(--s4)}
+	.table-wrap,details.section,details.toggle,.panel-card{border-color:var(--edge)}
+	details.section{
+		& > summary{border-radius:var(--r-inner);
+			background:linear-gradient(90deg, color-mix(in srgb, var(--accent-fg) 7%, var(--surface)), var(--surface))}
+		&[open] > summary{border-end-start-radius:0; border-end-end-radius:0; border-block-end:1px solid var(--line)}}
 	.legend-grid{display:grid; grid-template-columns:repeat(2,minmax(280px,1fr)); gap:var(--s2) var(--s8)}
 	.legend-row{display:flex; align-items:baseline; gap:10px; font-size:13px}
 	.legend-row .meaning{color:var(--muted)}
