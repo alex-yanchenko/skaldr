@@ -48,6 +48,8 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
    shorthand also resets the wash image, which is why this rule comes after it. */
 @media print{body{background:var(--paper)}}
 
+@property --skaldr-ang{syntax:"<angle>"; inherits:false; initial-value:0deg}
+
 @layer reset {
 	html{line-height:1.5; -webkit-text-size-adjust:100%}
 	body{margin:0}
@@ -116,6 +118,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		   tinted blocks stay flat so the lift keeps meaning "discrete panel". Reads only against the
 		   tinted --page, not pure white. */
 		--shadow:0 1px 2px light-dark(rgba(40,40,90,0.06),rgba(0,0,0,0.55)), 0 10px 30px light-dark(rgba(60,60,140,0.08),rgba(0,0,0,0.45));
+		--shadow-lift:0 2px 4px light-dark(rgba(20,26,40,0.06),rgba(0,0,0,0.5)), 0 14px 32px light-dark(rgba(20,26,40,0.12),rgba(0,0,0,0.5));
 		--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 		--mono:ui-monospace,"SF Mono",Menlo,monospace;
 	}
@@ -1071,6 +1074,71 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	.meter .fill{box-shadow:0 0 10px light-dark(color-mix(in srgb, var(--m,var(--neutral-fg)) 35%, transparent), color-mix(in srgb, var(--m,var(--neutral-fg)) 18%, transparent))}
 	.chip{box-shadow:inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent),
 		0 0 8px light-dark(color-mix(in srgb, currentColor 10%, transparent), color-mix(in srgb, currentColor 5%, transparent))}
+
+	/* Motion. Only for a reader who has not asked for less of it, and never on paper. Every entrance and
+	   fill is tied to the scroll position (a view timeline), so nothing runs on a clock at load; the one
+	   thing that moves on a clock is the border light a card shows while the pointer is on it. The
+	   entrances all share one slow rise, and no curve overshoots. */
+	@media screen and (prefers-reduced-motion: no-preference){
+		html{scroll-behavior:smooth}
+		@supports (animation-timeline: view()){
+			body::before{content:""; position:fixed; inset:0 auto auto 0; height:3px; width:100%; z-index:50;
+				transform-origin:0 50%; transform:scaleX(0);
+				background:linear-gradient(90deg, var(--accent-fg), var(--info-fg));
+				animation:skaldr-read linear both; animation-timeline:scroll(root)}
+			@keyframes skaldr-read{to{transform:scaleX(1)}}
+
+			.wrap > :is(h2,.cards,.table-wrap,details,.panel-card,.callout,.chart,.meter,.range,.kv,.grid,.tabs,.text,figure){
+				animation:skaldr-rise both ease-out; animation-timeline:view(); animation-range:entry 0% entry 40%}
+			@keyframes skaldr-rise{from{opacity:0; transform:translateY(18px)}}
+
+			h2:not(.part-title)::after{animation:skaldr-line both ease-out; animation-timeline:view(); animation-range:entry 20% entry 80%}
+			@keyframes skaldr-line{from{width:0}}
+
+			.meter .fill{position:relative; overflow:hidden; transform-origin:0 50%;
+				animation:skaldr-fill both cubic-bezier(.2,.8,.2,1); animation-timeline:view(); animation-range:entry 20% cover 45%}
+			@keyframes skaldr-fill{from{transform:scaleX(0)}}
+			.meter .fill::after{content:""; position:absolute; inset:0;
+				background:linear-gradient(100deg, transparent 20%, color-mix(in srgb, white 55%, transparent) 50%, transparent 80%);
+				transform:translateX(-100%); animation:skaldr-shine both ease-in-out; animation-timeline:view(); animation-range:cover 35% cover 65%}
+			@keyframes skaldr-shine{to{transform:translateX(100%)}}
+
+			.range .rseg{animation:skaldr-fade both ease-out; animation-timeline:view(); animation-range:entry 10% cover 35%}
+			@keyframes skaldr-fade{from{opacity:0}}
+
+			.chart svg :is(rect,path){transform-box:fill-box; transform-origin:50% 100%;
+				animation:skaldr-grow both cubic-bezier(.2,.8,.2,1); animation-timeline:view(); animation-range:entry 10% cover 45%}
+			@keyframes skaldr-grow{from{transform:scaleY(0.001); opacity:.2}}
+			.chart svg path[fill="none"]{stroke-dasharray:2400; stroke-dashoffset:2400; transform:none;
+				animation:skaldr-draw both ease-out; animation-timeline:view(); animation-range:entry 10% cover 55%}
+			@keyframes skaldr-draw{to{stroke-dashoffset:0}}
+		}
+
+		.cards > .card,.panel-card{transition:transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease}
+		.cards > .card:hover,.panel-card:hover{transform:translateY(-2px)}
+		.panel-card:hover{box-shadow:var(--shadow-lift)}
+
+		.cards > .card::after{content:""; position:absolute; inset:-1px; border-radius:var(--r-md); padding:1.5px;
+			z-index:2; opacity:0; pointer-events:none;
+			background:conic-gradient(from var(--skaldr-ang), var(--t,var(--accent-fg)), transparent 25%, transparent 75%, var(--t,var(--accent-fg)));
+			-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
+			filter:drop-shadow(0 0 4px color-mix(in srgb, var(--t,var(--accent-fg)) 60%, transparent));
+			transition:opacity .45s ease}
+		.cards > .card:hover::after{opacity:1; animation:skaldr-spin 3s linear infinite}
+		@keyframes skaldr-spin{to{--skaldr-ang:360deg}}
+
+		.chip{transition:transform .2s ease}
+		.chip:hover{transform:translateY(-1px) scale(1.06)}
+		.toc a{transition:filter .2s ease}
+		.toc a:hover{filter:brightness(1.25)}
+
+		:root{interpolate-size:allow-keywords}
+		details::details-content{block-size:0; overflow:clip;
+			transition:block-size .35s cubic-bezier(.2,.8,.2,1), content-visibility .35s allow-discrete}
+		details[open]::details-content{block-size:auto}
+		details.section > summary::before,details.toggle > summary::before{content:"▸"; display:inline-block; transition:transform .25s ease}
+		details.section[open] > summary::before,details.toggle[open] > summary::before{content:"▸"; transform:rotate(90deg)}
+	}
 }
 
 @layer print {
