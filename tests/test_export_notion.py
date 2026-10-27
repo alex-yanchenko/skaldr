@@ -1413,6 +1413,45 @@ def test_a_single_series_line_chart_is_an_xy_chart_in_the_series_colour_of_the_p
     )
 
 
+PIE_FOR_A_CONTAINER = {
+    "type": "chart",
+    "variant": "donut",
+    "slices": [{"label": "A", "value": 3, "tone": "success"}, {"label": "B", "value": 1}],
+}
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        pytest.param({"type": "toggle", "title": "More", "blocks": [PIE_FOR_A_CONTAINER]}, id="toggle"),
+        pytest.param(
+            {
+                "type": "tabs",
+                "tabs": [
+                    {"label": "One", "blocks": [PIE_FOR_A_CONTAINER]},
+                    {"label": "Two", "blocks": [{"type": "divider"}]},
+                ],
+            },
+            id="tab",
+        ),
+        pytest.param({"type": "panel", "title": "Slide", "blocks": [PIE_FOR_A_CONTAINER]}, id="panel"),
+        pytest.param(
+            {"type": "grid", "cells": [{"span": 6, "blocks": [PIE_FOR_A_CONTAINER]}]}, id="grid-cell"
+        ),
+        pytest.param(
+            {"type": "grid", "cells": [{"span": 6, "tone": "info", "blocks": [PIE_FOR_A_CONTAINER]}]},
+            id="toned-grid-cell-callout",
+        ),
+    ],
+)
+def test_a_pie_inside_a_container_is_written_with_the_same_init_line_as_at_the_top_level(
+    container: dict[str, Any],
+) -> None:
+    init_line = notion_of([PIE_FOR_A_CONTAINER]).splitlines()[1]
+
+    assert [line.strip() for line in notion_of([container]).splitlines() if "%%{init:" in line] == [init_line]
+
+
 def test_a_toned_donut_is_a_pie_in_the_slice_colours_of_the_page() -> None:
     donut = {
         "type": "chart",
