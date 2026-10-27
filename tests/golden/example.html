@@ -235,7 +235,6 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 
 	.chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
 		padding:3px 10px; border-radius:var(--r-pill); white-space:nowrap;
-		box-shadow:inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
 		&.slate{background:var(--neutral-bg); color:var(--neutral-fg)} &.blue{background:var(--info-bg); color:var(--info-fg)}
 		&.green{background:var(--success-bg); color:var(--success-fg)} &.amber{background:var(--warning-bg); color:var(--warning-fg)}
 		&.red{background:var(--danger-bg); color:var(--danger-fg)} &.violet{background:var(--accent-bg); color:var(--accent-fg)}
@@ -265,7 +264,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	/* Chips attached to a container (card / timeline entry / flow node), decoupled from the table. */
 	.chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:var(--s2)}
 
-	.callout{box-shadow:inset 4px 0 0 var(--c), var(--shadow);
+	.callout{box-shadow:inset 4px 0 0 var(--c);
 		background:linear-gradient(100deg, var(--cb) 0%, color-mix(in srgb, var(--cb) 40%, var(--surface)) 100%);
 		border-radius:var(--r-md); padding:14px 18px; margin-block:var(--s4);
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
@@ -1060,6 +1059,18 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		& .rq-handoff{display:flex; gap:var(--s2); align-items:center; justify-content:center;
 			padding:var(--s2) 0; font-family:var(--mono); font-size:11px; color:var(--muted)}
 		& .rq-bar{width:1px; height:12px; background:var(--rule)}}
+
+	/* Glow: a faint halo in each block's own tone. Each rule gives light and dark separately because a
+	   halo that reads on the pale page looks heavy against the dark one, so dark runs at about half. */
+	.cards > .card{box-shadow:0 0 0 1px light-dark(color-mix(in srgb, var(--t,var(--line)) 14%, transparent), color-mix(in srgb, var(--t,var(--line)) 9%, transparent)),
+		0 8px 28px light-dark(color-mix(in srgb, var(--t,var(--accent-fg)) 9%, transparent), color-mix(in srgb, var(--t,var(--accent-fg)) 4%, transparent))}
+	.callout{box-shadow:inset 4px 0 0 var(--c),
+		0 6px 24px light-dark(color-mix(in srgb, var(--c) 7%, transparent), color-mix(in srgb, var(--c) 3%, transparent))}
+	details.section{box-shadow:0 0 0 1px light-dark(color-mix(in srgb, var(--accent-fg) 8%, transparent), color-mix(in srgb, var(--accent-fg) 5%, transparent)),
+		0 8px 26px light-dark(color-mix(in srgb, var(--accent-fg) 5%, transparent), color-mix(in srgb, var(--accent-fg) 2.5%, transparent))}
+	.meter .fill{box-shadow:0 0 10px light-dark(color-mix(in srgb, var(--m,var(--neutral-fg)) 35%, transparent), color-mix(in srgb, var(--m,var(--neutral-fg)) 18%, transparent))}
+	.chip{box-shadow:inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent),
+		0 0 8px light-dark(color-mix(in srgb, currentColor 10%, transparent), color-mix(in srgb, currentColor 5%, transparent))}
 }
 
 @layer print {
