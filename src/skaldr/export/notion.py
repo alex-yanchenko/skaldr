@@ -877,7 +877,7 @@ def _notion_lines(node: NotionNode, room: TableRoom) -> list[str]:
             return _notion_blocks(data_table_swapped_in(node, "notion"), room)
         case Diagram():
             return [
-                *mermaid_fence_lines(figure_mermaid_draws(node, "notion")),
+                *mermaid_fence_lines(figure_mermaid_draws(node, "notion"), with_page_palette=True),
                 *_notion_blocks(node.supplement, room),
             ]
         case TableOfContents():
