@@ -187,7 +187,8 @@ Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/
 - **Derived, not authored:** number formatting, percentages, subtotals, the legend, the TOC,
   and the provenance footer are all computed, so they can't drift from the data.
 - **Light & dark:** the palette follows the viewer's OS theme; a small corner menu lets the
-  reader switch theme and page width.
+  reader switch theme and page width. A page with a table of contents also gets a Contents
+  button beside it, which opens a panel that follows the reader down the page.
 
 ## Let an AI write it
 

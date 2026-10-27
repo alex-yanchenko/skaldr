@@ -857,13 +857,33 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 
 	/* Display controls — a fixed corner menu (theme + width). position:fixed so it never affects
 	   layout or page width; collapsed to just the button until opened. z-index sits above all page
-	   content (sticky headers top out at 3). Hidden in print. */
-	.sc{position:fixed; top:var(--s3); right:var(--s3); z-index:50; font-size:13px}
-	.sc-btn{display:flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0;
+	   content (sticky headers top out at 3). Hidden in print. The row holds the Contents button (only a
+	   page with a table of contents has one) beside the settings button; the settings menu and the contents
+	   panel both open below it, and the script keeps only one of them open at a time. */
+	.sc{position:fixed; top:var(--s3); right:var(--s3); z-index:50; font-size:13px; --sc-size:40px;
+		display:flex; gap:var(--s2)}
+	.sc-btn,.toc-btn{display:flex; align-items:center; justify-content:center; width:var(--sc-size); height:var(--sc-size); padding:0;
 		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); color:var(--muted);
 		box-shadow:var(--shadow); cursor:pointer;
 		&:hover{color:var(--ink)}
 		&:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}}
+	.toc-btn[aria-expanded="true"]{color:var(--accent-fg); border-color:color-mix(in srgb, var(--accent-fg) 45%, var(--line))}
+	/* A manual popover floats over the page and stays open while the reader scrolls; the script and the
+	   same button close it. It sits where the settings menu sits (the top layer ignores .sc's box), and
+	   the link for the section in view is lit by :target-current where the browser supports it. */
+	.toc-pop{inset:auto; position:fixed; top:calc(var(--s3) + var(--sc-size) + var(--s2)); right:var(--s3); margin:0;
+		inline-size:min(280px, calc(100vw - 2 * var(--s3))); max-block-size:calc(100vh - 2 * var(--s3) - var(--sc-size) - var(--s2));
+		overflow:auto; padding:var(--s3); border-radius:var(--r-lg); border:1px solid var(--line); color:var(--ink);
+		background:color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter:blur(14px) saturate(140%);
+		box-shadow:var(--shadow-lift); scroll-target-group:auto;
+		& .toc-pop-hd{font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);
+			padding:var(--s1) 10px var(--s2)}
+		& a{display:block; padding:6px 10px; border-radius:var(--r-md); color:var(--muted); text-decoration:none;
+			line-height:1.3; font-size:13px}
+		& a:hover{color:var(--ink); background:color-mix(in srgb, var(--info-fg) 8%, transparent)}
+		& a:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}}
+	.toc-pop a:target-current{color:var(--accent-fg); font-weight:600;
+		background:color-mix(in srgb, var(--accent-fg) 12%, transparent); box-shadow:inset 3px 0 0 var(--accent-fg)}
 	/* Anchored below the button (its full height + a gap) so the offset tracks the button size. */
 	.sc-menu{position:absolute; top:calc(100% + var(--s2)); right:0; min-width:190px; padding:var(--s3);
 		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow);
@@ -1108,6 +1128,11 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 			transition:opacity .45s ease}
 		.cards > .card:hover::after{opacity:1; animation:skaldr-spin 3s linear infinite}
 		@keyframes skaldr-spin{to{--skaldr-ang:360deg}}
+
+		.toc-pop{opacity:0; transform:translateX(16px);
+			transition:opacity .2s ease, transform .2s ease, overlay .2s allow-discrete, display .2s allow-discrete}
+		.toc-pop:popover-open{opacity:1; transform:none}
+		@starting-style{.toc-pop:popover-open{opacity:0; transform:translateX(16px)}}
 
 		.chip{transition:transform .2s ease}
 		.chip:hover{transform:translateY(-1px) scale(1.06)}

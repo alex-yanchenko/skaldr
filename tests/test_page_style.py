@@ -115,5 +115,17 @@ def test_the_hover_lift_is_two_pixels_over_450_milliseconds() -> None:
     assert ":hover{transform:translateY(-2px)}" in motion
 
 
+def test_the_contents_panel_lights_the_section_in_view_by_scroll_tracking() -> None:
+    css = stylesheet()
+
+    assert ("scroll-target-group:auto" in css, ".toc-pop a:target-current{" in css) == (True, True)
+
+
+def test_the_corner_row_holding_both_buttons_and_the_panel_is_hidden_on_paper() -> None:
+    printed = stylesheet().split("@layer print {", 1)[1]
+
+    assert ".sc,.skaldr-live{display:none}" in printed
+
+
 def test_scroll_driven_rules_wait_for_a_browser_that_supports_them() -> None:
     assert "@supports (animation-timeline: view()){" in motion_blocks()[0]

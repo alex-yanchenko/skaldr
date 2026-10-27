@@ -13,7 +13,7 @@
      script changes, that test fails until the hash below is updated. One of the hashes is the --live
      reloader's, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-P4/AtrtqQD+C1Z7lzKJJm+P9FDHTR1hoiN5trfKlpuk=' 'sha256-rrstR5Fsu2TwJXuyS4PhRXkSAuTJhgZ8NiWIR5KQjvI=' 'sha256-0s89MInV5JOlHCktUHl9/9snp/xmOZJGJJyByUgboTs=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-ZsGLF5vs5g/omuEkqzw71SZVKixpU/2drgmzHbGzfw8='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-P4/AtrtqQD+C1Z7lzKJJm+P9FDHTR1hoiN5trfKlpuk=' 'sha256-mmIPXtSVbv/zjFygax+4GTvkkEmarO1+iV69vlPTHPk=' 'sha256-0s89MInV5JOlHCktUHl9/9snp/xmOZJGJJyByUgboTs=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-ZsGLF5vs5g/omuEkqzw71SZVKixpU/2drgmzHbGzfw8='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20y%3D%22.9em%22%20font-size%3D%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
@@ -875,13 +875,33 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 
 	/* Display controls — a fixed corner menu (theme + width). position:fixed so it never affects
 	   layout or page width; collapsed to just the button until opened. z-index sits above all page
-	   content (sticky headers top out at 3). Hidden in print. */
-	.sc{position:fixed; top:var(--s3); right:var(--s3); z-index:50; font-size:13px}
-	.sc-btn{display:flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0;
+	   content (sticky headers top out at 3). Hidden in print. The row holds the Contents button (only a
+	   page with a table of contents has one) beside the settings button; the settings menu and the contents
+	   panel both open below it, and the script keeps only one of them open at a time. */
+	.sc{position:fixed; top:var(--s3); right:var(--s3); z-index:50; font-size:13px; --sc-size:40px;
+		display:flex; gap:var(--s2)}
+	.sc-btn,.toc-btn{display:flex; align-items:center; justify-content:center; width:var(--sc-size); height:var(--sc-size); padding:0;
 		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); color:var(--muted);
 		box-shadow:var(--shadow); cursor:pointer;
 		&:hover{color:var(--ink)}
 		&:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}}
+	.toc-btn[aria-expanded="true"]{color:var(--accent-fg); border-color:color-mix(in srgb, var(--accent-fg) 45%, var(--line))}
+	/* A manual popover floats over the page and stays open while the reader scrolls; the script and the
+	   same button close it. It sits where the settings menu sits (the top layer ignores .sc's box), and
+	   the link for the section in view is lit by :target-current where the browser supports it. */
+	.toc-pop{inset:auto; position:fixed; top:calc(var(--s3) + var(--sc-size) + var(--s2)); right:var(--s3); margin:0;
+		inline-size:min(280px, calc(100vw - 2 * var(--s3))); max-block-size:calc(100vh - 2 * var(--s3) - var(--sc-size) - var(--s2));
+		overflow:auto; padding:var(--s3); border-radius:var(--r-lg); border:1px solid var(--line); color:var(--ink);
+		background:color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter:blur(14px) saturate(140%);
+		box-shadow:var(--shadow-lift); scroll-target-group:auto;
+		& .toc-pop-hd{font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);
+			padding:var(--s1) 10px var(--s2)}
+		& a{display:block; padding:6px 10px; border-radius:var(--r-md); color:var(--muted); text-decoration:none;
+			line-height:1.3; font-size:13px}
+		& a:hover{color:var(--ink); background:color-mix(in srgb, var(--info-fg) 8%, transparent)}
+		& a:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}}
+	.toc-pop a:target-current{color:var(--accent-fg); font-weight:600;
+		background:color-mix(in srgb, var(--accent-fg) 12%, transparent); box-shadow:inset 3px 0 0 var(--accent-fg)}
 	/* Anchored below the button (its full height + a gap) so the offset tracks the button size. */
 	.sc-menu{position:absolute; top:calc(100% + var(--s2)); right:0; min-width:190px; padding:var(--s3);
 		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow);
@@ -1126,6 +1146,11 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 			transition:opacity .45s ease}
 		.cards > .card:hover::after{opacity:1; animation:skaldr-spin 3s linear infinite}
 		@keyframes skaldr-spin{to{--skaldr-ang:360deg}}
+
+		.toc-pop{opacity:0; transform:translateX(16px);
+			transition:opacity .2s ease, transform .2s ease, overlay .2s allow-discrete, display .2s allow-discrete}
+		.toc-pop:popover-open{opacity:1; transform:none}
+		@starting-style{.toc-pop:popover-open{opacity:0; transform:translateX(16px)}}
 
 		.chip{transition:transform .2s ease}
 		.chip:hover{transform:translateY(-1px) scale(1.06)}
@@ -1738,6 +1763,9 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 
 <div class="footer">WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.</div><div class="credit">Generated with <a href="https://github.com/alex-yanchenko/skaldr">skaldr</a></div>
 </div><div class="sc" data-open="false">
+<button class="toc-btn" type="button" aria-label="Contents" aria-expanded="false" aria-controls="contents-panel" popovertarget="contents-panel">
+<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
+</button>
 <button class="sc-btn" type="button" aria-label="Display settings" aria-expanded="false" aria-controls="sc-menu">
 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.6" fill="var(--surface)"/><circle cx="15" cy="16" r="2.6" fill="var(--surface)"/></svg>
 </button>
@@ -1745,6 +1773,9 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <div class="sc-row"><span class="sc-lbl">Theme</span><div class="sc-seg" role="group" aria-label="Theme"><button type="button" aria-pressed="false" data-set="theme" data-val="auto">Auto</button><button type="button" aria-pressed="false" data-set="theme" data-val="light">Light</button><button type="button" aria-pressed="false" data-set="theme" data-val="dark">Dark</button></div></div>
 <div class="sc-row"><span class="sc-lbl">Width</span><div class="sc-seg" role="group" aria-label="Width"><button type="button" aria-pressed="false" data-set="width" data-val="default">Default</button><button type="button" aria-pressed="false" data-set="width" data-val="wide">Wide</button><button type="button" aria-pressed="false" data-set="width" data-val="full">Full</button></div></div>
 </div>
+<nav class="toc-pop" id="contents-panel" popover="manual" aria-label="Contents">
+<div class="toc-pop-hd">On this page</div>
+<a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#recount-followup">Recount Zone C</a><a href="#appendix-raw-counts">Appendix: discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</a><a href="#reconciling-a-bin-against-the-live-system">Reconciling a bin against the live system</a><a href="#sources">Sources</a></nav>
 </div>
 <script>
 (function () {
@@ -1755,6 +1786,13 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 	var menu = controls.querySelector(".sc-menu");
 	if (!button || !menu) return;
 	var defaultWidth = "default";
+	var contentsButton = controls.querySelector(".toc-btn");
+	var contentsPanel = controls.querySelector(".toc-pop");
+
+	function contentsOpen() {
+		try { return contentsPanel.matches(":popover-open"); } catch (err) { return false; }
+	}
+	function closeContents() { if (contentsOpen()) contentsPanel.hidePopover(); }
 
 	function save(key, value) { try { localStorage.setItem(key, value); } catch (err) {} }
 	function drop(key) { try { localStorage.removeItem(key); } catch (err) {} }
@@ -1763,6 +1801,15 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 		controls.dataset.open = isOpen ? "true" : "false";
 		button.setAttribute("aria-expanded", isOpen ? "true" : "false");
 		menu.hidden = !isOpen;
+		if (isOpen) closeContents();
+	}
+
+	if (contentsPanel && contentsButton) {
+		contentsPanel.addEventListener("toggle", function (event) {
+			var isOpen = event.newState === "open";
+			contentsButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+			if (isOpen) setOpen(false);
+		});
 	}
 
 	function syncGroup(kind, active) {
@@ -1779,7 +1826,11 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 
 	button.addEventListener("click", function (event) { event.stopPropagation(); setOpen(controls.dataset.open !== "true"); });
 	document.addEventListener("click", function (event) { if (!controls.contains(event.target)) setOpen(false); });
-	document.addEventListener("keydown", function (event) { if (event.key === "Escape") setOpen(false); });
+	document.addEventListener("keydown", function (event) {
+		if (event.key !== "Escape") return;
+		setOpen(false);
+		closeContents();
+	});
 
 	controls.querySelectorAll("[data-set]").forEach(function (item) {
 		item.addEventListener("click", function () {

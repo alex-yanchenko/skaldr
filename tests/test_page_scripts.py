@@ -5,10 +5,12 @@ from skaldr.models import parse_report
 from skaldr.render import render_html
 from tests.factories.report_factory import make_report, make_request
 from tests.node_page import (
+    MenuOutcome,
     PageOutcome,
     PageRun,
     call_script_function,
     requires_node,
+    run_menu_steps,
     run_page_scripts,
     script_containing,
 )
@@ -106,6 +108,64 @@ def test_the_display_controls_set_and_remember_the_choice(
     clicks: tuple[tuple[str, str], ...], expected: PageOutcome
 ) -> None:
     assert run_page_scripts(_boot_and_controls(_page_html()), PageRun(clicks=clicks)) == expected
+
+
+@pytest.mark.parametrize(
+    ("steps", "expected"),
+    [
+        pytest.param(("click-settings",), MenuOutcome(True, False, None), id="settings-open-on-their-own"),
+        pytest.param(("open-contents",), MenuOutcome(False, True, "true"), id="contents-open-on-their-own"),
+        pytest.param(
+            ("open-contents", "close-contents"),
+            MenuOutcome(False, False, "false"),
+            id="the-contents-button-reads-collapsed-once-the-panel-closes",
+        ),
+        pytest.param(
+            ("click-settings", "open-contents"),
+            MenuOutcome(False, True, "true"),
+            id="opening-the-contents-closes-the-settings-menu",
+        ),
+        pytest.param(
+            ("open-contents", "click-settings"),
+            MenuOutcome(True, False, "false"),
+            id="opening-the-settings-menu-closes-the-contents",
+        ),
+        pytest.param(
+            ("click-settings", "escape"),
+            MenuOutcome(False, False, None),
+            id="escape-closes-the-settings-menu",
+        ),
+        pytest.param(
+            ("open-contents", "escape"), MenuOutcome(False, False, "false"), id="escape-closes-the-contents"
+        ),
+    ],
+)
+def test_the_settings_menu_and_the_contents_panel_never_stay_open_together(
+    steps: tuple[str, ...], expected: MenuOutcome
+) -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert run_menu_steps([script_containing(html, "data-set")], steps) == expected
+
+
+def test_a_page_without_a_contents_panel_still_opens_and_closes_its_settings_menu() -> None:
+    html = render_html(parse_report(make_report()))
+    controls = [script_containing(html, "data-set")]
+
+    assert (
+        run_menu_steps(controls, ("click-settings",), contents=False),
+        run_menu_steps(controls, ("click-settings", "escape"), contents=False),
+    ) == (MenuOutcome(True, False, None), MenuOutcome(False, False, None))
+
+
+def test_a_browser_without_popovers_still_opens_and_closes_the_settings_menu() -> None:
+    html = render_html(parse_report(make_report()))
+    controls = [script_containing(html, "data-set")]
+
+    assert (
+        run_menu_steps(controls, ("click-settings",), popover_supported=False),
+        run_menu_steps(controls, ("click-settings", "escape"), popover_supported=False),
+    ) == (MenuOutcome(True, False, None), MenuOutcome(False, False, None))
 
 
 def test_the_display_controls_still_apply_a_choice_when_storage_throws() -> None:

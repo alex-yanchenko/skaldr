@@ -780,6 +780,7 @@ def test_anchor_slugs_yield_to_the_ids_the_page_itself_uses() -> None:
             blocks=[
                 {"type": "heading", "text": "Skaldr source"},
                 {"type": "heading", "text": "SC menu"},
+                {"type": "heading", "text": "Contents panel"},
                 {"type": "heading", "text": "Ref a"},
                 {"type": "heading", "text": "Fnref a"},
                 {"type": "heading", "text": "Ref b"},
@@ -791,13 +792,14 @@ def test_anchor_slugs_yield_to_the_ids_the_page_itself_uses() -> None:
     assert list(anchor_slugs(report).values()) == [
         "skaldr-source-2",
         "sc-menu-2",
+        "contents-panel-2",
         "ref-a-2",
         "fnref-a-2",
         "ref-b",
     ]
 
 
-@pytest.mark.parametrize("author_id", ["skaldr-source", "sc-menu", "ref-a", "fnref-a"])
+@pytest.mark.parametrize("author_id", ["skaldr-source", "sc-menu", "contents-panel", "ref-a", "fnref-a"])
 def test_anchor_slugs_refuse_an_author_id_the_page_itself_uses(author_id: str) -> None:
     report = parse_report(
         make_report(
@@ -812,8 +814,8 @@ def test_anchor_slugs_refuse_an_author_id_the_page_itself_uses(author_id: str) -
         anchor_slugs(report)
 
     assert str(raised.value) == (
-        f"anchor id '{author_id}' is one the page itself uses (the source block, the settings menu, or a "
-        "reference and its citation); give the heading or section another id"
+        f"anchor id '{author_id}' is one the page itself uses (the source block, the settings menu, the "
+        "contents panel, or a reference and its citation); give the heading or section another id"
     )
 
 

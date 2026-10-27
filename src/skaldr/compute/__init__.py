@@ -9,6 +9,7 @@ it, and models must not import compute) so templates can reach it through this o
 
 from skaldr.compute.page import (
     BADGE_LEGEND_SUBJECT,
+    CONTENTS_PANEL_ID,
     CSS_LOWER_ROMAN_RANGE,
     DELTA_GLYPHS,
     LATIN_ALPHABET_SIZE,
@@ -110,6 +111,7 @@ __all__ = [
     "CASE_LABEL_CHAR",
     "CASE_LABEL_CHROME",
     "CASE_STRIP_SLACK",
+    "CONTENTS_PANEL_ID",
     "CSS_LOWER_ROMAN_RANGE",
     "DELTA_GLYPHS",
     "LATIN_ALPHABET_SIZE",

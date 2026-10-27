@@ -80,6 +80,8 @@ meta:
 
 `source` is rich text, so `*`, backticks, `[label](url)` and `[^key]` in it are read as marks, code, links and citations (escape a literal one with a backslash), and a link to an unknown `#anchor` fails the build naming `meta.source`. The footer renders after the page's `references` block, so a reference cited only from `source` gets no back-link. The footer's date, updated stamp and reconcile lines stay plain text.
 
+`toc` also puts a Contents button in the page's top-right corner, beside the display-settings button. It opens a panel that lists the same entries, floats over the page, stays open while the reader scrolls, marks the section in view, and closes from the same button or the Escape key. Opening it closes the settings menu, and the other way round. The inline table of contents stays, and a page without `toc` has no Contents button. The exports ignore the button.
+
 `hero` opts the page into a bolder opening (a large display title and subtitle in a tinted band)
 for a page that leads by selling an idea (a proposal, an explainer) rather than a plain report header.
 
