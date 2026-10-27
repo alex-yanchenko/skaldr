@@ -82,6 +82,7 @@ const document = {
 const windowListeners = {};
 const window = {
   addEventListener(type, listener) { (windowListeners[type] = windowListeners[type] || []).push(listener); },
+  matchMedia() { return { matches: input.narrow }; },
 };
 const context = vm.createContext({ document: document, window: window, localStorage: localStorage });
 
@@ -99,6 +100,9 @@ input.clicks.forEach(function (pair) {
     panel.show(true);
   } else if (step === "close-contents") {
     panel.show(false);
+  } else if (step === "click-link" || step === "click-panel-text") {
+    const target = { closest(selector) { return step === "click-link" && selector === "a" ? {} : null; } };
+    (panel.listeners.click || []).forEach(function (listener) { listener({ target: target }); });
   } else if (step === "escape") {
     documentListeners.keydown.forEach(function (listener) { listener({ key: "Escape" }); });
   }
@@ -197,6 +201,7 @@ def _drive_page(
     steps: tuple[str, ...] = (),
     contents: bool = False,
     popover_supported: bool = True,
+    narrow: bool = False,
 ) -> _DrivenPage:
     assert NODE is not None
     payload = {
@@ -209,6 +214,7 @@ def _drive_page(
         "steps": steps,
         "contents": contents,
         "popover_supported": popover_supported,
+        "narrow": narrow,
     }
     finished = subprocess.run(
         [NODE, "-e", _PAGE_DRIVER],
@@ -227,9 +233,14 @@ def run_page_scripts(scripts: list[str], run: PageRun) -> PageOutcome:
 
 
 def run_menu_steps(
-    scripts: list[str], steps: tuple[str, ...], *, contents: bool = True, popover_supported: bool = True
+    scripts: list[str],
+    steps: tuple[str, ...],
+    *,
+    contents: bool = True,
+    popover_supported: bool = True,
+    narrow: bool = False,
 ) -> MenuOutcome:
-    menu = _drive_page(scripts, PageRun(), [], steps, contents, popover_supported)["menu"]
+    menu = _drive_page(scripts, PageRun(), [], steps, contents, popover_supported, narrow)["menu"]
     return MenuOutcome(menu["settingsOpen"] == "true", menu["contentsOpen"], menu["expanded"])
 
 

@@ -9,7 +9,7 @@
 <div class="sc-row"><span class="sc-lbl">Theme</span><div class="sc-seg" role="group" aria-label="Theme"><button type="button" aria-pressed="false" data-set="theme" data-val="auto">Auto</button><button type="button" aria-pressed="false" data-set="theme" data-val="light">Light</button><button type="button" aria-pressed="false" data-set="theme" data-val="dark">Dark</button></div></div>
 <div class="sc-row"><span class="sc-lbl">Width</span><div class="sc-seg" role="group" aria-label="Width"><button type="button" aria-pressed="false" data-set="width" data-val="default">Default</button><button type="button" aria-pressed="false" data-set="width" data-val="wide">Wide</button><button type="button" aria-pressed="false" data-set="width" data-val="full">Full</button></div></div>
 </div>
-{% if toc %}<nav class="toc-pop" id="{{ contents_panel_id }}" popover="manual" aria-label="Contents">
+{% if toc %}<nav class="toc-pop" id="{{ contents_panel_id }}" popover="manual" aria-label="Table of contents">
 <div class="toc-pop-hd">On this page</div>
 {% for slug, text in toc %}<a href="#{{ slug }}">{{ text }}</a>{% endfor %}
 </nav>
@@ -46,6 +46,10 @@
 			var isOpen = event.newState === "open";
 			contentsButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
 			if (isOpen) setOpen(false);
+		});
+		contentsPanel.addEventListener("click", function (event) {
+			var onNarrowScreen = window.matchMedia("(max-width: 900px)").matches;
+			if (onNarrowScreen && event.target.closest("a")) closeContents();
 		});
 	}
 

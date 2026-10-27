@@ -148,6 +148,37 @@ def test_the_settings_menu_and_the_contents_panel_never_stay_open_together(
     assert run_menu_steps([script_containing(html, "data-set")], steps) == expected
 
 
+@pytest.mark.parametrize(
+    ("steps", "narrow", "expected"),
+    [
+        pytest.param(
+            ("open-contents", "click-link"),
+            True,
+            MenuOutcome(False, False, "false"),
+            id="a-link-closes-it-on-a-narrow-screen",
+        ),
+        pytest.param(
+            ("open-contents", "click-link"),
+            False,
+            MenuOutcome(False, True, "true"),
+            id="a-link-keeps-it-open-on-a-wide-screen",
+        ),
+        pytest.param(
+            ("open-contents", "click-panel-text"),
+            True,
+            MenuOutcome(False, True, "true"),
+            id="text-in-the-panel-keeps-it-open",
+        ),
+    ],
+)
+def test_choosing_a_link_in_the_contents_panel_closes_it_only_on_a_narrow_screen(
+    steps: tuple[str, ...], narrow: bool, expected: MenuOutcome
+) -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert run_menu_steps([script_containing(html, "data-set")], steps, narrow=narrow) == expected
+
+
 def test_a_page_without_a_contents_panel_still_opens_and_closes_its_settings_menu() -> None:
     html = render_html(parse_report(make_report()))
     controls = [script_containing(html, "data-set")]

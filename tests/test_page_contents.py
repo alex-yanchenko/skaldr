@@ -1,10 +1,12 @@
 import re
+from pathlib import Path
 
 import pytest
 
-from skaldr.models import parse_report
+from skaldr import compute
+from skaldr.models import load_report, parse_report
 from skaldr.render import render_embed, render_html
-from tests.factories import make_report
+from tests.factories import make_report, make_section, write_index_document
 
 HEADINGS = [
     {"type": "heading", "text": "Method"},
@@ -14,11 +16,11 @@ HEADINGS = [
 
 CONTENTS_BUTTON = (
     '<button class="toc-btn" type="button" aria-label="Contents" aria-expanded="false" '
-    'aria-controls="contents-panel" popovertarget="contents-panel">'
+    'aria-controls="skaldr-contents" popovertarget="skaldr-contents">'
 )
 
 CONTENTS_PANEL = (
-    '<nav class="toc-pop" id="contents-panel" popover="manual" aria-label="Contents">'
+    '<nav class="toc-pop" id="skaldr-contents" popover="manual" aria-label="Table of contents">'
     '<div class="toc-pop-hd">On this page</div>'
     '<a href="#method">Method</a>'
     '<a href="#results-limits">Results &amp; limits</a>'
@@ -78,3 +80,37 @@ def test_an_embedded_page_gets_the_same_contents_button_and_panel() -> None:
     html = render_embed(parse_report(make_report(meta={"title": "T", "toc": True}, blocks=HEADINGS)))
 
     assert (CONTENTS_BUTTON in html, CONTENTS_PANEL in html.replace("\n", "")) == (True, True)
+
+
+def test_a_page_without_numbered_differs_from_a_numbered_one_only_in_the_root_class() -> None:
+    blocks = [*HEADINGS, make_section("details", title="Details")]
+    plain = render_html(parse_report(make_report(meta={"title": "T"}, blocks=blocks)))
+    numbered = render_html(parse_report(make_report(meta={"title": "T", "numbered": True}, blocks=blocks)))
+
+    assert (
+        '<div class="wrap">' in plain,
+        plain.replace('<div class="wrap">', '<div class="wrap numbered">', 1) == numbered,
+    ) == (True, True)
+
+
+def test_an_index_document_with_parts_can_be_numbered_and_carry_the_contents_panel(tmp_path: Path) -> None:
+    parts = {
+        "one.yaml": make_report(meta={"title": "Part one"}, blocks=[{"type": "text", "body": "first"}]),
+        "two.yaml": make_report(meta={"title": "Part two"}, blocks=[{"type": "text", "body": "second"}]),
+    }
+    index = write_index_document(
+        tmp_path,
+        parts,
+        meta={"title": "Combined", "toc": True, "numbered": True},
+        blocks=[{"type": "heading", "text": "Overview"}],
+    )
+    report = load_report(index)
+
+    html = render_html(report)
+
+    assert (
+        '<div class="wrap numbered">' in html,
+        [slug for slug, _ in compute.toc_entries(report, compute.anchor_slugs(report))],
+        '<section class="part"' in html or '<details class="part"' in html,
+        re.findall(r'<a href="#([^"]+)">', html.split('id="skaldr-contents"', 1)[1].split("</nav>", 1)[0]),
+    ) == (True, ["overview", "part-one", "part-two"], True, ["overview", "part-one", "part-two"])

@@ -458,6 +458,17 @@ def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> 
     assert html.index("Content-Security-Policy") < html.index("<script>")
 
 
+def test_the_live_reloader_restores_the_scroll_position_instantly_and_its_hash_is_pinned() -> None:
+    html = render_html(parse_report(make_report()), live=500)
+    script_src = html.split("script-src ", 1)[1].split(";", 1)[0]
+    reloader = next(body for body in inline_scripts(html) if "skaldr:live:" in body)
+
+    assert (
+        'window.scrollTo({top:s.y||0,behavior:"instant"})' in reloader,
+        f"'sha256-{script_hash(reloader)}'" in script_src,
+    ) == (True, True)
+
+
 def test_a_block_type_the_html_dispatch_does_not_handle_fails_instead_of_rendering_nothing() -> None:
     environment = html_environment()
     environment.filters["richtext"] = render_richtext

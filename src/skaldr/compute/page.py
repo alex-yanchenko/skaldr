@@ -48,7 +48,7 @@ _SLUG_SEPARATORS = re.compile(r"-+")
 
 SOURCE_BLOCK_ID = "skaldr-source"
 SETTINGS_MENU_ID = "sc-menu"
-CONTENTS_PANEL_ID = "contents-panel"
+CONTENTS_PANEL_ID = "skaldr-contents"
 
 
 def _kept_in_a_slug(character: str) -> bool:
