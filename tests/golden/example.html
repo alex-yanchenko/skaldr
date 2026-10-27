@@ -1083,6 +1083,23 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 			padding:var(--s2) 0; font-family:var(--mono); font-size:11px; color:var(--muted)}
 		& .rq-bar{width:1px; height:12px; background:var(--rule)}}
 
+	/* Numbered sections (meta.numbered): the page root carries `numbered`, and each top-level h2 counts
+	   itself and shows the count as a large gradient number: above the title on a narrow screen, in the
+	   left margin behind a thin divider from 1100px up, where the page's left padding widens to hold it. */
+	.wrap.numbered{counter-reset:skaldr-sec}
+	.wrap.numbered > h2{counter-increment:skaldr-sec; position:relative; margin-block-start:72px;
+		&::before{content:counter(skaldr-sec, decimal-leading-zero); display:block; inline-size:max-content;
+			margin-block-end:6px; font-size:30px; font-weight:800; line-height:1; letter-spacing:-0.03em;
+			font-variant-numeric:tabular-nums;
+			background:linear-gradient(160deg, var(--accent-fg) 10%, var(--info-fg) 90%);
+			-webkit-background-clip:text; background-clip:text; color:transparent}}
+	@media (min-width:1100px){
+		.wrap.numbered{padding-inline-start:120px}
+		.wrap.numbered > h2::before{position:absolute; inset-inline-end:calc(100% + 22px); top:-9px; margin:0;
+			font-size:52px; letter-spacing:-0.05em; padding-inline-end:22px;
+			border-inline-end:2px solid color-mix(in srgb, var(--accent-fg) 25%, transparent)}
+	}
+
 	/* Glow: a faint halo in each block's own tone. Each rule gives light and dark separately because a
 	   halo that reads on the pale page looks heavy against the dark one, so dark runs at about half. */
 	.cards > .card{box-shadow:0 0 0 1px light-dark(color-mix(in srgb, var(--t,var(--line)) 14%, transparent), color-mix(in srgb, var(--t,var(--line)) 9%, transparent)),

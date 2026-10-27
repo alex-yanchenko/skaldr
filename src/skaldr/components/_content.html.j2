@@ -1,4 +1,4 @@
-{% import "macros.html.j2" as m %}<div class="wrap">
+{% import "macros.html.j2" as m %}<div class="wrap{% if meta.numbered %} numbered{% endif %}">
 {% if meta.hero %}
 <header class="hero">{{ m.page_title(meta) }}{% for line in meta.subtitle %}<p class="subtitle">{{ line }}</p>{% endfor %}{{ m.cover_link(meta) }}</header>
 {% else %}

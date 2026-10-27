@@ -37,21 +37,26 @@ def test_the_glow_in_dark_is_at_most_two_thirds_of_the_glow_in_light() -> None:
 
 
 MOTION_QUERY = "@media screen and (prefers-reduced-motion: no-preference){"
+WIDE_PAGE_QUERY = "@media (min-width:1100px){"
 
 
-def motion_blocks() -> list[str]:
+def blocks_opened_by(opener: str) -> list[str]:
     css = stylesheet()
     blocks: list[str] = []
-    start = css.find(MOTION_QUERY)
+    start = css.find(opener)
     while start != -1:
         depth = 1
-        cursor = start + len(MOTION_QUERY)
+        cursor = start + len(opener)
         while depth:
             depth += {"{": 1, "}": -1}.get(css[cursor], 0)
             cursor += 1
-        blocks.append(css[start + len(MOTION_QUERY) : cursor - 1])
-        start = css.find(MOTION_QUERY, cursor)
+        blocks.append(css[start + len(opener) : cursor - 1])
+        start = css.find(opener, cursor)
     return blocks
+
+
+def motion_blocks() -> list[str]:
+    return blocks_opened_by(MOTION_QUERY)
 
 
 def stylesheet_without_motion() -> str:
@@ -125,6 +130,33 @@ def test_the_corner_row_holding_both_buttons_and_the_panel_is_hidden_on_paper() 
     printed = stylesheet().split("@layer print {", 1)[1]
 
     assert ".sc,.skaldr-live{display:none}" in printed
+
+
+def test_a_numbered_page_counts_its_top_level_headings_and_shows_the_count_before_each_title() -> None:
+    css = stylesheet()
+
+    assert (
+        ".wrap.numbered{counter-reset:skaldr-sec}" in css,
+        ".wrap.numbered > h2{counter-increment:skaldr-sec;" in css,
+        "content:counter(skaldr-sec, decimal-leading-zero)" in css,
+    ) == (True, True, True)
+
+
+def test_the_number_moves_into_the_left_margin_only_at_1100px_and_wider() -> None:
+    wide = blocks_opened_by(WIDE_PAGE_QUERY)
+
+    assert [
+        (".wrap.numbered{padding-inline-start:120px}" in block, "position:absolute" in block)
+        for block in wide
+    ] == [(True, True)]
+
+
+def test_only_a_numbered_page_reads_the_section_counter() -> None:
+    css = stylesheet()
+    numbered_rules = css[css.index("\t.wrap.numbered{counter-reset") : css.index("\t/* Glow:")]
+    elsewhere = css.replace(numbered_rules, "")
+
+    assert ("skaldr-sec" in numbered_rules, "skaldr-sec" in elsewhere) == (True, False)
 
 
 def test_scroll_driven_rules_wait_for_a_browser_that_supports_them() -> None:
