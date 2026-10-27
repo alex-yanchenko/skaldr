@@ -249,7 +249,8 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	/* Chips attached to a container (card / timeline entry / flow node), decoupled from the table. */
 	.chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:var(--s2)}
 
-	.callout{box-shadow:inset 4px 0 0 var(--c);
+	.callout{border-inline-start:4px solid var(--c);
+		box-shadow:0 6px 24px light-dark(color-mix(in srgb, var(--c) 7%, transparent), color-mix(in srgb, var(--c) 3%, transparent));
 		background:linear-gradient(100deg, var(--cb) 0%, color-mix(in srgb, var(--cb) 40%, var(--surface)) 100%);
 		border-radius:var(--r-md); padding:14px 18px; margin-block:var(--s4);
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
@@ -800,8 +801,8 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		& > summary .upd{margin-inline-start:auto; font-weight:400; font-size:11.5px; color:var(--muted);
 			letter-spacing:0.02em; font-variant-numeric:tabular-nums}
 		& > summary::-webkit-details-marker{display:none}
-		& > summary::before{content:"▸"; color:var(--muted); font-size:12px}
-		&[open] > summary::before{content:"▾"}
+		& > summary::before{content:"▸"; display:inline-block; color:var(--muted); font-size:12px}
+		&[open] > summary::before{transform:rotate(90deg)}
 		& .section-body{padding:0 var(--s4) var(--s4)}}
 
 	section.part,details.part{margin-block:var(--s8) var(--s4); scroll-margin-top:var(--hdr-h)}
@@ -867,6 +868,15 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		box-shadow:var(--shadow); cursor:pointer;
 		&:hover{color:var(--ink)}
 		&:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}}
+	/* The Contents button and panel need the Popover API; without it the button would do nothing and the
+	   panel, which is plain content then, would sit open over the page. So both stay hidden until the
+	   browser says it knows :popover-open. */
+	.toc-btn{display:none}
+	.toc-pop{display:none}
+	@supports selector(:popover-open){
+		.toc-btn{display:flex}
+		.toc-pop:popover-open{display:block}
+	}
 	.toc-btn[aria-expanded="true"]{color:var(--accent-fg); border-color:color-mix(in srgb, var(--accent-fg) 45%, var(--line))}
 	/* A manual popover floats over the page and stays open while the reader scrolls; the script and the
 	   same button close it. It sits where the settings menu sits (the top layer ignores .sc's box), and
@@ -1083,11 +1093,10 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	}
 
 	/* Glow: a faint halo in each block's own tone. Each rule gives light and dark separately because a
-	   halo that reads on the pale page looks heavy against the dark one, so dark runs at about half. */
+	   halo that reads on the pale page looks heavy against the dark one, so dark runs at about half. The
+	   callout's halo sits with the callout's own rule above. */
 	.cards > .card{box-shadow:0 0 0 1px light-dark(color-mix(in srgb, var(--t,var(--line)) 14%, transparent), color-mix(in srgb, var(--t,var(--line)) 9%, transparent)),
 		0 8px 28px light-dark(color-mix(in srgb, var(--t,var(--accent-fg)) 9%, transparent), color-mix(in srgb, var(--t,var(--accent-fg)) 4%, transparent))}
-	.callout{box-shadow:inset 4px 0 0 var(--c),
-		0 6px 24px light-dark(color-mix(in srgb, var(--c) 7%, transparent), color-mix(in srgb, var(--c) 3%, transparent))}
 	details.section{box-shadow:0 0 0 1px light-dark(color-mix(in srgb, var(--accent-fg) 8%, transparent), color-mix(in srgb, var(--accent-fg) 5%, transparent)),
 		0 8px 26px light-dark(color-mix(in srgb, var(--accent-fg) 5%, transparent), color-mix(in srgb, var(--accent-fg) 2.5%, transparent))}
 	.meter .fill{box-shadow:0 0 10px light-dark(color-mix(in srgb, var(--m,var(--neutral-fg)) 35%, transparent), color-mix(in srgb, var(--m,var(--neutral-fg)) 18%, transparent))}
@@ -1108,43 +1117,50 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 			@keyframes skaldr-read{to{transform:scaleX(1)}}
 
 			.wrap > :is(h2,.cards,.table-wrap,details,.panel-card,.callout,.chart,.meter,.range,.kv,.grid,.tabs,.text,figure){
-				animation:skaldr-rise both ease-out; animation-timeline:view(); animation-range:entry 0% entry 40%}
+				animation:skaldr-rise both ease-out; animation-timeline:view(); animation-range:entry 0 entry 160px}
 			@keyframes skaldr-rise{from{opacity:0; transform:translateY(18px)}}
 
-			h2:not(.part-title)::after{animation:skaldr-line both ease-out; animation-timeline:view(); animation-range:entry 20% entry 80%}
-			@keyframes skaldr-line{from{width:0}}
+			h2:not(.part-title)::after{transform-origin:0 50%;
+				animation:skaldr-line both ease-out; animation-timeline:view(); animation-range:entry 0 entry 120px}
+			:dir(rtl) h2:not(.part-title)::after{transform-origin:100% 50%}
+			@keyframes skaldr-line{from{transform:scaleX(0)}}
 
 			.meter .fill{position:relative; overflow:hidden; transform-origin:0 50%;
-				animation:skaldr-fill both cubic-bezier(.2,.8,.2,1); animation-timeline:view(); animation-range:entry 20% cover 45%}
+				animation:skaldr-fill both cubic-bezier(.2,.8,.2,1); animation-timeline:view(); animation-range:entry 0 entry 160px}
 			@keyframes skaldr-fill{from{transform:scaleX(0)}}
 			.meter .fill::after{content:""; position:absolute; inset:0;
 				background:linear-gradient(100deg, transparent 20%, color-mix(in srgb, white 55%, transparent) 50%, transparent 80%);
 				transform:translateX(-100%); animation:skaldr-shine both ease-in-out; animation-timeline:view(); animation-range:cover 35% cover 65%}
 			@keyframes skaldr-shine{to{transform:translateX(100%)}}
 
-			.range .rseg{animation:skaldr-fade both ease-out; animation-timeline:view(); animation-range:entry 10% cover 35%}
+			.range .rseg{animation:skaldr-fade both ease-out; animation-timeline:view(); animation-range:entry 0 entry 160px}
 			@keyframes skaldr-fade{from{opacity:0}}
 
-			.chart svg :is(rect,path){transform-box:fill-box; transform-origin:50% 100%;
-				animation:skaldr-grow both cubic-bezier(.2,.8,.2,1); animation-timeline:view(); animation-range:entry 10% cover 45%}
-			@keyframes skaldr-grow{from{transform:scaleY(0.001); opacity:.2}}
-			.chart svg path[fill="none"]{stroke-dasharray:2400; stroke-dashoffset:2400; transform:none;
-				animation:skaldr-draw both ease-out; animation-timeline:view(); animation-range:entry 10% cover 55%}
-			@keyframes skaldr-draw{to{stroke-dashoffset:0}}
+			/* One timeline per chart, shared by its shapes. Bars scale up from the chart's baseline, y=176 in
+			   the chart's viewBox (_BASE in charts.py), so the segments of a stack rise together; lines and
+			   areas are revealed from the left. */
+			.chart{view-timeline:--skaldr-chart block}
+			.chart svg rect{transform-box:view-box; transform-origin:0 176px;
+				animation:skaldr-grow both cubic-bezier(.2,.8,.2,1); animation-timeline:--skaldr-chart; animation-range:entry 0 entry 240px}
+			@keyframes skaldr-grow{from{transform:scaleY(0.001)}}
+			.chart svg path{animation:skaldr-reveal both ease-out; animation-timeline:--skaldr-chart; animation-range:entry 0 entry 240px}
+			@keyframes skaldr-reveal{from{clip-path:inset(0 100% 0 0)} to{clip-path:inset(0 0 0 0)}}
 		}
 
 		.cards > .card,.panel-card{transition:transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease}
 		.cards > .card:hover,.panel-card:hover{transform:translateY(-2px)}
 		.panel-card:hover{box-shadow:var(--shadow-lift)}
 
-		.cards > .card::after{content:""; position:absolute; inset:-1px; border-radius:var(--r-md); padding:1.5px;
-			z-index:2; opacity:0; pointer-events:none;
-			background:conic-gradient(from var(--skaldr-ang), var(--t,var(--accent-fg)), transparent 25%, transparent 75%, var(--t,var(--accent-fg)));
-			-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
-			filter:drop-shadow(0 0 4px color-mix(in srgb, var(--t,var(--accent-fg)) 60%, transparent));
-			transition:opacity .45s ease}
-		.cards > .card:hover::after{opacity:1; animation:skaldr-spin 3s linear infinite}
-		@keyframes skaldr-spin{to{--skaldr-ang:360deg}}
+		@media (hover:hover){
+			.cards > .card::after{content:""; position:absolute; inset:-1px; border-radius:var(--r-md); padding:1.5px;
+				z-index:2; opacity:0; pointer-events:none;
+				background:conic-gradient(from var(--skaldr-ang), var(--t,var(--accent-fg)), transparent 25%, transparent 75%, var(--t,var(--accent-fg)));
+				-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
+				filter:drop-shadow(0 0 4px color-mix(in srgb, var(--t,var(--accent-fg)) 60%, transparent));
+				transition:opacity .45s ease}
+			.cards > .card:hover::after{opacity:1; animation:skaldr-spin 3s linear infinite}
+			@keyframes skaldr-spin{to{--skaldr-ang:360deg}}
+		}
 
 		.toc-pop{opacity:0; transform:translateX(16px);
 			transition:opacity .2s ease, transform .2s ease, overlay .2s allow-discrete, display .2s allow-discrete}
@@ -1159,9 +1175,15 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		:root{interpolate-size:allow-keywords}
 		details::details-content{block-size:0; overflow:clip;
 			transition:block-size .35s cubic-bezier(.2,.8,.2,1), content-visibility .35s allow-discrete}
-		details[open]::details-content{block-size:auto}
-		details.section > summary::before,details.toggle > summary::before{content:"▸"; display:inline-block; transition:transform .25s ease}
-		details.section[open] > summary::before,details.toggle[open] > summary::before{content:"▸"; transform:rotate(90deg)}
+		details[open]::details-content{block-size:auto; overflow-clip-margin:32px}
+		details.section > summary::before,details.toggle > summary::before{transition:transform .25s ease}
+	}
+
+	/* Text painted from a clipped gradient has no colour of its own, and forced colours drop the
+	   gradient, which would leave it invisible. It falls back to the system text colour. */
+	@media (forced-colors: active){
+		.hero h1,.wrap.numbered > h2::before{background:none; -webkit-background-clip:border-box; background-clip:border-box;
+			color:CanvasText}
 	}
 }
 
@@ -1237,7 +1259,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		   beforeprint script (reliable); ::details-content covers a script-less host (an embedded
 		   fragment) on modern Chromium. */
 		details::details-content{content-visibility:visible !important}
-		details:not([open])>summary::before{content:"▾"}
+		:is(details.section,details.toggle):not([open])>summary::before{transform:rotate(90deg)}
 		details.part:not([open])>summary::before{content:""; transform:translateY(-7px) rotate(45deg)}
 	}
 }

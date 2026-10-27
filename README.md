@@ -138,6 +138,7 @@ meta:
   date: "Q3 2026"               # optional; never auto-now (builds are reproducible)
   toc: true                     # optional; auto table-of-contents from level-2 headings
   hero: true                    # optional; larger display title + subtitle in a tinted band
+  numbered: true                # optional; a large 01, 02, … number before each top-level section heading (HTML only)
 badges:                         # author-declared vocabulary (see below)
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
   SYSTEM: { label: "System", tone: blue,  legend: "Defect in the scanning/labeling pipeline." }
