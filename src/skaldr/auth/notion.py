@@ -42,7 +42,8 @@ SIGN_IN_TIMEOUT_SECONDS = 300.0
 
 _NOTION_API = "https://api.notion.com"
 _TOKEN_ENDPOINT = f"{_NOTION_API}/v1/oauth/token"
-WHOLE_ANSWER = "(the whole answer)"
+_WHOLE_ANSWER = "(the whole answer)"
+_NOT_JSON = object()
 SIGN_IN_AGAIN_SUFFIX = "; run `skaldr auth notion` again"
 RENEWED_SIGN_IN_REFUSED = f"Notion refused the renewed sign-in{SIGN_IN_AGAIN_SUFFIX}"
 CALLBACK_THREAD_PREFIX = "skaldr-notion-callback-"
@@ -269,20 +270,27 @@ def _refuse_an_unusable_token_answer(response: httpx2.Response) -> httpx2.Respon
 
 
 def _refuse_a_token_answer_that_is_not_a_json_object(response: httpx2.Response) -> None:
-    try:
-        body: object = response.json()
-    except json.JSONDecodeError as exc:
-        raise AuthError("Notion's token answer is not JSON") from exc
+    body = _json_body(response)
+    if body is _NOT_JSON:
+        raise AuthError("Notion's token answer is not JSON")
     if not isinstance(body, dict):
-        raise AuthError(f"Notion's token answer is missing or has invalid fields: {WHOLE_ANSWER}")
+        raise AuthError(_invalid_fields(_WHOLE_ANSWER))
 
 
 def _names_an_oauth_error(response: httpx2.Response) -> bool:
-    try:
-        body: object = response.json()
-    except json.JSONDecodeError:
-        return False
+    body = _json_body(response)
     return isinstance(body, dict) and "error" in body
+
+
+def _json_body(response: httpx2.Response) -> object:
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return _NOT_JSON
+
+
+def _invalid_fields(fields: str) -> str:
+    return f"Notion's token answer is missing or has invalid fields: {fields}"
 
 
 def _basic_auth_with_json_body(
@@ -308,12 +316,10 @@ def _parse_token(
             raise refused(exc) from exc
         except httpx2.HTTPError as exc:
             raise _unreachable(exc) from exc
-        except json.JSONDecodeError as exc:
-            raise AuthError("Notion's token answer is not JSON") from exc
     fields = ", ".join(
         ".".join(map(str, error["loc"])) for error in invalid.error.errors(include_input=False)
     )
-    raise AuthError(f"Notion's token answer is missing or has invalid fields: {fields or WHOLE_ANSWER}")
+    raise AuthError(_invalid_fields(fields or _WHOLE_ANSWER))
 
 
 def _oauth_error_named(exc: AuthlibBaseError) -> str:
