@@ -42,6 +42,7 @@ SIGN_IN_TIMEOUT_SECONDS = 300.0
 
 _NOTION_API = "https://api.notion.com"
 _TOKEN_ENDPOINT = f"{_NOTION_API}/v1/oauth/token"
+WHOLE_ANSWER = "(the whole answer)"
 SIGN_IN_AGAIN_SUFFIX = "; run `skaldr auth notion` again"
 RENEWED_SIGN_IN_REFUSED = f"Notion refused the renewed sign-in{SIGN_IN_AGAIN_SUFFIX}"
 CALLBACK_THREAD_PREFIX = "skaldr-notion-callback-"
@@ -251,18 +252,29 @@ def _oauth_client(
         timeout=HTTP_TIMEOUT_SECONDS,
     )
     client.register_client_auth_method((_BASIC_AUTH_WITH_JSON_BODY, _basic_auth_with_json_body))
-    client.register_compliance_hook("access_token_response", _refuse_a_failed_token_status)
-    client.register_compliance_hook("refresh_token_response", _refuse_a_failed_token_status)
+    client.register_compliance_hook("access_token_response", _refuse_an_unusable_token_answer)
+    client.register_compliance_hook("refresh_token_response", _refuse_an_unusable_token_answer)
     return client
 
 
-def _refuse_a_failed_token_status(response: httpx2.Response) -> httpx2.Response:
+def _refuse_an_unusable_token_answer(response: httpx2.Response) -> httpx2.Response:
     failed = response.status_code >= HTTPStatus.BAD_REQUEST
     if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (
         failed and not _names_an_oauth_error(response)
     ):
         raise AuthError(f"Notion answered HTTP {response.status_code} for the token request")
+    if not failed:
+        _refuse_a_token_answer_that_is_not_a_json_object(response)
     return response
+
+
+def _refuse_a_token_answer_that_is_not_a_json_object(response: httpx2.Response) -> None:
+    try:
+        body: object = response.json()
+    except json.JSONDecodeError as exc:
+        raise AuthError("Notion's token answer is not JSON") from exc
+    if not isinstance(body, dict):
+        raise AuthError(f"Notion's token answer is missing or has invalid fields: {WHOLE_ANSWER}")
 
 
 def _names_an_oauth_error(response: httpx2.Response) -> bool:
@@ -301,9 +313,7 @@ def _parse_token(
     fields = ", ".join(
         ".".join(map(str, error["loc"])) for error in invalid.error.errors(include_input=False)
     )
-    raise AuthError(
-        f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
-    )
+    raise AuthError(f"Notion's token answer is missing or has invalid fields: {fields or WHOLE_ANSWER}")
 
 
 def _oauth_error_named(exc: AuthlibBaseError) -> str:
