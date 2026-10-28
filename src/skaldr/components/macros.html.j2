@@ -203,7 +203,7 @@
 <div class="mx-wrap"><table class="mx">
 <thead><tr><th></th>{% for col in b.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
 <tbody>
-{% for row in b.rows %}{% set rowcells = grid[loop.index0] %}<tr><th>{{ row }}</th>{% for cell in rowcells %}{% if cell is none %}<td class="c"><span></span></td>{% else %}{% set tone, text, state = matrix_cell_display(cell, badges) %}<td class="c{% if tone %} {{ tone }}{% endif %}"><span>{% if state is not none %}<span class="chip">{{ state }}</span> {% endif %}{{ text }}</span></td>{% endif %}{% endfor %}</tr>
+{% for row in b.rows %}{% set rowcells = grid[loop.index0] %}<tr><th>{{ row }}</th>{% for cell in rowcells %}{% if cell is none %}<td class="c blank"><span></span></td>{% else %}{% set tone, text, state = matrix_cell_display(cell, badges) %}<td class="c{% if tone %} {{ tone }}{% endif %}"><span>{% if state is not none %}<span class="chip">{{ state }}</span> {% endif %}{{ text }}</span></td>{% endif %}{% endfor %}</tr>
 {% endfor %}
 </tbody>
 </table></div>

@@ -178,10 +178,29 @@ def test_matrix_fills_cells_by_state_and_leaves_blanks_empty() -> None:
     assert "<thead><tr><th></th><th>Docs</th><th>Tests</th></tr></thead>" in html
     assert (
         '<tr><th>Receiving</th><td class="c green"><span>Have</span></td>'
-        '<td class="c"><span></span></td></tr>'
+        '<td class="c blank"><span></span></td></tr>'
     ) in html
     assert (
         '<tr><th>Picking</th><td class="c blue"><span>R</span></td><td class="c"><span>n/a</span></td></tr>'
+    ) in html
+
+
+def test_only_a_missing_matrix_cell_is_marked_blank() -> None:
+    block = {
+        "type": "matrix",
+        "rows": ["r"],
+        "columns": ["missing", "label only", "toned"],
+        "cells": [
+            {"row": "r", "col": "label only", "label": "n/a"},
+            {"row": "r", "col": "toned", "tone": "green"},
+        ],
+    }
+
+    html = render_html(parse_report(make_report(blocks=[block])))
+
+    assert (
+        '<tr><th>r</th><td class="c blank"><span></span></td><td class="c"><span>n/a</span></td>'
+        '<td class="c green"><span></span></td></tr>'
     ) in html
 
 

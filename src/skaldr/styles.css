@@ -68,6 +68,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		--danger-fg:light-dark(#b91c1c,#fca5a5); --danger-bg:light-dark(#fee2e2,#301619);
 		--accent-fg:light-dark(#7c3aed,#c4b5fd); --accent-bg:light-dark(#f3e8ff,#241a38);
 		--accent-line:color-mix(in srgb, var(--accent-fg) 30%, transparent); /* soft accent border (comparison highlight) */
+		--header-rule:color-mix(in srgb, var(--accent-fg) 35%, var(--line)); /* the rule under a table/comparison header and above totals */
 		--teal-fg:light-dark(#0f766e,#5eead4); --teal-bg:light-dark(#f0fdfa,#0b2621);
 		--sky-fg:light-dark(#0369a1,#7dd3fc); --sky-bg:light-dark(#e0f2fe,#0c2740);
 		/* Diff add/remove get their own tokens (NOT the shared success/danger family, which also
@@ -522,7 +523,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		& thead th{position:sticky; top:0; z-index:3; text-align:start; font-size:11px; font-weight:700;
 			text-transform:uppercase; letter-spacing:0.06em; color:var(--muted);
 			background:color-mix(in srgb, var(--panel) 70%, var(--surface));
-			border-block-end:2px solid color-mix(in srgb, var(--accent-fg) 35%, var(--line));
+			border-block-end:2px solid var(--header-rule); height:var(--hdr-h);
 			padding:13px 16px 11px; vertical-align:bottom}
 		/* --r-inner = the wrapper's radius minus its 1px border, so the header sits flush in the corner. */
 		& thead th:first-child{border-start-start-radius:var(--r-inner)}
@@ -530,9 +531,9 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		& th.num{text-align:end}
 		& > tbody > tr:last-child > td{border-block-end:none}
 		& tr.group td{position:sticky; top:var(--hdr-h); z-index:2; background:var(--surface); padding:22px 16px 8px;
-			font-weight:700; font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted);
+			font-weight:700; font-size:11.5px; letter-spacing:0.07em; color:var(--muted);
 			box-shadow:inset 0 -1px 0 var(--rule)}
-		& tr.group .st{float:right; font-weight:600; font-size:13px; letter-spacing:0; text-transform:none; color:var(--ink);
+		& tr.group .st{float:right; font-weight:600; font-size:13px; letter-spacing:0; color:var(--ink);
 			font-variant-numeric:tabular-nums}
 		& tbody td{padding:16px; border-block-end:1px solid var(--line); vertical-align:top}
 		& tbody tr.row:hover > td{background-image:linear-gradient(var(--row-hover),var(--row-hover))}
@@ -543,12 +544,13 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		& tbody tr.row.muted td::after{content:""; position:absolute; inset:0; background:var(--surface); opacity:0.45; pointer-events:none}
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
 		/* tint_by: a faint whole-row heatmap keyed to a badge column's tone, plus a 3px bar of the tone's
-		   foreground on the row's first cell. The tr sets --tb and --tbar (inherited by its td); the
-		   hover wash is a background-image, so the tint holds through hover. Both rules read the row's own
-		   cells (> td) so a subtable inside a cell keeps its look. An explicit row tone (muted/danger)
-		   wins in the template — a toned row never carries a tint class. */
-		& tbody tr.row.tint > td{background:color-mix(in srgb, var(--tb, var(--danger-bg)) 45%, var(--surface))}
-		& tbody tr.row.danger > td{background:color-mix(in srgb, var(--tb, var(--danger-bg)) 45%, var(--surface))}
+		   foreground on the row's first cell. The tr sets --tb and --tbar (inherited by its td). The
+		   tint sets background-color only: the hover wash is a background-image, which the background
+		   shorthand would reset. Rules read the row's own cells (> td) so a subtable inside a cell keeps
+		   its look. An explicit row tone (muted/danger) wins in the template, so a toned row never
+		   carries a tint class. */
+		& tbody tr.row.tint > td,& tbody tr.row.danger > td{
+			background-color:color-mix(in srgb, var(--tb, var(--danger-bg)) 45%, var(--surface))}
 		& tbody tr.row.tint > td:first-child{box-shadow:inset 3px 0 0 var(--tbar)}
 		& tbody tr.row.danger > td:first-child{box-shadow:inset 3px 0 0 var(--tbar, var(--danger-fg))}
 		& tbody tr.row.tint.slate{--tb:var(--neutral-bg); --tbar:var(--neutral-fg)}
@@ -580,7 +582,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 			&.danger{background:var(--danger-fg)} &.accent{background:var(--accent-fg)} &.neutral{background:var(--neutral-fg)}
 			&.teal{background:var(--teal-fg)} &.sky{background:var(--sky-fg)}}
 		& td.num .pct{display:block; font-size:11px; color:var(--muted); font-weight:400; margin-top:2px}
-		& tfoot td{border-block-start:2px solid var(--ink); padding:12px 16px; font-weight:700}
+		& tfoot td{border-block-start:2px solid var(--header-rule); padding:12px 16px; font-weight:700}
 		& tfoot td.num{text-align:end; font-variant-numeric:tabular-nums; font-size:16px}
 		/* Scoped under table.rep so these win over `table.rep tbody td` (a descendant selector that would
 		   otherwise leak the main cell's 16px padding + row border into these nested quiet rows). */
@@ -601,7 +603,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		box-shadow:var(--shadow);
 		& th{padding:11px 16px; font-size:12px; font-weight:700; text-align:center;
 			background:color-mix(in srgb, var(--panel) 70%, var(--surface));
-			border-block-end:2px solid color-mix(in srgb, var(--accent-fg) 35%, var(--line))}
+			border-block-end:2px solid var(--header-rule)}
 		& th:first-child{text-align:start; color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em}
 		& td{padding:11px 16px; border-block-start:1px solid var(--line); text-align:center}
 		& td.feat{text-align:start; font-weight:600}
@@ -618,8 +620,8 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 			font-size:12px; font-weight:700}
 		& .chk.good{color:var(--success-fg); background:var(--success-bg)}
 		& .chk.bad{color:var(--danger-fg); background:var(--danger-bg)}
-		& .ct{display:inline-block; padding:2px 10px; border-radius:var(--r-pill); font-size:12px; font-weight:600;
-			color:var(--muted); background:var(--neutral-bg)}
+		& .ct{display:inline-block; padding:2px 10px; border-radius:var(--r-md); font-size:12px; font-weight:600;
+			color:var(--neutral-fg); background:var(--neutral-bg)}
 		& .ct.info{color:var(--info-fg); background:var(--info-bg)}
 		& .ct.success{color:var(--success-fg); background:var(--success-bg)}
 		& .ct.warning{color:var(--warning-fg); background:var(--warning-bg)}
@@ -651,7 +653,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 			box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cf, transparent) 18%, transparent);
 			color:var(--cf,var(--muted)); font-size:10px; font-weight:700;
 			text-transform:uppercase; letter-spacing:0.04em}
-		& td.c > span:empty{background:repeating-linear-gradient(135deg, transparent 0 6px,
+		& td.c.blank > span{background:repeating-linear-gradient(135deg, transparent 0 6px,
 			color-mix(in srgb, var(--line) 60%, transparent) 6px 7px); box-shadow:none}
 		& td.c .chip{background:var(--surface); color:var(--cf); margin-inline-end:6px}
 		& .c.slate{--cf:var(--neutral-fg); --cb:var(--neutral-bg)} & .c.blue{--cf:var(--info-fg); --cb:var(--info-bg)}
