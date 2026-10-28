@@ -43,6 +43,7 @@ UNLAYERED_ESSENTIALS = (
     *COLOR_SCHEME_RULES,
     "*,*::before,*::after{box-sizing:border-box}",
     "body{font-family:var(--sans); color:var(--ink); background:var(--page)",
+    "body{background-image:var(--page-wash); background-repeat:no-repeat}",
     # print forces white --paper; unlayered so it beats the base body rule above (a layered one wouldn't)
     "@media print{body{background:var(--paper)}}",
 )
@@ -217,7 +218,15 @@ def test_palette_is_theme_aware_via_light_dark() -> None:
 
     assert COLOR_SCHEME_RULES[0] in html
     assert "--ink:light-dark(#1e293b,#e8ecf3);" in html
-    assert "--page:light-dark(#f5f7fa,#0e1116);" in html
+    assert "--page:light-dark(#f3f5fb,#0b0e15);" in html
+
+
+def test_the_page_wash_is_dropped_on_paper() -> None:
+    html = render_html(parse_report(make_report()))
+
+    assert html.index("body{background-image:var(--page-wash)") < html.index(
+        "@media print{body{background:var(--paper)}}"
+    )
 
 
 def test_explicit_theme_overrides_win_over_the_os_default() -> None:
@@ -447,6 +456,17 @@ def test_output_carries_a_locked_down_csp_pinning_the_inline_script_hashes() -> 
     assert [body[:40] for body in scripts if f"'sha256-{script_hash(body)}'" not in script_src] == []
     # The policy must precede the inline scripts so it governs them.
     assert html.index("Content-Security-Policy") < html.index("<script>")
+
+
+def test_the_live_reloader_restores_the_scroll_position_instantly_and_its_hash_is_pinned() -> None:
+    html = render_html(parse_report(make_report()), live=500)
+    script_src = html.split("script-src ", 1)[1].split(";", 1)[0]
+    reloader = next(body for body in inline_scripts(html) if "skaldr:live:" in body)
+
+    assert (
+        'window.scrollTo({top:s.y||0,behavior:"instant"})' in reloader,
+        f"'sha256-{script_hash(reloader)}'" in script_src,
+    ) == (True, True)
 
 
 def test_a_block_type_the_html_dispatch_does_not_handle_fails_instead_of_rendering_nothing() -> None:

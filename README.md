@@ -138,6 +138,7 @@ meta:
   date: "Q3 2026"               # optional; never auto-now (builds are reproducible)
   toc: true                     # optional; auto table-of-contents from level-2 headings
   hero: true                    # optional; larger display title + subtitle in a tinted band
+  numbered: true                # optional; a large 01, 02, … number before each top-level section heading (HTML only)
 badges:                         # author-declared vocabulary (see below)
   FLOOR:  { label: "Floor",  tone: amber, legend: "Fixable on the floor before the next count." }
   SYSTEM: { label: "System", tone: blue,  legend: "Defect in the scanning/labeling pipeline." }
@@ -187,7 +188,8 @@ Full reference: **`skaldr --guide`** (source: [`src/skaldr/skill/GUIDE.md`](src/
 - **Derived, not authored:** number formatting, percentages, subtotals, the legend, the TOC,
   and the provenance footer are all computed, so they can't drift from the data.
 - **Light & dark:** the palette follows the viewer's OS theme; a small corner menu lets the
-  reader switch theme and page width.
+  reader switch theme and page width. A page with a table of contents also gets a Contents
+  button beside it, which opens a panel that follows the reader down the page.
 
 ## Let an AI write it
 

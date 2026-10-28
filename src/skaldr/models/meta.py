@@ -80,6 +80,12 @@ class Meta(FrozenModel):
         description="Opt-in hero header: a larger display title + subtitle in a tinted band, for a page "
         "that opens by selling an idea rather than a plain report header.",
     )
+    numbered: bool = Field(
+        default=False,
+        description="Opt-in numbered sections: each top-level level-2 heading on the HTML page gets a large "
+        "number (01, 02, …), in the left margin on a wide screen and above the title on a narrow one. The "
+        "exports ignore it.",
+    )
     people: dict[PersonKey, Person] = Field(
         default_factory=dict[str, Person],
         description="The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not "

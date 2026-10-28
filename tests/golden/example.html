@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;4.1.0&#34;}">
+<meta name="skaldr-render" content="{&#34;embed&#34;:false,&#34;live&#34;:null,&#34;source&#34;:false,&#34;version&#34;:&#34;4.2.0&#34;}">
 <!-- Hardening: default-src 'none' blocks every external load and scripted network request
      (fetch/XHR/beacon/img/websocket); the script hashes admit only skaldr's own inline scripts,
      so an injected inline script won't run. (Top-level navigation isn't constrainable by CSP.) The
@@ -13,7 +13,7 @@
      script changes, that test fails until the hash below is updated. One of the hashes is the --live
      reloader's, pinned unconditionally: a hash for a script the page doesn't carry is inert, and
      keeping the policy string constant means --live can't weaken it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-P4/AtrtqQD+C1Z7lzKJJm+P9FDHTR1hoiN5trfKlpuk=' 'sha256-rrstR5Fsu2TwJXuyS4PhRXkSAuTJhgZ8NiWIR5KQjvI=' 'sha256-0s89MInV5JOlHCktUHl9/9snp/xmOZJGJJyByUgboTs=' 'sha256-L+1L/J9InshyeRm13+7fwBe9t67/sCnKo62MrEYUcY0=' 'sha256-ZsGLF5vs5g/omuEkqzw71SZVKixpU/2drgmzHbGzfw8='; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-P4/AtrtqQD+C1Z7lzKJJm+P9FDHTR1hoiN5trfKlpuk=' 'sha256-bjCiyGPm6Ef2w0laS4jppEbI3qdTwstyLEpwMxCobhQ=' 'sha256-0s89MInV5JOlHCktUHl9/9snp/xmOZJGJJyByUgboTs=' 'sha256-De9bGGCwUNglAC47/F2osbOpbrjO/01jAI/hQZvbsqM=' 'sha256-ZsGLF5vs5g/omuEkqzw71SZVKixpU/2drgmzHbGzfw8='; base-uri 'none'; form-action 'none'">
 <title>Q3 Warehouse Inventory Count: Discrepancies &amp; Fixes</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20y%3D%22.9em%22%20font-size%3D%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
 <style>/* skaldr — single source of truth for page styling; inlined into every page by render.py.
@@ -40,9 +40,15 @@
 *,*::before,*::after{box-sizing:border-box}
 body{font-family:var(--sans); color:var(--ink); background:var(--page); font-size:14px;
 	line-height:1.5; -webkit-font-smoothing:antialiased}
+/* The tinted wash behind the page belongs to the body surface, so it is unlayered for the same reason
+   as the body colours above. It is an image layer only: the --page colour underneath stays the fallback. */
+body{background-image:var(--page-wash); background-repeat:no-repeat}
 /* On paper the body background is the forced-white --paper, not --page. Unlayered too, so it still
-   beats the base body rule above during print (a layered @layer print rule would lose to it). */
+   beats the base body rule above during print (a layered @layer print rule would lose to it). The
+   shorthand also resets the wash image, which is why this rule comes after it. */
 @media print{body{background:var(--paper)}}
+
+@property --skaldr-ang{syntax:"<angle>"; inherits:false; initial-value:0deg}
 
 @layer reset {
 	html{line-height:1.5; -webkit-text-size-adjust:100%}
@@ -59,11 +65,20 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	:root{
 		--ink:light-dark(#1e293b,#e8ecf3); --muted:light-dark(#64748b,#97a1b2);
 		--line:light-dark(#e2e8f0,#2a313d); --rule:light-dark(#cbd5e1,#3b4453);
-		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f5f7fa,#0e1116);
-		--surface:light-dark(#ffffff,#171d28); --hover:light-dark(#f8fafc,#1f2733);
+		--panel:light-dark(#f8fafc,#1b212b); --page:light-dark(#f3f5fb,#0b0e15);
+		--surface:light-dark(#ffffff,#141a26); --hover:light-dark(#f8fafc,#1f2733);
+		--edge:light-dark(#e3e6f2,#252c3d);
+		/* The violet and blue the page wash and the hero are tinted with: a saturated pair that stays
+		   the same hue in both themes (the --accent-fg / --info-fg tones turn pastel in dark). */
+		--wash-violet:light-dark(rgba(122,53,240,0.10),rgba(122,53,240,0.18));
+		--wash-blue:light-dark(rgba(36,87,230,0.10),rgba(36,87,230,0.16));
+		--page-wash:radial-gradient(1200px 520px at 8% -8%, var(--wash-violet), transparent 70%),
+			radial-gradient(900px 480px at 100% 0%, var(--wash-blue), transparent 70%);
+		--hero-a:light-dark(#ffffff,#161c2b); --hero-b:light-dark(#f4efff,#1d1834); --hero-c:light-dark(#eaf1ff,#15213a);
+		--hero-edge:light-dark(#e4dcff,#2c2650);
 		--row-hover:light-dark(color-mix(in srgb, var(--ink) 3%, transparent), color-mix(in srgb, var(--ink) 5%, transparent));
 		--paper:#ffffff; /* the forced page colour when printing — physical paper, not theme-aware */
-		--hdr:light-dark(#475569,#2c3543); --hdr-fg:#ffffff; --hdr-h:41px;
+		--hdr:light-dark(#3b3f8f,#262b5c); --hdr-fg:#ffffff; --hdr-h:41px;
 		--neutral-fg:light-dark(#475569,#cbd5e1); --neutral-bg:light-dark(#f1f5f9,#2b3441);
 		--info-fg:light-dark(#1d4ed8,#93c5fd); --info-bg:light-dark(#eff6ff,#15243c);
 		--success-fg:light-dark(#15803d,#86efac); --success-bg:light-dark(#ecfdf5,#122a1e);
@@ -102,7 +117,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		/* Soft elevation for the bounded-panel family (cards/table/code/image/section); flow and
 		   tinted blocks stay flat so the lift keeps meaning "discrete panel". Reads only against the
 		   tinted --page, not pure white. */
-		--shadow:0 1px 2px light-dark(rgba(20,26,40,0.05),rgba(0,0,0,0.5)), 0 4px 16px light-dark(rgba(20,26,40,0.04),rgba(0,0,0,0.35));
+		--shadow:0 1px 2px light-dark(rgba(40,40,90,0.06),rgba(0,0,0,0.55)), 0 10px 30px light-dark(rgba(60,60,140,0.08),rgba(0,0,0,0.45));
+		--shadow-lift:0 2px 4px light-dark(rgba(20,26,40,0.06),rgba(0,0,0,0.5)), 0 14px 32px light-dark(rgba(20,26,40,0.12),rgba(0,0,0,0.5));
 		--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 		--mono:ui-monospace,"SF Mono",Menlo,monospace;
 	}
@@ -126,8 +142,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 	h1{font-size:26px; font-weight:650; letter-spacing:-0.01em; margin-block-end:6px; text-wrap:balance}
 	.subtitle{color:var(--muted); font-size:14px}
-	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); padding-block-end:var(--s2);
-		border-block-end:1px solid var(--line); scroll-margin-top:var(--hdr-h)}
+	h2{font-size:20px; font-weight:650; margin:var(--s8) 0 var(--s3); scroll-margin-top:var(--hdr-h)}
+	h2:not(.part-title)::after{content:""; display:block; height:3px; width:56px; margin-top:10px;
+		border-radius:3px; background:linear-gradient(90deg, var(--accent-fg), var(--info-fg))}
 	h3{font-size:16px; font-weight:650; margin:var(--s6) 0 var(--s2)}
 	h4:not(.tab-pane-hd){font-size:14px; font-weight:650; margin:var(--s4) 0 var(--s2)}
 	/* heading.sub — a subordinate caption under an h2/h3 title (sits above the h2 rule); resets the
@@ -146,22 +163,28 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 	/* Opt-in hero header (meta.hero): a larger display title in a tinted band, for a page that opens
 	   by selling an idea. Flat by design (tinted block). */
-	.hero{margin:0 0 var(--s6); padding:var(--s8) var(--s6); background:var(--panel);
-		border:1px solid var(--line); border-radius:var(--r-lg)}
-	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3)}
+	.hero{margin:0 0 var(--s6); padding:var(--s8) var(--s6);
+		background:linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 55%, var(--hero-c) 100%);
+		border:1px solid var(--hero-edge); border-radius:var(--r-lg); box-shadow:var(--shadow)}
+	.hero h1{font-size:38px; line-height:1.1; margin-block-end:var(--s3);
+		background:linear-gradient(90deg, var(--ink) 0%, var(--accent-fg) 60%, var(--info-fg) 100%);
+		-webkit-background-clip:text; background-clip:text; color:transparent}
+	.hero h1 .title-icon{-webkit-text-fill-color:initial; color:var(--ink)}
 	.hero .subtitle{font-size:16px}
 	.hero .subtitle:not(:last-child){margin-block-end:var(--s1)}
 	.title-icon{margin-inline-end:0.4em}
 	.cover{font-size:13px; margin-block-start:var(--s2)}
 	.toc{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); margin-top:var(--s3); font-size:13px}
-	.toc a{color:var(--info-fg); text-decoration:underline; text-underline-offset:2px}
+	.toc a{color:var(--info-fg); text-decoration:none; padding:3px 10px; border-radius:var(--r-pill);
+		background:color-mix(in srgb, var(--info-fg) 9%, var(--surface));
+		box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--info-fg) 18%, transparent)}
 }
 
 @layer components {
 	.facts{display:flex; flex-wrap:wrap; gap:var(--s1) 0; font-size:12.5px; color:var(--muted); margin-block:var(--s3)}
 	.facts .fact{display:inline-flex; gap:6px}
 	.facts .fact:not(:last-child)::after{content:"·"; margin-inline:var(--s3); color:var(--rule)}
-	.facts .fact .k{font-weight:600; color:var(--ink)}
+	.facts .fact .k{font-weight:600; color:var(--accent-fg)}
 
 	.sfields{display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4); align-items:center; font-size:12.5px; color:var(--muted); margin-block:var(--s3);
 		& .sf{display:inline-flex; flex-wrap:wrap; gap:var(--s1) 6px; align-items:center}
@@ -192,6 +215,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .cbadge{display:inline-block}
 		& .l{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted)}
 		& .n{font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:var(--s2); letter-spacing:-0.01em;
+			color:color-mix(in srgb, var(--t,var(--ink)) 70%, var(--ink));
 			&.neg{color:var(--danger-fg)} &.str{font-size:20px; font-weight:600}
 			& .pct{font-size:13px; font-weight:500; color:var(--muted); margin-inline-start:6px}
 			/* delta trend chip beside the value; author-chosen tone (up isn't always good). */
@@ -203,9 +227,17 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 			& .delta.accent{--dt:var(--accent-fg); --db:var(--accent-bg)} & .delta.neutral{--dt:var(--neutral-fg); --db:var(--neutral-bg)}
 			& .delta.teal{--dt:var(--teal-fg); --db:var(--teal-bg)} & .delta.sky{--dt:var(--sky-fg); --db:var(--sky-bg)}}
 		& .note{font-size:11px; color:var(--muted); margin-top:var(--s2); line-height:1.35}}
+	/* A metric card in a card row carries its tone as a gradient bar laid over its own top border and a
+	   faint tint of that tone. The bar has the card's corner radius and nothing clips it, so the hover
+	   border drawn over the same edge follows the same corners. Flow step cards stay flat. */
+	.cards > .card{position:relative; border-block-start:1px solid var(--line);
+		background:linear-gradient(180deg, color-mix(in srgb, var(--t,var(--line)) 12%, var(--surface)) 0%, var(--surface) 60%);
+		&::before{content:""; position:absolute; inset:-1px -1px auto -1px; height:4px;
+			border-start-start-radius:var(--r-md); border-start-end-radius:var(--r-md);
+			background:linear-gradient(90deg, var(--t,var(--line)), color-mix(in srgb, var(--t,var(--line)) 40%, transparent))}}
 
 	.chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
-		padding:2px 9px; border-radius:var(--r-sm); white-space:nowrap;
+		padding:3px 10px; border-radius:var(--r-pill); white-space:nowrap;
 		&.slate{background:var(--neutral-bg); color:var(--neutral-fg)} &.blue{background:var(--info-bg); color:var(--info-fg)}
 		&.green{background:var(--success-bg); color:var(--success-fg)} &.amber{background:var(--warning-bg); color:var(--warning-fg)}
 		&.red{background:var(--danger-bg); color:var(--danger-fg)} &.violet{background:var(--accent-bg); color:var(--accent-fg)}
@@ -235,7 +267,10 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	/* Chips attached to a container (card / timeline entry / flow node), decoupled from the table. */
 	.chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:var(--s2)}
 
-	.callout{border-inline-start:4px solid var(--c); background:var(--cb); border-radius:var(--r-md); padding:14px 18px; margin-block:var(--s4);
+	.callout{border-inline-start:4px solid var(--c);
+		box-shadow:0 6px 24px light-dark(color-mix(in srgb, var(--c) 7%, transparent), color-mix(in srgb, var(--c) 3%, transparent));
+		background:linear-gradient(100deg, var(--cb) 0%, color-mix(in srgb, var(--cb) 40%, var(--surface)) 100%);
+		border-radius:var(--r-md); padding:14px 18px; margin-block:var(--s4);
 		&.info{--c:var(--info-fg); --cb:var(--info-bg)} &.success{--c:var(--success-fg); --cb:var(--success-bg)}
 		&.warning{--c:var(--warning-fg); --cb:var(--warning-bg)} &.danger{--c:var(--danger-fg); --cb:var(--danger-bg)}
 		& .title{font-weight:600; color:var(--c); margin-block-end:var(--s1)}}
@@ -257,8 +292,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	   still aligns — adapts cleanly whether the meter is full-width or in a narrow grid cell. */
 	.meter{display:grid; grid-template-columns:max-content 1fr auto; gap:var(--s3) var(--s4); align-items:center; margin-block:var(--s4); max-width:900px;
 		& .m-label{font-size:13px}
-		& .track{background:var(--neutral-bg); border-radius:var(--r-pill); height:12px; overflow:hidden}
-		& .fill{height:100%; border-radius:var(--r-pill); background:var(--m,var(--neutral-fg));
+		& .track{background:color-mix(in srgb, var(--neutral-bg) 80%, var(--surface)); border-radius:var(--r-pill); height:14px; overflow:hidden}
+		& .fill{height:100%; border-radius:var(--r-pill);
+			background:linear-gradient(90deg, color-mix(in srgb, var(--m,var(--neutral-fg)) 65%, white), var(--m,var(--neutral-fg)));
 			&.info{--m:var(--info-fg)} &.success{--m:var(--success-fg)} &.warning{--m:var(--warning-fg)}
 			&.danger{--m:var(--danger-fg)} &.neutral{--m:var(--neutral-fg)} &.accent{--m:var(--accent-fg)}
 			&.teal{--m:var(--teal-fg)} &.sky{--m:var(--sky-fg)}}
@@ -502,7 +538,9 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	   ignore border-radius. border-spacing:0 keeps the row rules looking like collapsed borders. */
 	table.rep{width:100%; table-layout:fixed; font-size:14px; border-collapse:separate; border-spacing:0;
 		& thead th{position:sticky; top:0; z-index:3; text-align:start; font-size:11px; font-weight:700;
-			text-transform:uppercase; letter-spacing:0.06em; color:var(--hdr-fg); background:var(--hdr); padding:12px 16px; vertical-align:bottom}
+			text-transform:uppercase; letter-spacing:0.06em; color:var(--hdr-fg);
+			background:linear-gradient(180deg, color-mix(in srgb, var(--hdr) 88%, white) 0%, var(--hdr) 100%);
+			padding:12px 16px; vertical-align:bottom}
 		/* --r-inner = the wrapper's radius minus its 1px border, so the header sits flush in the corner. */
 		& thead th:first-child{border-start-start-radius:var(--r-inner)}
 		& thead th:last-child{border-start-end-radius:var(--r-inner)}
@@ -781,8 +819,8 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& > summary .upd{margin-inline-start:auto; font-weight:400; font-size:11.5px; color:var(--muted);
 			letter-spacing:0.02em; font-variant-numeric:tabular-nums}
 		& > summary::-webkit-details-marker{display:none}
-		& > summary::before{content:"▸"; color:var(--muted); font-size:12px}
-		&[open] > summary::before{content:"▾"}
+		& > summary::before{content:"▸"; display:inline-block; color:var(--muted); font-size:12px}
+		&[open] > summary::before{transform:rotate(90deg)}
 		& .section-body{padding:0 var(--s4) var(--s4)}}
 
 	section.part,details.part{margin-block:var(--s8) var(--s4); scroll-margin-top:var(--hdr-h)}
@@ -802,6 +840,11 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 	.panel-card{border:1px solid var(--line); border-radius:var(--r-md); margin-block:var(--s4); background:var(--surface); box-shadow:var(--shadow)}
 	.panel-card .panel-card-hd{padding:var(--s3) var(--s4); font-weight:650; font-size:14px; border-block-end:1px solid var(--line)}
 	.panel-card .panel-card-body{padding:var(--s2) var(--s4) var(--s4)}
+	.table-wrap,details.section,details.toggle,.panel-card{border-color:var(--edge)}
+	details.section{
+		& > summary{border-radius:var(--r-inner);
+			background:linear-gradient(90deg, color-mix(in srgb, var(--accent-fg) 7%, var(--surface)), var(--surface))}
+		&[open] > summary{border-end-start-radius:0; border-end-end-radius:0; border-block-end:1px solid var(--line)}}
 	.legend-grid{display:grid; grid-template-columns:repeat(2,minmax(280px,1fr)); gap:var(--s2) var(--s8)}
 	.legend-row{display:flex; align-items:baseline; gap:10px; font-size:13px}
 	.legend-row .meaning{color:var(--muted)}
@@ -833,13 +876,42 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 
 	/* Display controls — a fixed corner menu (theme + width). position:fixed so it never affects
 	   layout or page width; collapsed to just the button until opened. z-index sits above all page
-	   content (sticky headers top out at 3). Hidden in print. */
-	.sc{position:fixed; top:var(--s3); right:var(--s3); z-index:50; font-size:13px}
-	.sc-btn{display:flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0;
+	   content (sticky headers top out at 3). Hidden in print. The row holds the Contents button (only a
+	   page with a table of contents has one) beside the settings button; the settings menu and the contents
+	   panel both open below it, and the script keeps only one of them open at a time. */
+	.sc{position:fixed; top:var(--s3); right:var(--s3); z-index:50; font-size:13px; --sc-size:40px;
+		display:flex; gap:var(--s2)}
+	.sc-btn,.toc-btn{display:flex; align-items:center; justify-content:center; width:var(--sc-size); height:var(--sc-size); padding:0;
 		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); color:var(--muted);
 		box-shadow:var(--shadow); cursor:pointer;
 		&:hover{color:var(--ink)}
 		&:focus-visible{outline:2px solid var(--info-fg); outline-offset:2px}}
+	/* The Contents button and panel need the Popover API; without it the button would do nothing and the
+	   panel, which is plain content then, would sit open over the page. So both stay hidden until the
+	   browser says it knows :popover-open. */
+	.toc-btn{display:none}
+	.toc-pop{display:none}
+	@supports selector(:popover-open){
+		.toc-btn{display:flex}
+		.toc-pop:popover-open{display:block}
+	}
+	.toc-btn[aria-expanded="true"]{color:var(--accent-fg); border-color:color-mix(in srgb, var(--accent-fg) 45%, var(--line))}
+	/* A manual popover floats over the page and stays open while the reader scrolls; the script and the
+	   same button close it. It sits where the settings menu sits (the top layer ignores .sc's box), and
+	   the link for the section in view is lit by :target-current where the browser supports it. */
+	.toc-pop{inset:auto; position:fixed; top:calc(var(--s3) + var(--sc-size) + var(--s2)); right:var(--s3); margin:0;
+		inline-size:min(280px, calc(100vw - 2 * var(--s3))); max-block-size:calc(100vh - 2 * var(--s3) - var(--sc-size) - var(--s2));
+		overflow:auto; padding:var(--s3); border-radius:var(--r-lg); border:1px solid var(--line); color:var(--ink);
+		background:color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter:blur(14px) saturate(140%);
+		box-shadow:var(--shadow-lift); scroll-target-group:auto;
+		& .toc-pop-hd{font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);
+			padding:var(--s1) 10px var(--s2)}
+		& a{display:block; padding:6px 10px; border-radius:var(--r-md); color:var(--muted); text-decoration:none;
+			line-height:1.3; font-size:13px}
+		& a:hover{color:var(--ink); background:color-mix(in srgb, var(--info-fg) 8%, transparent)}
+		& a:focus-visible{outline:2px solid var(--info-fg); outline-offset:-2px}}
+	.toc-pop a:target-current{color:var(--accent-fg); font-weight:600;
+		background:color-mix(in srgb, var(--accent-fg) 12%, transparent); box-shadow:inset 3px 0 0 var(--accent-fg)}
 	/* Anchored below the button (its full height + a gap) so the offset tracks the button size. */
 	.sc-menu{position:absolute; top:calc(100% + var(--s2)); right:0; min-width:190px; padding:var(--s3);
 		border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--shadow);
@@ -1020,6 +1092,117 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		& .rq-handoff{display:flex; gap:var(--s2); align-items:center; justify-content:center;
 			padding:var(--s2) 0; font-family:var(--mono); font-size:11px; color:var(--muted)}
 		& .rq-bar{width:1px; height:12px; background:var(--rule)}}
+
+	/* Numbered sections (meta.numbered): the page root carries `numbered`, and each top-level h2 counts
+	   itself and shows the count as a large gradient number: above the title on a narrow screen, in the
+	   left margin behind a thin divider from 1100px up, where the page's left padding widens to hold it. */
+	.wrap.numbered{counter-reset:skaldr-sec}
+	.wrap.numbered > h2{counter-increment:skaldr-sec; position:relative; margin-block-start:72px;
+		&::before{content:counter(skaldr-sec, decimal-leading-zero); display:block; inline-size:max-content;
+			margin-block-end:6px; font-size:30px; font-weight:800; line-height:1; letter-spacing:-0.03em;
+			font-variant-numeric:tabular-nums;
+			background:linear-gradient(160deg, var(--accent-fg) 10%, var(--info-fg) 90%);
+			-webkit-background-clip:text; background-clip:text; color:transparent}}
+	@media (min-width:1100px){
+		.wrap.numbered{padding-inline-start:120px}
+		.wrap.numbered > h2::before{position:absolute; inset-inline-end:calc(100% + 22px); top:-9px; margin:0;
+			font-size:52px; letter-spacing:-0.05em; padding-inline-end:22px;
+			border-inline-end:2px solid color-mix(in srgb, var(--accent-fg) 25%, transparent)}
+	}
+
+	/* Glow: a faint halo in each block's own tone. Each rule gives light and dark separately because a
+	   halo that reads on the pale page looks heavy against the dark one, so dark runs at about half. The
+	   callout's halo sits with the callout's own rule above. */
+	.cards > .card{box-shadow:0 0 0 1px light-dark(color-mix(in srgb, var(--t,var(--line)) 14%, transparent), color-mix(in srgb, var(--t,var(--line)) 9%, transparent)),
+		0 8px 28px light-dark(color-mix(in srgb, var(--t,var(--accent-fg)) 9%, transparent), color-mix(in srgb, var(--t,var(--accent-fg)) 4%, transparent))}
+	details.section{box-shadow:0 0 0 1px light-dark(color-mix(in srgb, var(--accent-fg) 8%, transparent), color-mix(in srgb, var(--accent-fg) 5%, transparent)),
+		0 8px 26px light-dark(color-mix(in srgb, var(--accent-fg) 5%, transparent), color-mix(in srgb, var(--accent-fg) 2.5%, transparent))}
+	.meter .fill{box-shadow:0 0 10px light-dark(color-mix(in srgb, var(--m,var(--neutral-fg)) 35%, transparent), color-mix(in srgb, var(--m,var(--neutral-fg)) 18%, transparent))}
+	.chip{box-shadow:inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent),
+		0 0 8px light-dark(color-mix(in srgb, currentColor 10%, transparent), color-mix(in srgb, currentColor 5%, transparent))}
+
+	/* Motion. Only for a reader who has not asked for less of it, and never on paper. Every entrance and
+	   fill is tied to the scroll position (a view timeline), so nothing runs on a clock at load; the one
+	   thing that moves on a clock is the border light a card shows while the pointer is on it. The
+	   entrances all share one slow rise, and no curve overshoots. */
+	@media screen and (prefers-reduced-motion: no-preference){
+		html{scroll-behavior:smooth}
+		@supports (animation-timeline: view()){
+			body::before{content:""; position:fixed; inset:0 auto auto 0; height:3px; width:100%; z-index:50;
+				transform-origin:0 50%; transform:scaleX(0);
+				background:linear-gradient(90deg, var(--accent-fg), var(--info-fg));
+				animation:skaldr-read linear both; animation-timeline:scroll(root)}
+			@keyframes skaldr-read{to{transform:scaleX(1)}}
+
+			.wrap > :is(h2,.cards,.table-wrap,details,.panel-card,.callout,.chart,.meter,.range,.kv,.grid,.tabs,.text,figure){
+				animation:skaldr-rise both ease-out; animation-timeline:view(); animation-range:entry 0 entry 160px}
+			@keyframes skaldr-rise{from{opacity:0; transform:translateY(18px)}}
+
+			h2:not(.part-title)::after{transform-origin:0 50%;
+				animation:skaldr-line both ease-out; animation-timeline:view(); animation-range:entry 0 entry 120px}
+			:dir(rtl) h2:not(.part-title)::after{transform-origin:100% 50%}
+			@keyframes skaldr-line{from{transform:scaleX(0)}}
+
+			.meter .fill{position:relative; overflow:hidden; transform-origin:0 50%;
+				animation:skaldr-fill both cubic-bezier(.2,.8,.2,1); animation-timeline:view(); animation-range:entry 0 entry 160px}
+			@keyframes skaldr-fill{from{transform:scaleX(0)}}
+			.meter .fill::after{content:""; position:absolute; inset:0;
+				background:linear-gradient(100deg, transparent 20%, color-mix(in srgb, white 55%, transparent) 50%, transparent 80%);
+				transform:translateX(-100%); animation:skaldr-shine both ease-in-out; animation-timeline:view(); animation-range:cover 35% cover 65%}
+			@keyframes skaldr-shine{to{transform:translateX(100%)}}
+
+			.range .rseg{animation:skaldr-fade both ease-out; animation-timeline:view(); animation-range:entry 0 entry 160px}
+			@keyframes skaldr-fade{from{opacity:0}}
+
+			/* One timeline per chart, shared by its shapes. Bars scale up from the chart's baseline, y=176 in
+			   the chart's viewBox (_BASE in charts.py), so the segments of a stack rise together; lines and
+			   areas are revealed from the left. */
+			.chart{view-timeline:--skaldr-chart block}
+			.chart svg rect{transform-box:view-box; transform-origin:0 176px;
+				animation:skaldr-grow both cubic-bezier(.2,.8,.2,1); animation-timeline:--skaldr-chart; animation-range:entry 0 entry 240px}
+			@keyframes skaldr-grow{from{transform:scaleY(0.001)}}
+			.chart svg path{animation:skaldr-reveal both ease-out; animation-timeline:--skaldr-chart; animation-range:entry 0 entry 240px}
+			@keyframes skaldr-reveal{from{clip-path:inset(0 100% 0 0)} to{clip-path:inset(0 0 0 0)}}
+		}
+
+		.cards > .card,.panel-card{transition:transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease}
+		.cards > .card:hover,.panel-card:hover{transform:translateY(-2px)}
+		.panel-card:hover{box-shadow:var(--shadow-lift)}
+
+		@media (hover:hover){
+			.cards > .card::after{content:""; position:absolute; inset:-1px; border-radius:var(--r-md); padding:1.5px;
+				z-index:2; opacity:0; pointer-events:none;
+				background:conic-gradient(from var(--skaldr-ang), var(--t,var(--accent-fg)), transparent 25%, transparent 75%, var(--t,var(--accent-fg)));
+				-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
+				filter:drop-shadow(0 0 4px color-mix(in srgb, var(--t,var(--accent-fg)) 60%, transparent));
+				transition:opacity .45s ease}
+			.cards > .card:hover::after{opacity:1; animation:skaldr-spin 3s linear infinite}
+			@keyframes skaldr-spin{to{--skaldr-ang:360deg}}
+		}
+
+		.toc-pop{opacity:0; transform:translateX(16px);
+			transition:opacity .2s ease, transform .2s ease, overlay .2s allow-discrete, display .2s allow-discrete}
+		.toc-pop:popover-open{opacity:1; transform:none}
+		@starting-style{.toc-pop:popover-open{opacity:0; transform:translateX(16px)}}
+
+		.chip{transition:transform .2s ease}
+		.chip:hover{transform:translateY(-1px) scale(1.06)}
+		.toc a{transition:filter .2s ease}
+		.toc a:hover{filter:brightness(1.25)}
+
+		:root{interpolate-size:allow-keywords}
+		details::details-content{block-size:0; overflow:clip;
+			transition:block-size .35s cubic-bezier(.2,.8,.2,1), content-visibility .35s allow-discrete}
+		details[open]::details-content{block-size:auto; overflow-clip-margin:32px}
+		details.section > summary::before,details.toggle > summary::before{transition:transform .25s ease}
+	}
+
+	/* Text painted from a clipped gradient has no colour of its own, and forced colours drop the
+	   gradient, which would leave it invisible. It falls back to the system text colour. */
+	@media (forced-colors: active){
+		.hero h1,.wrap.numbered > h2::before{background:none; -webkit-background-clip:border-box; background-clip:border-box;
+			color:CanvasText}
+	}
 }
 
 @layer print {
@@ -1094,7 +1277,7 @@ body{font-family:var(--sans); color:var(--ink); background:var(--page); font-siz
 		   beforeprint script (reliable); ::details-content covers a script-less host (an embedded
 		   fragment) on modern Chromium. */
 		details::details-content{content-visibility:visible !important}
-		details:not([open])>summary::before{content:"▾"}
+		:is(details.section,details.toggle):not([open])>summary::before{transform:rotate(90deg)}
 		details.part:not([open])>summary::before{content:""; transform:translateY(-7px) rotate(45deg)}
 	}
 }
@@ -1619,6 +1802,9 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 
 <div class="footer">WMS export · Q3 2026 · updated 18 Jul 2026 · Reconciles: 1,500 + 8,500 matched cleanly = 10,000.</div><div class="credit">Generated with <a href="https://github.com/alex-yanchenko/skaldr">skaldr</a></div>
 </div><div class="sc" data-open="false">
+<button class="toc-btn" type="button" aria-label="Contents" aria-expanded="false" aria-controls="skaldr-contents" popovertarget="skaldr-contents">
+<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
+</button>
 <button class="sc-btn" type="button" aria-label="Display settings" aria-expanded="false" aria-controls="sc-menu">
 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.6" fill="var(--surface)"/><circle cx="15" cy="16" r="2.6" fill="var(--surface)"/></svg>
 </button>
@@ -1626,6 +1812,9 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 <div class="sc-row"><span class="sc-lbl">Theme</span><div class="sc-seg" role="group" aria-label="Theme"><button type="button" aria-pressed="false" data-set="theme" data-val="auto">Auto</button><button type="button" aria-pressed="false" data-set="theme" data-val="light">Light</button><button type="button" aria-pressed="false" data-set="theme" data-val="dark">Dark</button></div></div>
 <div class="sc-row"><span class="sc-lbl">Width</span><div class="sc-seg" role="group" aria-label="Width"><button type="button" aria-pressed="false" data-set="width" data-val="default">Default</button><button type="button" aria-pressed="false" data-set="width" data-val="wide">Wide</button><button type="button" aria-pressed="false" data-set="width" data-val="full">Full</button></div></div>
 </div>
+<nav class="toc-pop" id="skaldr-contents" popover="manual" aria-label="Table of contents">
+<div class="toc-pop-hd">On this page</div>
+<a href="#overview">Overview</a><a href="#discrepancies-fixes">Discrepancies &amp; fixes</a><a href="#count-progress">Count progress</a><a href="#verification">Verification</a><a href="#rollout">Rollout</a><a href="#method">Method</a><a href="#at-a-glance">At a glance</a><a href="#recount-followup">Recount Zone C</a><a href="#appendix-raw-counts">Appendix: discrepancy-reason raw counts</a><a href="#counts-at-a-glance">Counts at a glance</a><a href="#count-methods-compared">Count methods compared</a><a href="#readiness-by-zone">Readiness by zone</a><a href="#where-the-count-comes-from">Where the count comes from</a><a href="#how-to-run-the-recount">How to run the recount</a><a href="#pulling-a-bin-from-the-wms-yourself">Pulling a bin from the WMS yourself</a><a href="#reconciling-a-bin-against-the-live-system">Reconciling a bin against the live system</a><a href="#sources">Sources</a></nav>
 </div>
 <script>
 (function () {
@@ -1636,6 +1825,13 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 	var menu = controls.querySelector(".sc-menu");
 	if (!button || !menu) return;
 	var defaultWidth = "default";
+	var contentsButton = controls.querySelector(".toc-btn");
+	var contentsPanel = controls.querySelector(".toc-pop");
+
+	function contentsOpen() {
+		try { return contentsPanel.matches(":popover-open"); } catch (err) { return false; }
+	}
+	function closeContents() { if (contentsOpen()) contentsPanel.hidePopover(); }
 
 	function save(key, value) { try { localStorage.setItem(key, value); } catch (err) {} }
 	function drop(key) { try { localStorage.removeItem(key); } catch (err) {} }
@@ -1644,6 +1840,19 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 		controls.dataset.open = isOpen ? "true" : "false";
 		button.setAttribute("aria-expanded", isOpen ? "true" : "false");
 		menu.hidden = !isOpen;
+		if (isOpen) closeContents();
+	}
+
+	if (contentsPanel && contentsButton) {
+		contentsPanel.addEventListener("toggle", function (event) {
+			var isOpen = event.newState === "open";
+			contentsButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+			if (isOpen) setOpen(false);
+		});
+		contentsPanel.addEventListener("click", function (event) {
+			var onNarrowScreen = window.matchMedia("(max-width: 900px)").matches;
+			if (onNarrowScreen && event.target.closest("a")) closeContents();
+		});
 	}
 
 	function syncGroup(kind, active) {
@@ -1660,7 +1869,11 @@ Accept: application/json</pre></div><div class="rq-pane"><div class="rq-pane-hd"
 
 	button.addEventListener("click", function (event) { event.stopPropagation(); setOpen(controls.dataset.open !== "true"); });
 	document.addEventListener("click", function (event) { if (!controls.contains(event.target)) setOpen(false); });
-	document.addEventListener("keydown", function (event) { if (event.key === "Escape") setOpen(false); });
+	document.addEventListener("keydown", function (event) {
+		if (event.key !== "Escape") return;
+		setOpen(false);
+		closeContents();
+	});
 
 	controls.querySelectorAll("[data-set]").forEach(function (item) {
 		item.addEventListener("click", function () {

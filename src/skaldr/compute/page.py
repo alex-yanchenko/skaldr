@@ -48,6 +48,7 @@ _SLUG_SEPARATORS = re.compile(r"-+")
 
 SOURCE_BLOCK_ID = "skaldr-source"
 SETTINGS_MENU_ID = "sc-menu"
+CONTENTS_PANEL_ID = "skaldr-contents"
 
 
 def _kept_in_a_slug(character: str) -> bool:
@@ -66,7 +67,7 @@ def _page_ids(report: Report) -> set[str]:
         for item in iter_reference_items(report.blocks)
         for anchor in (f"ref-{item.key}", f"fnref-{item.key}")
     )
-    return {SOURCE_BLOCK_ID, SETTINGS_MENU_ID, *reference_ids}
+    return {SOURCE_BLOCK_ID, SETTINGS_MENU_ID, CONTENTS_PANEL_ID, *reference_ids}
 
 
 Anchored = Heading | Section | Part
@@ -105,8 +106,8 @@ def anchor_slugs(report: Report) -> dict[int, str]:
     reserved = next((anchor for anchor in explicit if anchor in page_ids), None)
     if reserved is not None:
         raise ReportError(
-            f"anchor id '{reserved}' is one the page itself uses (the source block, the settings menu, or a "
-            "reference and its citation); give the heading or section another id"
+            f"anchor id '{reserved}' is one the page itself uses (the source block, the settings menu, the "
+            "contents panel, or a reference and its citation); give the heading or section another id"
         )
 
     slugs: dict[int, str] = {}

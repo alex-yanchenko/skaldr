@@ -190,3 +190,42 @@ def test_the_json_dump_names_the_icon_and_the_cover() -> None:
     dumped = parse_report(report_with(icon="\U0001f9ea", cover=COVER)).model_dump(mode="json")["meta"]
 
     assert (dumped["icon"], dumped["cover"]) == ("\U0001f9ea", COVER)
+
+
+def test_sections_are_not_numbered_unless_the_document_asks() -> None:
+    report = parse_report(report_with())
+
+    assert (report.meta.numbered, '<div class="wrap">' in render_html(report)) == (False, True)
+
+
+def test_numbered_puts_a_class_on_the_page_root_of_the_page_and_of_the_embed() -> None:
+    report = parse_report(report_with(numbered=True))
+
+    assert (
+        '<div class="wrap numbered">' in render_html(report),
+        '<div class="wrap numbered">' in render_embed(report),
+    ) == (
+        True,
+        True,
+    )
+
+
+def test_the_json_dump_names_numbered() -> None:
+    assert parse_report(report_with(numbered=True)).model_dump(mode="json")["meta"]["numbered"] is True
+
+
+def test_numbered_must_be_true_or_false() -> None:
+    with pytest.raises(ReportError) as raised:
+        parse_report(report_with(numbered="yes"))
+
+    assert str(raised.value) == "invalid content data: meta.numbered: Input should be a valid boolean"
+
+
+def test_the_exports_ignore_numbered() -> None:
+    plain = lower_report(parse_report(report_with()))
+    numbered = lower_report(parse_report(report_with(numbered=True)))
+
+    assert (render_markdown_document(numbered), render_notion(numbered.body)) == (
+        render_markdown_document(plain),
+        render_notion(plain.body),
+    )

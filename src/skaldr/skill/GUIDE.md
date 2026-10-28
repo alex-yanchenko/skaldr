@@ -70,6 +70,7 @@ meta:
   updated: "18 Jul 2026"         # optional; footer "updated <value>", a living-doc freshness stamp
   toc: true                      # optional; auto table-of-contents from level-2 headings + sections
   hero: true                     # optional; a larger display title + subtitle in a tinted band
+  numbered: true                 # optional; a large 01, 02, … number before each top-level level-2 heading (HTML only)
   notion_width: full             # optional; normal (default) or full: the Notion page width tables are sized for
   people:                        # optional; who a [Ada](user:ada) link can name (see Rich text)
     ada: { notion: "user://11111111-2222-3333-4444-555555555555", jira: "5b10a2844c20165700ede21g", slack: "U0EXAMPLE1" }
@@ -80,8 +81,12 @@ meta:
 
 `source` is rich text, so `*`, backticks, `[label](url)` and `[^key]` in it are read as marks, code, links and citations (escape a literal one with a backslash), and a link to an unknown `#anchor` fails the build naming `meta.source`. The footer renders after the page's `references` block, so a reference cited only from `source` gets no back-link. The footer's date, updated stamp and reconcile lines stay plain text.
 
+`toc` also puts a Contents button in the page's top-right corner, beside the display-settings button. It opens a panel that lists the same entries, floats over the page, stays open while the reader scrolls, marks the section in view, and closes from the same button or the Escape key. Opening it closes the settings menu, and the other way round. The inline table of contents stays, and a page without `toc` has no Contents button. The exports ignore the button.
+
 `hero` opts the page into a bolder opening (a large display title and subtitle in a tinted band)
 for a page that leads by selling an idea (a proposal, an explainer) rather than a plain report header.
+
+`numbered` (default `false`) numbers the page's top-level level-2 headings 01, 02, and so on, for a page whose sections a reader refers to by number. Each heading gets a large gradient number: in the left margin behind a thin divider on a screen 1100 px wide or more, where the page's left padding widens to make room, and above the title on a narrower one, with extra space before each section. Headings inside a section, a grid cell or a part are not numbered, and a page without `numbered` looks as it did before. It changes the HTML page only; the Markdown, Notion, Jira and Slack exports ignore it.
 
 `icon` is one emoji. The page shows it beside the title and uses it as the favicon, and the GitHub-flavored export leads the title with it. `cover` is an `http://` or `https://` address. The page allows no remote images, so it shows a "Cover image" link under the title instead of the image, and the GitHub-flavored export writes the image itself under the title, as `![Cover](url)`. Neither reaches the Notion export's Markdown, which holds only the body; the Notion export folder's `.skaldr-export.json` carries them as `icon` and `cover` instead, and leaves them out when the document sets none. A Notion publish sets them on the page itself, as the page icon and cover (see Publishing to Notion). The ADF and Slack canvas exports write them as words instead, since a Jira issue and a Slack canvas have no icon or cover of their own: the icon leads the title, and the cover is a first paragraph holding a "Cover image" link, as on the page. A publish to Jira or Slack writes them the same way.
 

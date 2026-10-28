@@ -267,6 +267,7 @@ def html_environment() -> Environment:
         display_math=display_math,
         query_text_for=compute.query_text_for,
         settings_menu_id=compute.SETTINGS_MENU_ID,
+        contents_panel_id=compute.CONTENTS_PANEL_ID,
         unhandled_block=unhandled_block,
     )
     return env

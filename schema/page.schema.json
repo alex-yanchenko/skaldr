@@ -2987,6 +2987,12 @@
           "title": "Hero",
           "type": "boolean"
         },
+        "numbered": {
+          "default": false,
+          "description": "Opt-in numbered sections: each top-level level-2 heading on the HTML page gets a large number (01, 02, \u2026), in the left margin on a wide screen and above the title on a narrow one. The exports ignore it.",
+          "title": "Numbered",
+          "type": "boolean"
+        },
         "people": {
           "description": "The people a `[Ada](user:ada)` link can name, by key. A `user:` link to a key not listed here fails the build.",
           "patternProperties": {
