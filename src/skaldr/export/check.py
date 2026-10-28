@@ -2,9 +2,7 @@ from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import chain
-from typing import Final
-
-from typing_extensions import Self, assert_never
+from typing import Final, Self, assert_never
 
 from skaldr import models
 from skaldr.errors import ExportRejectedError

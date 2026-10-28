@@ -1,9 +1,7 @@
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
-
-from typing_extensions import Self
+from typing import Literal, Self
 
 from skaldr.errors import PublishError
 from skaldr.publish.applier import StepListener

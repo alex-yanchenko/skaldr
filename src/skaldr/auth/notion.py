@@ -11,7 +11,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import TCPServer
 from types import TracebackType
-from typing import NoReturn
+from typing import NoReturn, Self
 from urllib.parse import parse_qs, parse_qsl, urlsplit
 from uuid import UUID
 
@@ -20,7 +20,7 @@ from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.httpx_client import OAuth2Client
 from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
 from skaldr.auth.store import (
@@ -42,6 +42,8 @@ SIGN_IN_TIMEOUT_SECONDS = 300.0
 
 _NOTION_API = "https://api.notion.com"
 _TOKEN_ENDPOINT = f"{_NOTION_API}/v1/oauth/token"
+_WHOLE_ANSWER = "(the whole answer)"
+_NOT_JSON = object()
 SIGN_IN_AGAIN_SUFFIX = "; run `skaldr auth notion` again"
 RENEWED_SIGN_IN_REFUSED = f"Notion refused the renewed sign-in{SIGN_IN_AGAIN_SUFFIX}"
 CALLBACK_THREAD_PREFIX = "skaldr-notion-callback-"
@@ -251,26 +253,44 @@ def _oauth_client(
         timeout=HTTP_TIMEOUT_SECONDS,
     )
     client.register_client_auth_method((_BASIC_AUTH_WITH_JSON_BODY, _basic_auth_with_json_body))
-    client.register_compliance_hook("access_token_response", _refuse_a_failed_token_status)
-    client.register_compliance_hook("refresh_token_response", _refuse_a_failed_token_status)
+    client.register_compliance_hook("access_token_response", _refuse_an_unusable_token_answer)
+    client.register_compliance_hook("refresh_token_response", _refuse_an_unusable_token_answer)
     return client
 
 
-def _refuse_a_failed_token_status(response: httpx2.Response) -> httpx2.Response:
+def _refuse_an_unusable_token_answer(response: httpx2.Response) -> httpx2.Response:
     failed = response.status_code >= HTTPStatus.BAD_REQUEST
     if response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR or (
         failed and not _names_an_oauth_error(response)
     ):
         raise AuthError(f"Notion answered HTTP {response.status_code} for the token request")
+    if not failed:
+        _refuse_a_token_answer_that_is_not_a_json_object(response)
     return response
 
 
+def _refuse_a_token_answer_that_is_not_a_json_object(response: httpx2.Response) -> None:
+    body = _json_body(response)
+    if body is _NOT_JSON:
+        raise AuthError("Notion's token answer is not JSON")
+    if not isinstance(body, dict):
+        raise AuthError(_invalid_fields(_WHOLE_ANSWER))
+
+
 def _names_an_oauth_error(response: httpx2.Response) -> bool:
-    try:
-        body: object = response.json()
-    except json.JSONDecodeError:
-        return False
+    body = _json_body(response)
     return isinstance(body, dict) and "error" in body
+
+
+def _json_body(response: httpx2.Response) -> object:
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return _NOT_JSON
+
+
+def _invalid_fields(fields: str) -> str:
+    return f"Notion's token answer is missing or has invalid fields: {fields}"
 
 
 def _basic_auth_with_json_body(
@@ -296,14 +316,10 @@ def _parse_token(
             raise refused(exc) from exc
         except httpx2.HTTPError as exc:
             raise _unreachable(exc) from exc
-        except json.JSONDecodeError as exc:
-            raise AuthError("Notion's token answer is not JSON") from exc
     fields = ", ".join(
         ".".join(map(str, error["loc"])) for error in invalid.error.errors(include_input=False)
     )
-    raise AuthError(
-        f"Notion's token answer is missing or has invalid fields: {fields or '(the whole answer)'}"
-    )
+    raise AuthError(_invalid_fields(fields or _WHOLE_ANSWER))
 
 
 def _oauth_error_named(exc: AuthlibBaseError) -> str:

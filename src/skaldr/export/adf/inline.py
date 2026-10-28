@@ -1,11 +1,9 @@
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from typing import Final
+from datetime import UTC, date, datetime
+from typing import Final, assert_never
 from urllib.parse import urlsplit
-
-from typing_extensions import assert_never
 
 from skaldr.errors import ConnectorError, ExportInvariantError
 from skaldr.export.adf.colors import BACKGROUND_COLOR, BADGE_LOZENGE, TEXT_COLOR
@@ -198,7 +196,7 @@ def _as_text_in_a_link(node: AdfInline) -> AdfInline:
 
 
 def _date_node(day: date) -> AdfDate:
-    midnight_utc = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+    midnight_utc = datetime(day.year, day.month, day.day, tzinfo=UTC)
     return AdfDate(type="date", attrs=AdfDateAttrs(timestamp=str(int(midnight_utc.timestamp()) * 1000)))
 
 

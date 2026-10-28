@@ -1,10 +1,9 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Final, Literal, Protocol, TypeVar
+from typing import Final, Literal, Protocol, TypeVar, assert_never
 
 from markdown_it.token import Token
-from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.models import Person, ToneLiteral

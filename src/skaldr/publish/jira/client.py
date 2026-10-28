@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
 from http import HTTPStatus
 from types import TracebackType
-from typing import Final, TypeVar
+from typing import Final, Self, TypeVar
 from urllib.parse import quote
 
 import httpx2
@@ -17,7 +17,6 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-from typing_extensions import Self
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS
 from skaldr.auth.store import JiraCredentials

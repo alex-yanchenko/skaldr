@@ -3,11 +3,10 @@ from collections.abc import Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Literal, TypeGuard, cast, get_args
+from typing import Any, Literal, TypeGuard, assert_never, cast, get_args
 
 from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
-from typing_extensions import assert_never
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.models.base import BlockBase

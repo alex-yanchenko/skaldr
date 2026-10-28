@@ -1,8 +1,7 @@
 import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
-
-from typing_extensions import Self
+from typing import Self
 
 from skaldr.export.tree import Node
 

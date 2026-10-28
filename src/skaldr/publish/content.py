@@ -3,10 +3,9 @@ import json
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Literal
+from typing import Literal, assert_never
 
 from pydantic import Field, JsonValue
-from typing_extensions import assert_never
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields

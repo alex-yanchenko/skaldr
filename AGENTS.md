@@ -9,9 +9,9 @@ repo cold; the full authoring contract comes from the tool (`skaldr --guide`), n
 skaldr is a CLI. Install once, or run from this checkout:
 
 ```bash
-uv tool install skaldr      # or: pipx install skaldr   (needs Python ≥ 3.10)
+uv tool install skaldr      # or: pipx install skaldr   (needs Python ≥ 3.11)
 # In a sandbox that can't fetch a managed interpreter, run from the checkout instead:
-uv run skaldr ...           # uv uses the system Python ≥ 3.10
+uv run skaldr ...           # uv uses the system Python ≥ 3.11
 # or: pip install -e . && skaldr ...
 ```
 

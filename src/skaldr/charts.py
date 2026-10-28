@@ -9,10 +9,9 @@ Kept separate from `compute` because it is a self-contained geometry unit with n
 import math
 import re
 from functools import cache
-from typing import Final, Literal, TypedDict
+from typing import Final, Literal, TypedDict, assert_never
 
 from markupsafe import Markup, escape
-from typing_extensions import assert_never
 
 from skaldr import compute
 from skaldr.errors import ExportInvariantError

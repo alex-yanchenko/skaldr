@@ -4,12 +4,11 @@ import unicodedata
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from functools import cache
-from typing import Any, Final, Literal, NamedTuple, TypedDict, cast, get_args, get_type_hints
+from typing import Any, Final, Literal, NamedTuple, TypedDict, assert_never, cast, get_args, get_type_hints
 from urllib.parse import quote, urlsplit
 
 import roman
 from pydantic import BaseModel
-from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.models import (

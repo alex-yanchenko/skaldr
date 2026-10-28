@@ -1,8 +1,6 @@
 from collections.abc import Sequence
 from itertools import pairwise
-from typing import Final
-
-from typing_extensions import assert_never
+from typing import Final, assert_never
 
 from skaldr import compute
 from skaldr.charts import chart_legend, donut_total

@@ -1,9 +1,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from typing import Final, Literal, TypeVar
-
-from typing_extensions import Self
+from typing import Final, Literal, Self, TypeVar
 
 from skaldr.errors import (
     AuthError,

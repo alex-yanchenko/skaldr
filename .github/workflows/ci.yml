@@ -30,7 +30,7 @@ jobs:
       matrix:
         # Oldest supported and newest — the bounds of requires-python are where
         # stdlib/pydantic behavior differences surface, not the middle versions.
-        python-version: ["3.10", "3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7

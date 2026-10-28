@@ -1,8 +1,6 @@
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Literal, Protocol
-
-from typing_extensions import assert_never
+from typing import Literal, Protocol, assert_never
 
 from skaldr.export.inline import one_line
 from skaldr.models import BadgeColor, StatusState, SwimlaneStepState, ToneLiteral

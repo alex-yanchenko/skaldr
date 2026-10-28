@@ -106,6 +106,18 @@ def test_a_refused_renewal_names_the_oauth_error_and_not_the_tokens() -> None:
     )
 
 
+def test_a_renewal_answer_that_is_not_a_json_object_names_the_whole_answer_and_not_the_tokens() -> None:
+    answer = (200, ["renewed-access", "renewed-refresh"])
+
+    with pytest.raises(AuthError) as caught:
+        renewed_notion_credentials(make_notion_credentials(), transport=_token_endpoint(answer, []))
+
+    assert (str(caught.value), "renewed-access" in rendered_traceback(caught.value)) == (
+        "Notion's token answer is missing or has invalid fields: (the whole answer)",
+        False,
+    )
+
+
 def test_an_unreachable_token_endpoint_is_named_when_renewing() -> None:
     with pytest.raises(AuthError, match=r"^Could not reach Notion: connection refused$"):
         renewed_notion_credentials(make_notion_credentials(), transport=refusing_connections())

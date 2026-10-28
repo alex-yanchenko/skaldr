@@ -3,10 +3,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
-from typing import Final, NoReturn, TypeAlias
+from typing import Final, NoReturn, Self, TypeAlias, assert_never
 from urllib.parse import quote
-
-from typing_extensions import Self, assert_never
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.flanking import EMPHASIS_OPENER_STAND_IN, LINE_EDGE, NO_CHARACTER, markers_flank

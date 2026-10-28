@@ -1,9 +1,9 @@
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import assert_never
 
 from pydantic import ValidationError
-from typing_extensions import assert_never
 
 from skaldr.errors import PublishError
 from skaldr.publish.connector import Connector, ConnectorRegistry, WriteGranularity

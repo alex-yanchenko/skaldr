@@ -11,9 +11,7 @@ import time
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
-
-from typing_extensions import assert_never
+from typing import Literal, assert_never
 
 from skaldr.errors import (
     ConnectorError,

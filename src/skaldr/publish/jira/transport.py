@@ -1,9 +1,8 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TypeVar
+from typing import Self, TypeVar
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
-from typing_extensions import Self
 
 from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length

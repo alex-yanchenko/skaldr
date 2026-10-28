@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Literal, NotRequired
 
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 from skaldr.export.tree import HeadingLevel
 

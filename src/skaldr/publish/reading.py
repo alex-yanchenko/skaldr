@@ -2,8 +2,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-
-from typing_extensions import assert_never
+from typing import assert_never
 
 from skaldr.errors import ItemNotFoundError, PublishError, WriteRejectedError
 from skaldr.publish.content import (

@@ -1,12 +1,6 @@
-import sys
 from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
-
-# Traversable moved to importlib.resources.abc in 3.11; on 3.10 it lives in importlib.abc.
-if sys.version_info >= (3, 11):
-    from importlib.resources.abc import Traversable
-else:
-    from importlib.abc import Traversable
 
 
 def _resource(name: str) -> Traversable:

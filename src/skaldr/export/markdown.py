@@ -5,9 +5,7 @@ from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date
-from typing import Final, Literal, NoReturn
-
-from typing_extensions import assert_never
+from typing import Final, Literal, NoReturn, assert_never
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.folds import folded, folded_except, reference_runs

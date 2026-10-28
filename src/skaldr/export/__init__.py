@@ -2,10 +2,9 @@ import os
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Final
+from typing import Annotated, Final, assert_never
 
 from pydantic import StringConstraints, ValidationError
-from typing_extensions import assert_never
 
 from skaldr.errors import ReportError
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, adf_json, compact_adf_length, render_adf_document

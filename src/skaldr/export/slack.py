@@ -2,9 +2,7 @@ import re
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Final, Literal, NoReturn, TypeGuard
-
-from typing_extensions import assert_never
+from typing import Final, Literal, NoReturn, TypeGuard, assert_never
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError
 from skaldr.export.capabilities import (

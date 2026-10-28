@@ -1,7 +1,5 @@
 from collections.abc import Iterable, Iterator, Sequence
-from typing import Any, cast
-
-from typing_extensions import assert_never
+from typing import Any, assert_never, cast
 
 from skaldr.models.comparison_matrix import Comparison, Matrix
 from skaldr.models.containers import (
