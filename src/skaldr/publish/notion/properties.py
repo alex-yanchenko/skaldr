@@ -2,10 +2,9 @@ import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, Literal, NamedTuple, TypeGuard
+from typing import Final, Literal, NamedTuple, TypeGuard, assert_never
 
 from pydantic import JsonValue
-from typing_extensions import assert_never
 
 from skaldr.errors import WriteRejectedError
 from skaldr.publish.content import is_unset

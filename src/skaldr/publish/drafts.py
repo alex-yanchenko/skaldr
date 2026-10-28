@@ -4,9 +4,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
-
-from typing_extensions import assert_never
+from typing import assert_never, cast
 
 from skaldr import models
 from skaldr.errors import PublishError

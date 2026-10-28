@@ -2,9 +2,7 @@ import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date
-from typing import Final
-
-from typing_extensions import assert_never
+from typing import Final, assert_never
 
 from skaldr import compute
 from skaldr.errors import ExportInvariantError

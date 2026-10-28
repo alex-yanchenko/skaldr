@@ -1,7 +1,5 @@
 from collections.abc import Mapping
-from typing import Final
-
-from typing_extensions import assert_never
+from typing import Final, assert_never
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.capabilities import PANES_FEATURES, TARGET_SUBJECTS, Feature, OccurrenceFeature, swaps

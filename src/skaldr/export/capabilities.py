@@ -1,8 +1,6 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
-from typing import Final, Literal
-
-from typing_extensions import Self
+from typing import Final, Literal, Self
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.data_images import ACCEPTED_IMAGE_TYPES_IN_WORDS

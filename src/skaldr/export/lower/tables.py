@@ -1,8 +1,6 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Final
-
-from typing_extensions import assert_never
+from typing import Final, assert_never
 
 from skaldr import compute, models
 from skaldr.export.inline import bold, italic, plain

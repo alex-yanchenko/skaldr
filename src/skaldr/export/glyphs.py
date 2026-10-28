@@ -1,8 +1,6 @@
 import math
 from collections.abc import Mapping
-from typing import Final
-
-from typing_extensions import assert_never
+from typing import Final, assert_never
 
 from skaldr.compute import STATUS_GLYPHS
 from skaldr.export.runs import (

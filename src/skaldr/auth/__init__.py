@@ -1,7 +1,5 @@
 from types import TracebackType
-from typing import Generic, TypeVar
-
-from typing_extensions import Self
+from typing import Generic, Self, TypeVar
 
 HTTP_TIMEOUT_SECONDS = 30.0
 _JOINERS = frozenset({"\N{ZERO WIDTH NON-JOINER}", "\N{ZERO WIDTH JOINER}"})

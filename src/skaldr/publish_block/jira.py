@@ -1,7 +1,6 @@
-from typing import Annotated
+from typing import Annotated, Self
 
 from pydantic import Field, StringConstraints, field_validator, model_validator
-from typing_extensions import Self
 
 from skaldr.auth.site import normalise_site
 from skaldr.errors import AuthError

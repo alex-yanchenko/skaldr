@@ -1,7 +1,6 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-
-from typing_extensions import assert_never
+from typing import assert_never
 
 from skaldr.errors import CreatedButUnfinishedError, PublishError, WriteRejectedError
 from skaldr.publish.content import (

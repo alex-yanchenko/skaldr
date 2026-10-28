@@ -11,7 +11,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import TCPServer
 from types import TracebackType
-from typing import NoReturn
+from typing import NoReturn, Self
 from urllib.parse import parse_qs, parse_qsl, urlsplit
 from uuid import UUID
 
@@ -20,7 +20,7 @@ from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.httpx_client import OAuth2Client
 from authlib.oauth2.auth import ClientAuth, encode_client_secret_basic
 from pydantic import BaseModel, ValidationError
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from skaldr.auth import HTTP_TIMEOUT_SECONDS, CaughtWithoutChaining, printable_only
 from skaldr.auth.store import (

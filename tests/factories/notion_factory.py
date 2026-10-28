@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx2
@@ -15,7 +15,7 @@ from skaldr.publish_block import notion_page_id
 
 BOT_ID = "b0b0b0b0-0000-4000-8000-000000000001"
 PERSON_ID = "9e9e9e9e-0000-4000-8000-000000000002"
-FIRST_EDIT = datetime(2026, 10, 9, 12, 0, tzinfo=timezone.utc)
+FIRST_EDIT = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 TITLE_NAME = "Name"
 DATABASE_SCHEMA = {TITLE_NAME: "title", "Area": "rich_text", "Owner": "rich_text", "Status": "select"}
 PAGE_PATH = re.compile(r"/v1/pages/([^/]+)$")

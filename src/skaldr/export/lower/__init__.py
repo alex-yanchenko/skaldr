@@ -1,6 +1,5 @@
 from collections.abc import Sequence
-
-from typing_extensions import assert_never
+from typing import assert_never
 
 from skaldr import compute, models
 from skaldr.errors import RegionNotFoundError

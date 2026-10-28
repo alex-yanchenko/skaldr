@@ -2,8 +2,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import TracebackType
-
-from typing_extensions import Self
+from typing import Self
 
 from skaldr.errors import PublishError
 from skaldr.publish.connector import ConnectorRegistry

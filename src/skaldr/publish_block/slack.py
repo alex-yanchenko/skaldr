@@ -1,8 +1,8 @@
 import re
+from typing import Self
 from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
-from typing_extensions import Self
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish_block.target import JsonFields, Location, TargetBase

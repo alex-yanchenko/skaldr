@@ -2,11 +2,10 @@ import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, assert_never
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
-from typing_extensions import assert_never
 
 from skaldr.export.markup import encode_url
 from skaldr.patterns import SLUG_PATTERN

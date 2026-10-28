@@ -1,9 +1,7 @@
 import json
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import Final, NamedTuple, NoReturn, get_args
-
-from typing_extensions import assert_never
+from typing import Final, NamedTuple, NoReturn, assert_never, get_args
 
 from skaldr.charts import chart_light_colour, tone_light_colours
 from skaldr.errors import ExportInvariantError

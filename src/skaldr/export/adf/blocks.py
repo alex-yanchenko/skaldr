@@ -1,9 +1,7 @@
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from itertools import count, groupby
-from typing import Final, Literal
-
-from typing_extensions import Never
+from typing import Final, Literal, Never
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.adf.colors import BACKGROUND_COLOR, PANEL_TYPE

@@ -1,8 +1,7 @@
-from typing import Final, Literal
+from typing import Final, Literal, assert_never
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import JsonValue
-from typing_extensions import assert_never
 
 from skaldr.publish.content import ItemContent
 from skaldr.publish.notion.responses import (

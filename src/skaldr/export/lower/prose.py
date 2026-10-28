@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-
-from typing_extensions import assert_never
+from typing import assert_never
 
 from skaldr import compute, models
 from skaldr.code_language import block_code_language
