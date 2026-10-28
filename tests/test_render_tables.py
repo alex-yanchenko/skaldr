@@ -552,11 +552,10 @@ def test_a_toned_column_tints_its_col(columns: list[dict[str, object]], colgroup
 def test_the_stylesheet_paints_a_col_by_its_tone_class() -> None:
     html = render_html(parse_report(make_report()))
 
-    assert css_declarations(html, "& col.tint") == ["background:var(--tb)"]
     assert css_declarations(html, "& col.tint.success") == ["--tb:var(--success-bg)"]
 
 
-def test_a_muted_or_toned_row_paints_opaque_cells_over_a_column_tint() -> None:
+def test_a_muted_row_paints_opaque_cells_over_a_column_tint() -> None:
     html = render_html(parse_report(make_report()))
 
     assert {
@@ -565,8 +564,6 @@ def test_a_muted_or_toned_row_paints_opaque_cells_over_a_column_tint() -> None:
             "& tbody tr.row.muted",
             "& tbody tr.row.muted td",
             "& tbody tr.row.muted td::after",
-            "& tbody tr.row.danger td",
-            "& tbody tr.row.tint td",
         )
     } == {
         "& tbody tr.row.muted": [],
@@ -577,17 +574,16 @@ def test_a_muted_or_toned_row_paints_opaque_cells_over_a_column_tint() -> None:
         "& tbody tr.row.muted td::after": [
             'content:"";position:absolute;inset:0;background:var(--surface);opacity:0.45;pointer-events:none'
         ],
-        "& tbody tr.row.danger td": ["background:var(--danger-bg)"],
-        "& tbody tr.row.tint td": ["background:var(--tb)"],
     }
 
 
 def test_a_row_hover_lays_a_translucent_wash_over_the_cell_so_a_column_tint_shows_through() -> None:
     html = render_html(parse_report(make_report()))
 
-    assert css_declarations(html, "& tbody tr.row:hover td") == [
-        "background-image:linear-gradient(var(--row-hover),var(--row-hover))"
-    ]
+    assert (
+        css_declarations(html, "& tbody tr.row:hover td"),
+        css_declarations(html, "& tbody tr.row:hover > td"),
+    ) == ([], ["background-image:linear-gradient(var(--row-hover),var(--row-hover))"])
     assert (
         "--row-hover:light-dark(color-mix(insrgb,var(--ink)3%,transparent),"
         "color-mix(insrgb,var(--ink)5%,transparent));" in re.sub(r"\s+", "", html)

@@ -9,6 +9,17 @@ TINT_PAIR = re.compile(
 MOTION_QUERY = "@media screen and (prefers-reduced-motion: no-preference){"
 SIMPLE_RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
 TIME_VALUE = re.compile(r"(?<![\w.-])\d*\.?\d+m?s\b")
+COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+TONE_FOR_ROW_TINT = {
+    "slate": "neutral",
+    "blue": "info",
+    "green": "success",
+    "amber": "warning",
+    "red": "danger",
+    "violet": "accent",
+    "teal": "teal",
+    "sky": "sky",
+}
 
 
 def stylesheet() -> str:
@@ -204,3 +215,159 @@ def test_only_a_numbered_page_reads_the_section_counter() -> None:
     elsewhere = css.replace(numbered_rules, "")
 
     assert ("skaldr-sec" in numbered_rules, "skaldr-sec" in elsewhere) == (True, False)
+
+
+def stylesheet_without_comments() -> str:
+    return COMMENT.sub("", stylesheet())
+
+
+def selectors_declaring(property_name: str) -> list[str]:
+    return [
+        selector.strip()
+        for selectors, _ in rules_declaring(stylesheet_without_comments(), property_name)
+        for selector in selectors.rsplit(";", 1)[-1].split(",")
+    ]
+
+
+def declared_value(selector: str, property_name: str) -> str:
+    values = [
+        re.sub(r"\s+", " ", match.group(1)).strip()
+        for rule_selectors, body in SIMPLE_RULE.findall(stylesheet_without_comments())
+        if selector in [part.strip() for part in rule_selectors.rsplit(";", 1)[-1].split(",")]
+        for match in re.finditer(rf"(?<![\w-]){property_name}:([^;]*)", body)
+    ]
+    assert len(values) == 1, (selector, property_name, values)
+    return values[0]
+
+
+def test_a_toned_row_sets_background_colour_so_the_hover_wash_laid_as_an_image_still_shows() -> None:
+    shorthand = selectors_declaring("background")
+
+    assert (
+        [selector for selector in shorthand if re.search(r"tr\.row\.(tint|danger)", selector)],
+        "& tbody tr.row.tint > td" in selectors_declaring("background-color"),
+        "& tbody tr.row.danger > td" in selectors_declaring("background-color"),
+    ) == ([], True, True)
+
+
+def test_a_toned_row_cell_is_opaque_over_a_column_tint_and_the_column_tint_is_translucent() -> None:
+    row_cell = declared_value("& tbody tr.row.tint > td", "background-color")
+    column = declared_value("& col.tint", "background")
+
+    assert (row_cell.endswith("var(--surface))"), "transparent" in row_cell, "transparent" in column) == (
+        True,
+        False,
+        True,
+    )
+
+
+def test_the_header_is_as_tall_as_the_offset_the_sticky_group_rows_hang_from() -> None:
+    assert (
+        declared_value("& thead th", "height"),
+        declared_value("& tr.group td", "top"),
+    ) == ("var(--hdr-h)", "var(--hdr-h)")
+
+
+def test_a_group_label_keeps_the_case_its_author_wrote() -> None:
+    group_rules = [
+        selector for selector in selectors_declaring("text-transform") if selector.startswith("& tr.group")
+    ]
+
+    assert group_rules == []
+
+
+def test_the_header_the_totals_and_the_comparison_share_one_accent_rule() -> None:
+    assert (
+        declared_value("& thead th", "border-block-end"),
+        declared_value("& tfoot td", "border-block-start"),
+        declared_value("& th", "border-block-end"),
+    ) == ("2px solid var(--header-rule)",) * 3
+
+
+def test_a_comparison_value_pill_reads_in_a_tone_that_meets_contrast_and_wraps_without_a_stadium() -> None:
+    assert (
+        declared_value("& .ct", "color"),
+        declared_value("& .ct", "border-radius"),
+    ) == ("var(--neutral-fg)", "var(--r-md)")
+
+
+def test_a_toned_row_styles_its_own_cells_only_never_those_of_a_subtable_inside_it() -> None:
+    row_rules = [
+        selector
+        for property_name in ("background", "background-color", "background-image", "box-shadow")
+        for selector in selectors_declaring(property_name)
+        if re.search(r"tr\.row\.(tint|danger)|tr\.row:hover", selector) and "td" in selector
+    ]
+
+    assert (row_rules != [], [selector for selector in row_rules if "> td" not in selector]) == (True, [])
+
+
+def test_the_tone_bar_of_a_row_sits_on_its_first_own_cell() -> None:
+    bar_selectors = [
+        selector
+        for selector in selectors_declaring("box-shadow")
+        if "tr.row" in selector and "first-child" in selector
+    ]
+
+    assert bar_selectors == [
+        "& tbody tr.row.tint > td:first-child",
+        "& tbody tr.row.danger > td:first-child",
+    ]
+
+
+def test_every_row_tint_pairs_its_background_tone_with_the_foreground_of_the_same_tone() -> None:
+    css = stylesheet_without_comments()
+    declared = {tone: re.search(rf"tr\.row\.tint\.{tone}\{{([^{{}}]*)\}}", css) for tone in TONE_FOR_ROW_TINT}
+
+    assert {tone: match and match.group(1) for tone, match in declared.items()} == {
+        tone: f"--tb:var(--{name}-bg); --tbar:var(--{name}-fg)" for tone, name in TONE_FOR_ROW_TINT.items()
+    }
+
+
+def test_the_table_wrapper_holds_no_overflow_so_the_sticky_header_keeps_working() -> None:
+    assert [
+        selector for selector in selectors_declaring("overflow") if selector.endswith(".table-wrap")
+    ] == []
+
+
+def test_the_header_and_the_group_rows_of_a_table_stay_sticky() -> None:
+    sticky = selectors_declaring("position")
+
+    assert ("& thead th" in sticky, "& tr.group td" in sticky) == (True, True)
+
+
+def test_the_header_of_a_table_keeps_its_rounded_corners() -> None:
+    css = stylesheet_without_comments()
+
+    assert (
+        "& thead th:first-child{border-start-start-radius:var(--r-inner)}" in css,
+        "& thead th:last-child{border-start-end-radius:var(--r-inner)}" in css,
+    ) == (True, True)
+
+
+def test_the_header_of_a_table_is_light_so_its_text_needs_no_white_ink() -> None:
+    header_rule = re.search(
+        r"table\.rep\{.*?& thead th\{([^{}]*)\}", stylesheet_without_comments(), re.DOTALL
+    )
+
+    assert header_rule is not None
+    assert ("var(--hdr-fg)" in header_rule.group(1), "color:var(--muted)" in header_rule.group(1)) == (
+        False,
+        True,
+    )
+
+
+def test_a_toned_row_keeps_a_visible_edge_in_forced_colours_where_box_shadows_are_dropped() -> None:
+    forced = COMMENT.sub("", block_opened_by(stylesheet(), "@media (forced-colors: active){"))
+
+    assert (
+        "tr.row.tint > td:first-child" in forced,
+        "tr.row.danger > td:first-child" in forced,
+        "border-inline-start:3px solid CanvasText" in forced,
+    ) == (True, True, True)
+
+
+def test_only_a_cell_marked_blank_is_hatched() -> None:
+    hatched = [selector for selector in selectors_declaring("background") if ".blank" in selector]
+
+    assert hatched == ["& td.c.blank > span"]
