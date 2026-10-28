@@ -538,37 +538,46 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	   ignore border-radius. border-spacing:0 keeps the row rules looking like collapsed borders. */
 	table.rep{width:100%; table-layout:fixed; font-size:14px; border-collapse:separate; border-spacing:0;
 		& thead th{position:sticky; top:0; z-index:3; text-align:start; font-size:11px; font-weight:700;
-			text-transform:uppercase; letter-spacing:0.06em; color:var(--hdr-fg);
-			background:linear-gradient(180deg, color-mix(in srgb, var(--hdr) 88%, white) 0%, var(--hdr) 100%);
-			padding:12px 16px; vertical-align:bottom}
+			text-transform:uppercase; letter-spacing:0.06em; color:var(--muted);
+			background:color-mix(in srgb, var(--panel) 70%, var(--surface));
+			border-block-end:2px solid color-mix(in srgb, var(--accent-fg) 35%, var(--line));
+			padding:13px 16px 11px; vertical-align:bottom}
 		/* --r-inner = the wrapper's radius minus its 1px border, so the header sits flush in the corner. */
 		& thead th:first-child{border-start-start-radius:var(--r-inner)}
 		& thead th:last-child{border-start-end-radius:var(--r-inner)}
 		& th.num{text-align:end}
 		& > tbody > tr:last-child > td{border-block-end:none}
-		& tr.group td{position:sticky; top:var(--hdr-h); z-index:2; background:var(--surface); padding:18px 16px 8px;
-			font-weight:700; font-size:13px; color:var(--ink); box-shadow:inset 0 -1px 0 var(--rule)}
-		& tr.group .st{float:right; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums}
+		& tr.group td{position:sticky; top:var(--hdr-h); z-index:2; background:var(--surface); padding:22px 16px 8px;
+			font-weight:700; font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted);
+			box-shadow:inset 0 -1px 0 var(--rule)}
+		& tr.group .st{float:right; font-weight:600; font-size:13px; letter-spacing:0; text-transform:none; color:var(--ink);
+			font-variant-numeric:tabular-nums}
 		& tbody td{padding:16px; border-block-end:1px solid var(--line); vertical-align:top}
-		& tbody tr.row:hover td{background-image:linear-gradient(var(--row-hover),var(--row-hover))}
+		& tbody tr.row:hover > td{background-image:linear-gradient(var(--row-hover),var(--row-hover))}
 		/* Row emphasis (reserved row key `tone`): muted = a struck, dimmed "rejected" row; danger = a
 		   red-tinted "bad" row. The strike sits on the title only — struck numbers read as edits. */
 		& tbody tr.row.muted td{position:relative; background-color:var(--surface);
 			border-block-end-color:color-mix(in srgb, var(--line) 55%, var(--surface))}
 		& tbody tr.row.muted td::after{content:""; position:absolute; inset:0; background:var(--surface); opacity:0.45; pointer-events:none}
 		& tbody tr.row.muted td.title{text-decoration:line-through; text-decoration-color:var(--rule)}
-		& tbody tr.row.danger td{background:var(--danger-bg)}
-		& tbody tr.row.danger:hover td{background:var(--danger-bg)}
-		/* tint_by: a faint whole-row heatmap keyed to a badge column's tone. The tr sets --tb (inherited
-		   by its td); the tint holds through hover so the band stays legible. An explicit row tone
-		   (muted/danger) wins in the template — a toned row never carries a tint class. */
-		& tbody tr.row.tint td{background:var(--tb)}
-		& tbody tr.row.tint:hover td{background:var(--tb)}
-		& tbody tr.row.tint.slate{--tb:var(--neutral-bg)} & tbody tr.row.tint.blue{--tb:var(--info-bg)}
-		& tbody tr.row.tint.green{--tb:var(--success-bg)} & tbody tr.row.tint.amber{--tb:var(--warning-bg)}
-		& tbody tr.row.tint.red{--tb:var(--danger-bg)} & tbody tr.row.tint.violet{--tb:var(--accent-bg)}
-		& tbody tr.row.tint.teal{--tb:var(--teal-bg)} & tbody tr.row.tint.sky{--tb:var(--sky-bg)}
-		& col.tint{background:var(--tb)}
+		/* tint_by: a faint whole-row heatmap keyed to a badge column's tone, plus a 3px bar of the tone's
+		   foreground on the row's first cell. The tr sets --tb and --tbar (inherited by its td); the
+		   hover wash is a background-image, so the tint holds through hover. Both rules read the row's own
+		   cells (> td) so a subtable inside a cell keeps its look. An explicit row tone (muted/danger)
+		   wins in the template — a toned row never carries a tint class. */
+		& tbody tr.row.tint > td{background:color-mix(in srgb, var(--tb, var(--danger-bg)) 45%, var(--surface))}
+		& tbody tr.row.danger > td{background:color-mix(in srgb, var(--tb, var(--danger-bg)) 45%, var(--surface))}
+		& tbody tr.row.tint > td:first-child{box-shadow:inset 3px 0 0 var(--tbar)}
+		& tbody tr.row.danger > td:first-child{box-shadow:inset 3px 0 0 var(--tbar, var(--danger-fg))}
+		& tbody tr.row.tint.slate{--tb:var(--neutral-bg); --tbar:var(--neutral-fg)}
+		& tbody tr.row.tint.blue{--tb:var(--info-bg); --tbar:var(--info-fg)}
+		& tbody tr.row.tint.green{--tb:var(--success-bg); --tbar:var(--success-fg)}
+		& tbody tr.row.tint.amber{--tb:var(--warning-bg); --tbar:var(--warning-fg)}
+		& tbody tr.row.tint.red{--tb:var(--danger-bg); --tbar:var(--danger-fg)}
+		& tbody tr.row.tint.violet{--tb:var(--accent-bg); --tbar:var(--accent-fg)}
+		& tbody tr.row.tint.teal{--tb:var(--teal-bg); --tbar:var(--teal-fg)}
+		& tbody tr.row.tint.sky{--tb:var(--sky-bg); --tbar:var(--sky-fg)}
+		& col.tint{background:color-mix(in srgb, var(--tb) 50%, transparent)}
 		& col.tint.neutral{--tb:var(--neutral-bg)} & col.tint.info{--tb:var(--info-bg)}
 		& col.tint.success{--tb:var(--success-bg)} & col.tint.warning{--tb:var(--warning-bg)}
 		& col.tint.danger{--tb:var(--danger-bg)} & col.tint.accent{--tb:var(--accent-bg)}
@@ -581,7 +590,7 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		& td .cell-p + .cell-p{margin-block-start:var(--s3)}
 		/* placement:cell badge column — the inline-block chips space out and wrap within the cell. */
 		& td.bc .chip{margin:1px 4px 1px 0}
-		& td.num{text-align:end; font-variant-numeric:tabular-nums; font-weight:600; font-size:16px}
+		& td.num{text-align:end; font-variant-numeric:tabular-nums; font-weight:600; font-size:17px; letter-spacing:-0.01em}
 		/* indicator column — a colour-only status dot in its own cell (orthogonal signals per row). */
 		& th.ind,& td.ind{text-align:center}
 		& .dot{display:inline-block; width:11px; height:11px; border-radius:var(--r-pill); background:var(--neutral-fg); vertical-align:middle;
@@ -606,8 +615,11 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	/* comparison — a feature matrix: options across the top, features down the side; one column can be
 	   highlighted as the recommended pick. Bare bool cells render ✓/✗, strings render as text. */
 	.cmp{width:100%; border-collapse:separate; border-spacing:0; font-size:13.5px; margin-block:var(--s4);
-		border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:var(--surface);
-		& th{padding:11px 16px; font-size:12px; font-weight:700; text-align:center; background:var(--panel); border-block-end:1px solid var(--line)}
+		border:1px solid var(--edge); border-radius:var(--r-md); overflow:hidden; background:var(--surface);
+		box-shadow:var(--shadow);
+		& th{padding:11px 16px; font-size:12px; font-weight:700; text-align:center;
+			background:color-mix(in srgb, var(--panel) 70%, var(--surface));
+			border-block-end:2px solid color-mix(in srgb, var(--accent-fg) 35%, var(--line))}
 		& th:first-child{text-align:start; color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em}
 		& td{padding:11px 16px; border-block-start:1px solid var(--line); text-align:center}
 		& td.feat{text-align:start; font-weight:600}
@@ -616,14 +628,24 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 		   header. Scoped to .cmp so the shared --accent-bg token is untouched; works in both themes.
 		   The cap is an inset box-shadow, NOT a border-block-start: a real top border would add 3px to
 		   th.hl's height and knock it out of vertical alignment with its sibling header cells. */
-		& th.hl{background:var(--accent-bg); color:var(--accent-fg); box-shadow:inset 0 3px 0 var(--accent-fg)}
-		& td.hl{background:var(--accent-bg)}
+		& th.hl{background:color-mix(in srgb, var(--accent-bg) 70%, var(--surface)); color:var(--accent-fg);
+			box-shadow:inset 0 3px 0 var(--accent-fg)}
+		& td.hl{background:color-mix(in srgb, var(--accent-bg) 45%, var(--surface))}
 		& .hl{border-inline:1px solid var(--accent-line)}
-		& .chk{font-weight:700} & .chk.good{color:var(--success-fg)} & .chk.bad{color:var(--danger-fg)}
-		& .ct{color:var(--muted)}
-		& .ct.info{color:var(--info-fg)} & .ct.success{color:var(--success-fg)} & .ct.warning{color:var(--warning-fg)}
-		& .ct.danger{color:var(--danger-fg)} & .ct.accent{color:var(--accent-fg)} & .ct.neutral{color:var(--neutral-fg)}
-		& .ct.teal{color:var(--teal-fg)} & .ct.sky{color:var(--sky-fg)}}
+		& .chk{display:inline-grid; place-items:center; inline-size:22px; block-size:22px; border-radius:var(--r-pill);
+			font-size:12px; font-weight:700}
+		& .chk.good{color:var(--success-fg); background:var(--success-bg)}
+		& .chk.bad{color:var(--danger-fg); background:var(--danger-bg)}
+		& .ct{display:inline-block; padding:2px 10px; border-radius:var(--r-pill); font-size:12px; font-weight:600;
+			color:var(--muted); background:var(--neutral-bg)}
+		& .ct.info{color:var(--info-fg); background:var(--info-bg)}
+		& .ct.success{color:var(--success-fg); background:var(--success-bg)}
+		& .ct.warning{color:var(--warning-fg); background:var(--warning-bg)}
+		& .ct.danger{color:var(--danger-fg); background:var(--danger-bg)}
+		& .ct.accent{color:var(--accent-fg); background:var(--accent-bg)}
+		& .ct.neutral{color:var(--neutral-fg); background:var(--neutral-bg)}
+		& .ct.teal{color:var(--teal-fg); background:var(--teal-bg)}
+		& .ct.sky{color:var(--sky-fg); background:var(--sky-bg)}}
 
 	/* matrix — rows × columns, one state per cell (a coverage / RACI / capability grid). Unlike
 	   `comparison` (options × features, a recommend column), the CELL is the signal: a badge/tone fills
@@ -633,21 +655,22 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	   the row-header column hugs its labels and the data columns share the rest. */
 	.mx-wrap{margin-block:var(--s6); border:1px solid var(--line); border-radius:var(--r-md);
 		overflow-x:auto; background:var(--surface); box-shadow:var(--shadow)}
-	.mx{width:100%; border-collapse:separate; border-spacing:0; font-size:13px;
-		& th,& td{border-block-end:1px solid var(--line); border-inline-end:1px solid var(--line)}
-		& thead th:last-child,& tbody td:last-child{border-inline-end:none}
-		& tbody tr:last-child th,& tbody tr:last-child td{border-block-end:none}
-		& thead th{background:var(--panel); color:var(--muted); font-size:10.5px; font-weight:700;
-			text-transform:uppercase; letter-spacing:0.05em; text-align:center; padding:9px 12px; vertical-align:bottom}
-		& thead th:first-child{text-align:start; border-start-start-radius:var(--r-inner)}
-		& tbody th{background:var(--panel); font-weight:640; font-size:13px; color:var(--ink);
-			text-align:start; padding:0 12px; white-space:nowrap}
-		& tbody td{text-align:center; padding:0; height:44px; vertical-align:middle}
+	.mx{width:100%; border-collapse:separate; border-spacing:4px; padding:4px; font-size:13px;
+		& thead th{background:transparent; color:var(--muted); font-size:10.5px; font-weight:700;
+			text-transform:uppercase; letter-spacing:0.05em; text-align:center; padding:8px 10px 4px; vertical-align:bottom}
+		& thead th:first-child{text-align:start}
+		& tbody th{background:transparent; font-weight:640; font-size:13px; color:var(--ink);
+			text-align:start; padding:0 12px 0 8px; white-space:nowrap}
+		& tbody td{text-align:center; padding:0; height:40px; vertical-align:middle}
 		/* the cell's fill + centred label; --cb/--cf come from the colour class (or the muted default for
 		   a label-only, untinted cell). The span fills the td so the tint reads as the whole cell. */
 		& td.c > span{display:flex; align-items:center; justify-content:center; height:100%; padding:0 8px;
-			background:var(--cb,transparent); color:var(--cf,var(--muted)); font-size:10px; font-weight:700;
+			border-radius:8px; background:color-mix(in srgb, var(--cb, transparent) 85%, var(--surface));
+			box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--cf, transparent) 18%, transparent);
+			color:var(--cf,var(--muted)); font-size:10px; font-weight:700;
 			text-transform:uppercase; letter-spacing:0.04em}
+		& td.c > span:empty{background:repeating-linear-gradient(135deg, transparent 0 6px,
+			color-mix(in srgb, var(--line) 60%, transparent) 6px 7px); box-shadow:none}
 		& td.c .chip{background:var(--surface); color:var(--cf); margin-inline-end:6px}
 		& .c.slate{--cf:var(--neutral-fg); --cb:var(--neutral-bg)} & .c.blue{--cf:var(--info-fg); --cb:var(--info-bg)}
 		& .c.green{--cf:var(--success-fg); --cb:var(--success-bg)} & .c.amber{--cf:var(--warning-fg); --cb:var(--warning-bg)}
@@ -1202,6 +1225,9 @@ body{background-image:var(--page-wash); background-repeat:no-repeat}
 	@media (forced-colors: active){
 		.hero h1,.wrap.numbered > h2::before{background:none; -webkit-background-clip:border-box; background-clip:border-box;
 			color:CanvasText}
+		/* Forced colours drop box-shadows, which would erase a toned row's bar: draw it as a border. */
+		table.rep tbody tr.row.tint > td:first-child,table.rep tbody tr.row.danger > td:first-child{
+			border-inline-start:3px solid CanvasText}
 	}
 }
 
