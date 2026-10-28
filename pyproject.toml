@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Alex Yanchenko", email = "a.inbox.2026@gmail.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "emoji>=2.16",
     "jinja2>=3.1",
@@ -26,7 +26,6 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -40,8 +39,8 @@ Issues = "https://github.com/alex-yanchenko/skaldr/issues"
 
 [project.optional-dependencies]
 publish = [
-    "authlib>=1.8.0",
-    "filelock>=4.0",
+    "authlib>=1.9.1",
+    "filelock>=4.2.1",
     "httpx2>=2.13.1",
     "keyring>=25.7.0",
     "tenacity>=8.2,<10",
@@ -69,7 +68,7 @@ dev = [
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
