@@ -126,7 +126,7 @@ class NewItem:
     content: ItemContent
     parent_id: str | None = None
     into_id: str | None = None
-    into_raw_sections: RawSections = field(default=NO_SECTIONS)
+    into_raw_sections: RawSections = field(default_factory=lambda: NO_SECTIONS)
 
 
 @dataclass(frozen=True)
