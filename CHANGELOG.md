@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.3.0](https://github.com/alex-yanchenko/skaldr/compare/v4.2.0...v4.3.0) (2026-10-28)
+
+
+### Features
+
+* **export:** colour notion pie and xy charts as the page and the github export do ([#255](https://github.com/alex-yanchenko/skaldr/issues/255)) ([ce910b7](https://github.com/alex-yanchenko/skaldr/commit/ce910b753b62a064b0f4ff698c8a895df7dc01dd))
+* **render:** give tables, the comparison and the matrix a quieter look ([#259](https://github.com/alex-yanchenko/skaldr/issues/259)) ([d6bc1f6](https://github.com/alex-yanchenko/skaldr/commit/d6bc1f6320565ad87275434f567d27fbf0ec49d0))
+* **render:** refresh the page with colour, scroll-driven motion, a contents panel and opt-in numbered sections ([#256](https://github.com/alex-yanchenko/skaldr/issues/256)) ([1ecb132](https://github.com/alex-yanchenko/skaldr/commit/1ecb132c91a4c4e855bd2d00edf4ef1748d8c2ba))
+
 ## [4.2.0](https://github.com/alex-yanchenko/skaldr/compare/v4.1.0...v4.2.0) (2026-10-26)
 
 
