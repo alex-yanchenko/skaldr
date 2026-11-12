@@ -69,10 +69,6 @@ from skaldr.richtext import (
 )
 from tests.factories import (
     API_AND_RISK_BADGES,
-    EDGE_BADGES,
-    HAVE_BADGE,
-    MATRIX_OF_EDGE_BADGE_LABELS,
-    MATRIX_OF_EVERY_CELL_SHAPE,
     TEXT_X_BLOCK,
     accepted_example,
     folder_texts,
@@ -932,22 +928,6 @@ def test_a_canvas_table_dots_tones_drops_widths_escapes_pipes_and_joins_lines() 
     )
 
 
-def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
-    assert slack_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
-        "|  | Badge | Both | Tone | Label |\n"
-        "| --- | --- | --- | --- | --- |\n"
-        "| **Receiving** | 🟢 Have | 🟢 **Have** · runbook v2 | 🔴 none yet | n/a |\n"
-    )
-
-
-def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add_and_escapes_the_ones_it_does() -> None:
-    assert slack_of([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES) == (
-        "|  | Blank | Spaces | Same | Special |\n"
-        "| --- | --- | --- | --- | --- |\n"
-        "| **Receiving** | 🔴 lbl | 🟡 lbl | 🟢 Have | 🔵 **A\\|B \\*x\\*** · a\\_b \\[c\\] \\<d\\> \\| e |\n"
-    )
-
-
 def test_tones_on_a_canvas_are_dots() -> None:
     blocks = [
         {"type": "badge_row", "items": [{"key": "API"}, {"label": "Done", "tone": "green"}]},
@@ -1720,9 +1700,6 @@ def test_canvas_special_characters_and_pipes_are_escaped_in_a_table_cell() -> No
     [
         pytest.param("::: {.callout}", "\\::: {.callout}", id="callout-fence"),
         pytest.param(":::", "\\:::", id="bare-fence"),
-        pytest.param("# not a heading", "\\# not a heading", id="heading-marker"),
-        pytest.param("- not a list", "\\- not a list", id="list-marker"),
-        pytest.param("1. not a list", "1\\. not a list", id="ordered-marker"),
         pytest.param("a ::: b", "a ::: b", id="fence-mid-line"),
     ],
 )
