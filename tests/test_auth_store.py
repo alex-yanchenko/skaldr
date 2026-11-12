@@ -63,6 +63,7 @@ from tests.factories.auth_factory import (
     SlowSaveKeyring,
     assert_secret_not_in_error_chain,
     insecure_keyring_refusal,
+    keyring_answering_once_the_notice_is_logged,
     legacy_entry_json,
     make_jira_credentials,
     make_notion_credentials,
@@ -927,9 +928,19 @@ def test_a_program_that_sets_up_no_logging_shows_the_keychain_notice_on_stderr(t
         [
             "import keyring",
             "from skaldr.auth import store",
+            "import sys",
             "from tests.factories.auth_factory import SlowKeyring",
+            "slow = SlowKeyring(answers_after=30)",
+            "class AnswersOnceTheNoticeIsWritten:",
+            "    def write(self, text):",
+            "        sys.__stderr__.write(text)",
+            "        slow.released.set()",
+            "        return len(text)",
+            "    def flush(self):",
+            "        sys.__stderr__.flush()",
             "store.KEYCHAIN_NOTICE_SECONDS = 0.01",
-            "keyring.set_keyring(SlowKeyring(answers_after=0.05))",
+            "keyring.set_keyring(slow)",
+            "sys.stderr = AnswersOnceTheNoticeIsWritten()",
             "print(store.stored_jira_sign_ins())",
         ]
     )
@@ -1155,12 +1166,13 @@ def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.01)
-    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 5.0)
-    slow = SlowKeyring(answers_after=0.05)
-    slow.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
-    keyring.set_keyring(slow)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 25.0)
 
-    loaded = load_jira()
+    with keyring_answering_once_the_notice_is_logged() as slow:
+        slow.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
+        keyring.set_keyring(slow)
+
+        loaded = load_jira()
 
     assert (loaded, caplog.record_tuples, capsys.readouterr().err) == (
         SignIn(make_jira_credentials(), "keychain"),

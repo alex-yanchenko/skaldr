@@ -1,11 +1,12 @@
 import base64
 import json
+import logging
 import socket
 import threading
 import traceback
 from collections import Counter
-from collections.abc import Callable
-from contextlib import suppress
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from queue import Empty, SimpleQueue
 from urllib.parse import parse_qs, urlsplit
@@ -198,6 +199,28 @@ class SlowKeyring(InMemoryKeyring):
         super().delete_password(service, username)
 
 
+class _ReleaseTheKeyringOnANotice(logging.Handler):
+    def __init__(self, keyring_to_release: SlowKeyring) -> None:
+        super().__init__()
+        self.keyring_to_release = keyring_to_release
+
+    @override
+    def emit(self, record: logging.LogRecord) -> None:
+        self.keyring_to_release.released.set()
+
+
+@contextmanager
+def keyring_answering_once_the_notice_is_logged() -> Generator[SlowKeyring, None, None]:
+    slow = SlowKeyring(answers_after=30)
+    logger = logging.getLogger(store.__name__)
+    handler = _ReleaseTheKeyringOnANotice(slow)
+    logger.addHandler(handler)
+    try:
+        yield slow
+    finally:
+        logger.removeHandler(handler)
+
+
 class LockedKeyring(KeyringBackend):
     @properties.classproperty
     def priority(cls) -> float:
@@ -332,9 +355,12 @@ def favicon(_state: str) -> str:
 
 
 class FakeBrowser:
-    def __init__(self, *visits: Visit, resolves_localhost_to: str = "127.0.0.1") -> None:
+    def __init__(
+        self, *visits: Visit, resolves_localhost_to: str = "127.0.0.1", settles_before_returning: bool = False
+    ) -> None:
         self.visits = visits
         self.resolves_localhost_to = resolves_localhost_to
+        self.settles_before_returning = settles_before_returning
         self.opened: list[str] = []
         self.statuses: list[int | str] = []
         self._thread: threading.Thread | None = None
@@ -352,6 +378,8 @@ class FakeBrowser:
         targets = [origin + visit(query["state"][0]) for visit in self.visits]
         self._thread = threading.Thread(target=self._visit_in_order, args=(targets,), daemon=True)
         self._thread.start()
+        if self.settles_before_returning:
+            self.finished()
 
     def _visit_in_order(self, targets: list[str]) -> None:
         try:

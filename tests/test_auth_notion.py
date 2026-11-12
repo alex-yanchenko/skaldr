@@ -198,10 +198,10 @@ def test_a_second_matching_callback_is_turned_away() -> None:
 )
 def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_endpoint(visit: Visit) -> None:
     seen: list[httpx2.Request] = []
-    browser = FakeBrowser(visit)
+    browser = FakeBrowser(visit, settles_before_returning=True)
 
-    with pytest.raises(AuthError, match=r"^Timed out after 0\.3 seconds waiting for Notion"):
-        sign_in(browser, seen, timeout_seconds=0.3)
+    with pytest.raises(AuthError, match=r"^Timed out after 0\.2 seconds waiting for Notion"):
+        sign_in(browser, seen, timeout_seconds=0.2)
 
     assert (browser.finished(), seen) == ([400], [])
 
