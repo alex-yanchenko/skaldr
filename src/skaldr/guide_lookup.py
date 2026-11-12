@@ -1,7 +1,7 @@
 import json
 import types
 from dataclasses import dataclass
-from typing import Annotated, ForwardRef, Literal, Union, get_args, get_origin
+from typing import Annotated, Final, ForwardRef, Literal, Union, get_args, get_origin
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -18,9 +18,9 @@ _TABLE_HEADER_LINES = 2
 _NONE_TYPE = type(None)
 _BLOCK_TYPE_FIELD = "type"
 _INDENT = "  "
-_SECTION_LEVEL = 2
-_SUBSECTION_LEVEL = 3
-_HEADING_TAGS = {"h2": _SECTION_LEVEL, "h3": _SUBSECTION_LEVEL}
+_SECTION_LEVEL: Final = 2
+_SUBSECTION_LEVEL: Final = 3
+_HEADING_TAGS: Final = {"h2": _SECTION_LEVEL, "h3": _SUBSECTION_LEVEL}
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,8 @@ class _Section:
     title: str
     first_line: int
     end_line: int
-    level: int = _SECTION_LEVEL
+    level: int
+    folded: str
 
 
 def _block_models() -> dict[str, type[BaseModel]]:
@@ -131,13 +132,13 @@ def _starts_at_a_word(title: str, wanted: str) -> bool:
 
 
 def _first_matching_tier(pool: list[_Section], wanted: str) -> list[_Section]:
-    exact = [section for section in pool if _plain(section.title).casefold() == wanted]
+    exact = [section for section in pool if section.folded == wanted]
     if exact:
         return exact[:1]
-    prefixed = [section for section in pool if _plain(section.title).casefold().startswith(wanted)]
+    prefixed = [section for section in pool if section.folded.startswith(wanted)]
     if prefixed:
         return prefixed
-    return [section for section in pool if _starts_at_a_word(_plain(section.title).casefold(), wanted)]
+    return [section for section in pool if _starts_at_a_word(section.folded, wanted)]
 
 
 @dataclass(frozen=True)
@@ -160,8 +161,9 @@ class _Guide:
             _Section(
                 title,
                 first,
-                next((later for later, other, _ in headings[at + 1 :] if other <= level), len(lines)),
+                next((start for start, deeper, _ in headings[at + 1 :] if deeper <= level), len(lines)),
                 level,
+                _plain(title).casefold(),
             )
             for at, (first, level, title) in enumerate(headings)
         ]
@@ -172,22 +174,21 @@ class _Guide:
             [item for item in found if item.level == _SUBSECTION_LEVEL],
         )
 
-    def subsections_of(self, section: _Section) -> list[_Section]:
-        return [item for item in self.subsections if section.first_line < item.first_line < section.end_line]
-
     def section_text(self, section: _Section) -> str:
         return "\n".join(self.lines[section.first_line : section.end_line]).rstrip()
 
     def section_named(self, title: str) -> _Section | None:
         return next((section for section in self.sections if section.title == title), None)
 
+    def in_document_order(self) -> list[_Section]:
+        return sorted([*self.sections, *self.subsections], key=lambda section: section.first_line)
+
     def section_matching(self, query: str) -> _Section | None:
         wanted = _plain(query).casefold()
-        for pool in (self.sections, self.subsections):
-            matched = _first_matching_tier(pool, wanted)
-            if matched:
-                return matched[0] if len(matched) == 1 and wanted else None
-        return None
+        if not wanted:
+            return None
+        matched = _first_matching_tier([*self.sections, *self.subsections], wanted)
+        return matched[0] if len(matched) == 1 else None
 
     def blocks_table_rows(self, name: str) -> str | None:
         blocks = self.section_named(_BLOCKS_SECTION)
@@ -237,7 +238,7 @@ def lookup(name: str, guide_text: str) -> str:
     if section is None:
         raise UnknownGuideTopicError(
             f"unknown block or section '{name}'; the blocks are {', '.join(block_names())}; "
-            f"the sections are {', '.join(_plain(item.title) for item in guide.sections)}"
+            f"the sections are {', '.join(_plain(item.title) for item in guide.in_document_order())}"
         )
     return guide.section_text(section)
 
@@ -245,11 +246,7 @@ def lookup(name: str, guide_text: str) -> str:
 def list_topics(guide_text: str) -> str:
     guide = _Guide.parse(guide_text)
     titles = [
-        line
-        for section in guide.sections
-        for line in (
-            section.title,
-            *(f"{_INDENT}{item.title}" for item in guide.subsections_of(section)),
-        )
+        f"{_INDENT if section.level == _SUBSECTION_LEVEL else ''}{section.title}"
+        for section in guide.in_document_order()
     ]
     return "\n".join(["Guide sections", *titles, "", "Blocks", *block_names()])

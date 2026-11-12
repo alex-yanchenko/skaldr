@@ -187,7 +187,7 @@ def test_an_unknown_name_lists_the_blocks_and_the_sections() -> None:
 
     assert str(raised.value) == (
         f"unknown block or section 'gamma'; the blocks are {', '.join(block_names())}; "
-        "the sections are Blocks, The quote, meta, Rich text, Other"
+        "the sections are Blocks, The quote, Quote detail, meta, Rich text, Other"
     )
 
 
@@ -299,9 +299,7 @@ def test_an_unknown_name_on_the_command_line_fails_listing_blocks_and_sections(
 
     captured = capsys.readouterr()
     sections = ", ".join(
-        line.replace("`", "")
-        for line in list_topics(GUIDE).split("\n\nBlocks\n")[0].splitlines()[1:]
-        if not line.startswith(" ")
+        line.replace("`", "").strip() for line in list_topics(GUIDE).split("\n\nBlocks\n")[0].splitlines()[1:]
     )
     sections += ", A complete example"
     assert exit_code == 1
@@ -342,6 +340,31 @@ def test_the_listing_with_another_flag_is_refused(capsys: pytest.CaptureFixture[
 
     assert raised.value.code == 2
     assert "--guide runs on its own; drop --strict" in capsys.readouterr().err
+
+
+def test_an_ambiguous_title_prefix_across_sections_is_unknown_even_beside_a_longer_title() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## Over one\n\n## Over two\n\n## Reover")
+
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("over", guide)
+
+
+@pytest.mark.parametrize("query", ["", "   "], ids=["empty", "blank"])
+def test_an_empty_or_blank_query_is_unknown(query: str) -> None:
+    with pytest.raises(UnknownGuideTopicError):
+        lookup(query, SMALL_GUIDE)
+
+
+def test_an_exact_subsection_title_beats_a_longer_section_title_that_starts_with_it() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## Overview\n\n### Over\n\nSub prose.")
+
+    assert lookup("over", guide) == "### Over\n\nSub prose."
+
+
+def test_a_subsection_title_prefix_is_unique_even_when_a_section_title_has_it_as_a_word() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## All about zeta\n\n### Zeta details\n\nSub prose.")
+
+    assert lookup("zeta", guide) == "### Zeta details\n\nSub prose."
 
 
 def test_a_subsection_title_prints_that_subsection_only() -> None:
