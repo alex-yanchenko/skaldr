@@ -330,6 +330,14 @@ def test_a_media_block_keeps_its_kind_url_and_caption(block: dict[str, Any], nod
         ),
         pytest.param({"content": "plain"}, (CodeBlock("plain", ""),), id="no-label"),
         pytest.param(
+            {"label": " : ", "content": "x"}, (CodeBlock("x", ""),), id="a-label-of-only-a-colon-is-no-label"
+        ),
+        pytest.param(
+            {"label": "Run:", "content": "x"},
+            (Paragraph(bold("Run")), CodeBlock("x", "")),
+            id="one-trailing-colon-is-dropped",
+        ),
+        pytest.param(
             {"content": "gh run list", "lang": "shell"}, (CodeBlock("gh run list", "shell"),), id="lang"
         ),
         pytest.param(

@@ -355,6 +355,11 @@ def test_an_empty_or_blank_query_is_unknown(query: str) -> None:
         lookup(query, SMALL_GUIDE)
 
 
+def test_an_empty_query_is_unknown_even_in_a_guide_of_one_section() -> None:
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("", "# Guide\n\n## Only\n\nBody.\n")
+
+
 def test_an_exact_subsection_title_beats_a_longer_section_title_that_starts_with_it() -> None:
     guide = SMALL_GUIDE.replace("## Other", "## Overview\n\n### Over\n\nSub prose.")
 
