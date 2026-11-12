@@ -96,6 +96,13 @@ typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
 
+[tool.coverage.run]
+branch = true
+source = ["skaldr"]
+
+[tool.coverage.report]
+fail_under = 97
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error"]
