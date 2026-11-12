@@ -146,7 +146,7 @@ class Applier:
         self.remote[ref] = replace(
             remote,
             comparable=with_parts(self._comparable(ref, item), read_back, parts),
-            raw_sections=_raw_with_written_parts(self._raw_sections(ref), remote.raw_sections, parts),
+            raw_sections=self._raw_after_write(ref, remote, parts),
         )
         written = item.model_copy(
             update={
@@ -158,6 +158,13 @@ class Applier:
             }
         )
         return with_item(self.state, ref, target_plan.target, written)
+
+    def _raw_after_write(self, ref: ItemRef, remote: RemoteItem, parts: Sequence[Part]) -> RawSections:
+        before = self.remote.get(ref)
+        put_the_stamp_back = before is not None and before.stamp is None and remote.stamp is not None
+        if put_the_stamp_back:
+            return remote.raw_sections
+        return _raw_with_written_parts(self._raw_sections(ref), remote.raw_sections, parts)
 
     def _raw_sections(self, ref: ItemRef) -> RawSections:
         return self.remote[ref].raw_sections if ref in self.remote else NO_SECTIONS

@@ -412,6 +412,13 @@ def test_a_fake_item_that_lost_its_stamp_but_holds_what_skaldr_wrote_gets_the_wr
             "Sow in May.",
             id="document-page-with-its-own-child-pages",
         ),
+        pytest.param(
+            DOCUMENT_PAGE,
+            Stamp(DOC_ID, None),
+            make_garden_blocks(intro="Welcome back to the garden."),
+            "Welcome back to the garden.",
+            id="two-writes-after-the-first-puts-the-stamp-back",
+        ),
     ],
 )
 def test_a_notion_page_that_lost_its_stamp_but_holds_what_skaldr_wrote_gets_the_write_and_its_stamp_back(
