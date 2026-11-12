@@ -275,6 +275,7 @@ class FakeTransport:
         item.revision = self._bump()
 
     def fill_a_page_left_empty(self, item_id: str, request: NewItem, /) -> RemoteItem:
+        self._refuse_a_stale_layout(item_id, request.into_raw_sections)
         self._write(("fill", item_id))
         item = self.items[item_id]
         content = self.comparable_form(request.content)
