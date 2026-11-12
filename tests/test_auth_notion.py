@@ -200,8 +200,8 @@ def test_a_callback_that_does_not_answer_this_sign_in_never_reaches_the_token_en
     seen: list[httpx2.Request] = []
     browser = FakeBrowser(visit)
 
-    with pytest.raises(AuthError, match=r"^Timed out after 2 seconds waiting for Notion"):
-        sign_in(browser, seen, timeout_seconds=2)
+    with pytest.raises(AuthError, match=r"^Timed out after 0\.3 seconds waiting for Notion"):
+        sign_in(browser, seen, timeout_seconds=0.3)
 
     assert (browser.finished(), seen) == ([400], [])
 

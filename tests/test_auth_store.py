@@ -928,8 +928,8 @@ def test_a_program_that_sets_up_no_logging_shows_the_keychain_notice_on_stderr(t
             "import keyring",
             "from skaldr.auth import store",
             "from tests.factories.auth_factory import SlowKeyring",
-            "store.KEYCHAIN_NOTICE_SECONDS = 0.05",
-            "keyring.set_keyring(SlowKeyring(answers_after=0.3))",
+            "store.KEYCHAIN_NOTICE_SECONDS = 0.01",
+            "keyring.set_keyring(SlowKeyring(answers_after=0.05))",
             "print(store.stored_jira_sign_ins())",
         ]
     )
@@ -1154,8 +1154,9 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
 def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
-    slow = SlowKeyring(answers_after=0.5)
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.01)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 5.0)
+    slow = SlowKeyring(answers_after=0.05)
     slow.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
     keyring.set_keyring(slow)
 
