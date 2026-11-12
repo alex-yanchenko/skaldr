@@ -554,20 +554,24 @@ def test_sync_short_circuits_when_skills_dir_is_absent(
     assert not (tmp_path / ".claude").exists()
 
 
-def test_sync_never_raises_when_the_claude_dir_is_unsearchable(
+@pytest.mark.skipif(os.geteuid() == 0, reason="root searches a folder whatever its mode")
+def test_sync_writes_nothing_and_does_not_raise_when_the_claude_dir_is_unsearchable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # a locked-down home: ~/.claude isn't searchable, so even stat-ing skills/ raises PermissionError.
-    # The setup guard must swallow it — reaching the end of this test (no exception) is the assertion.
     _enable_sync(monkeypatch)
     claude = tmp_path / ".claude"
     (claude / "skills").mkdir(parents=True)
     claude.chmod(0o000)
 
     try:
-        sync_installed_skills(home=tmp_path)  # must not raise
+        sync_installed_skills(home=tmp_path)
     finally:
-        claude.chmod(0o755)  # restore so tmp cleanup can descend
+        claude.chmod(0o755)
+
+    assert sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*")) == [
+        Path(".claude"),
+        Path(".claude/skills"),
+    ]
 
 
 def test_sync_never_raises_on_a_permission_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -656,3 +660,72 @@ def test_main_refreshes_a_drifted_skill_on_a_normal_render(
     assert main([str(report), "-o", str(tmp_path / "r.html")]) == 0
 
     assert dest.read_bytes() == _BUNDLED_SKALDR_SKILL  # main()'s sync refreshed it
+
+
+def _home_at(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".claude").mkdir()
+    return tmp_path / ".claude"
+
+
+def test_the_install_skill_flag_installs_the_bundled_skill_under_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    claude = _home_at(tmp_path, monkeypatch)
+    installed = claude / "skills" / "skaldr" / "SKILL.md"
+
+    rc = main(["--install-skill"])
+
+    out = capsys.readouterr().out
+    assert (rc, installed.read_bytes(), f"OK  installed skaldr skill -> {installed}\n" in out) == (
+        0,
+        _BUNDLED_SKALDR_SKILL,
+        True,
+    )
+
+
+def test_the_install_skill_flag_reports_a_skill_folder_it_cannot_create(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    claude = _home_at(tmp_path, monkeypatch)
+    blocked = claude / "skills" / "skaldr"
+    blocked.parent.mkdir()
+    blocked.write_text("a file where the folder belongs\n", encoding="utf-8")
+
+    rc = main(["--install-skill"])
+
+    captured = capsys.readouterr()
+    assert (rc, captured.err) == (
+        1,
+        f"error: could not install the skill into {blocked}: [Errno 17] File exists: '{blocked}'\n",
+    )
+
+
+def test_the_install_plan_rule_flag_writes_the_rule_block_into_claude_md_under_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    claude = _home_at(tmp_path, monkeypatch)
+    claude_md = claude / "CLAUDE.md"
+
+    rc = main(["--install-plan-rule"])
+
+    written = claude_md.read_text(encoding="utf-8")
+    assert (
+        rc,
+        written.count(_PLAN_RULE_BEGIN),
+        written.count(_PLAN_RULE_END),
+        capsys.readouterr().out.startswith(f"OK  added the plan-workflow rule in {claude_md}\n"),
+    ) == (0, 1, 1, True)
+
+
+def test_the_install_plan_rule_flag_reports_a_claude_md_it_cannot_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    claude = _home_at(tmp_path, monkeypatch)
+    claude_md = claude / "CLAUDE.md"
+    claude_md.mkdir()
+
+    rc = main(["--install-plan-rule"])
+
+    err = capsys.readouterr().err
+    assert (rc, err.startswith(f"error: could not update {claude_md}: ")) == (1, True)

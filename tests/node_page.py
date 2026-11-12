@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -8,7 +9,21 @@ from typing import TypedDict
 import pytest
 
 NODE = shutil.which("node")
-requires_node = pytest.mark.skipif(NODE is None, reason="the page scripts run under node")
+
+
+def skipped_without_node(node: str | None, ci: str | None) -> bool:
+    return node is None and not ci
+
+
+def node_binary() -> str:
+    if NODE is None:
+        pytest.fail("node is not installed, and the page script tests need it")
+    return NODE
+
+
+requires_node = pytest.mark.skipif(
+    skipped_without_node(NODE, os.environ.get("CI")), reason="the page scripts run under node"
+)
 
 _PAGE_DRIVER = """
 const vm = require("vm");
@@ -203,7 +218,6 @@ def _drive_page(
     popover_supported: bool = True,
     narrow: bool = False,
 ) -> _DrivenPage:
-    assert NODE is not None
     payload = {
         "scripts": scripts,
         "storage": run.storage,
@@ -217,7 +231,7 @@ def _drive_page(
         "narrow": narrow,
     }
     finished = subprocess.run(
-        [NODE, "-e", _PAGE_DRIVER],
+        [node_binary(), "-e", _PAGE_DRIVER],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -250,11 +264,10 @@ def run_print_cycle(scripts: list[str], disclosures: list[bool]) -> PrintCycle:
 
 
 def call_script_function(script: str, name: str, argument: str) -> object:
-    assert NODE is not None
     declaration = re.search(rf"^\t*function {name}\(.*?^\t\}}$", script, flags=re.DOTALL | re.MULTILINE)
     assert declaration is not None
     finished = subprocess.run(
-        [NODE, "-e", _FUNCTION_DRIVER],
+        [node_binary(), "-e", _FUNCTION_DRIVER],
         input=json.dumps({"source": declaration.group(0), "call": name, "argument": argument}),
         capture_output=True,
         text=True,
