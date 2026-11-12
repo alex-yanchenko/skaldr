@@ -2188,7 +2188,7 @@ def test_an_oversized_opening_before_the_first_heading_is_named_as_the_opening_s
 def test_an_oversized_section_is_named_by_its_heading_text_not_its_markup() -> None:
     nodes = (Toggle((Plain("Q3 [draft]"),), 2, (Paragraph((Plain("y" * 50),)),)),)
 
-    assert _chunked(nodes, 20).oversized_sections == ("## Q3 [draft]",)
+    assert _chunked(nodes, 20).unsplittable_sections == ("## Q3 [draft]",)
 
 
 def test_two_sections_that_exactly_fill_the_limit_share_one_chunk() -> None:
@@ -3048,7 +3048,7 @@ def test_an_oversized_section_is_named_by_the_heading_marks_the_page_writes() ->
         Heading(5, (Plain("Deep"),)),
     ]
 
-    assert _chunked(nodes, 20).oversized_sections == ("# Big",)
+    assert _chunked(nodes, 20).unsplittable_sections == ("# Big",)
 
 
 def test_a_carried_heading_counts_toward_the_part_it_starts() -> None:

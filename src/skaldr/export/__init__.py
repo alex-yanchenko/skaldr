@@ -222,7 +222,7 @@ def _notion_pages(document: LoweredDocument, notion_width: NotionWidth, chunk: i
     return RenderedExport(
         document.title,
         _chunk_pages(split.chunks),
-        unsplittable_sections=split.oversized_sections,
+        unsplittable_sections=split.unsplittable_sections,
         icon=document.icon,
         cover=document.cover,
     )

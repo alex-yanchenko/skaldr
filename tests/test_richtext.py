@@ -24,11 +24,11 @@ from skaldr.richtext import (
     StyleName,
     TextRunWriter,
     Tinted,
-    VisibleText,
     parse_rich,
     write_runs,
 )
 from skaldr.richtext_syntax import MAX_NESTING
+from tests.factories.richtext_factory import visible_text
 
 FULL_CONTEXT = RichContext(
     reference_numbers={"sop": 1},
@@ -959,7 +959,7 @@ def test_visible_text_reads_every_run_as_a_reader_would() -> None:
         InlineMath("x_i"),
     )
 
-    assert write_runs(runs, VisibleText()) == "a b[2]who! H2O 3 hot x_i"
+    assert visible_text(runs) == "a b[2]who! H2O 3 hot x_i"
 
 
 class _TaggedRuns(TextRunWriter):

@@ -14,12 +14,11 @@ from skaldr.richtext import (
     Plain,
     RichContext,
     Styled,
-    VisibleText,
     parse_rich,
-    write_runs,
 )
 from skaldr.typed_links import issue_key_in_url, issue_url
 from tests.factories import make_report, markdown_of, notion_of, slack_of
+from tests.factories.richtext_factory import visible_text
 
 ADA = Person(
     notion="user://11111111-2222-3333-4444-555555555555", jira="5b10a2844c20165700ede21g", slack="U0EXAMPLE1"
@@ -110,7 +109,7 @@ def test_an_address_that_browses_no_issue_names_no_issue_key(url: str) -> None:
 
 
 def test_a_typed_link_reads_as_its_label_in_visible_text() -> None:
-    assert write_runs(parse_rich(TYPED_BODY, CONTEXT), VisibleText()) == (
+    assert visible_text(parse_rich(TYPED_BODY, CONTEXT)) == (
         "Due 1 Oct or the week; Ada owns ABC-123; see the plan."
     )
 

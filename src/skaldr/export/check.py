@@ -702,10 +702,7 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
 def feature_hits(
     report: Report, document: LoweredDocument, target: ExportTarget | None = None
 ) -> Iterator[FeatureHit]:
-    walk = _TreeWalk(
-        _model_hits_in_document_order(report, document),
-        target is not None and writes_definitions_as_blocks(target),
-    )
+    walk = _TreeWalk(_model_hits_in_document_order(report, document), writes_definitions_as_blocks(target))
     return walk.document(document.body)
 
 

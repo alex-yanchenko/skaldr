@@ -1,5 +1,4 @@
 from collections.abc import Callable, Mapping
-from typing import Any
 
 import pytest
 
@@ -98,20 +97,20 @@ MATRIX_WITH_BADGE_LABELS_THAT_ADD_NO_STATE: Mapping[ExportTarget, str] = {
 }
 
 
-DECISION_LIST: Mapping[ExportTarget, str] = {
+DECISION_LIST_PAGES: Mapping[ExportTarget, str] = {
     "markdown": "- ❓ open\n- ☑️ done\n",
     "notion": "- ❓ open\n- ☑️ done\n",
 }
 
 
-@pytest.mark.parametrize("target", DECISION_LIST)
+@pytest.mark.parametrize("target", DECISION_LIST_PAGES)
 def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs(target: ExportTarget) -> None:
     block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
 
-    assert WRITERS[target]([block]) == DECISION_LIST[target]
+    assert WRITERS[target]([block]) == DECISION_LIST_PAGES[target]
 
 
-NESTED_DECISION_LIST: Mapping[ExportTarget, str] = {
+NESTED_DECISION_LIST_PAGES: Mapping[ExportTarget, str] = {
     "markdown": "- ☑️ region\n  - ❓ failover\n  - ☑️ zone\n\n* [x] shipped\n* [ ] tested\n\n- ✅ rolled out\n",
     "notion": (
         "- ☑️ region\n\t- ❓ failover\n\t- ☑️ zone\n- [x] shipped\n- [ ] tested\n"
@@ -120,7 +119,7 @@ NESTED_DECISION_LIST: Mapping[ExportTarget, str] = {
 }
 
 
-@pytest.mark.parametrize("target", NESTED_DECISION_LIST)
+@pytest.mark.parametrize("target", NESTED_DECISION_LIST_PAGES)
 def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list(
     target: ExportTarget,
 ) -> None:
@@ -136,18 +135,14 @@ def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_l
         {"type": "status_list", "items": [{"state": "done", "text": "rolled out"}]},
     ]
 
-    assert WRITERS[target](blocks) == NESTED_DECISION_LIST[target]
-
-
-def _matrix_page(target: ExportTarget, matrix: dict[str, Any], badges: dict[str, Any]) -> str:
-    return WRITERS[target]([matrix], badges=badges)
+    assert WRITERS[target](blocks) == NESTED_DECISION_LIST_PAGES[target]
 
 
 @pytest.mark.parametrize("target", WRITERS)
 def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label(
     target: ExportTarget,
 ) -> None:
-    page = _matrix_page(target, MATRIX_OF_EVERY_CELL_SHAPE, HAVE_BADGE)
+    page = WRITERS[target]([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE)
 
     assert page == MATRIX_WITH_A_BADGE_AND_A_LABEL[target]
 
@@ -156,6 +151,6 @@ def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_the
 def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add_and_escapes_the_ones_it_does(
     target: ExportTarget,
 ) -> None:
-    page = _matrix_page(target, MATRIX_OF_EDGE_BADGE_LABELS, EDGE_BADGES)
+    page = WRITERS[target]([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES)
 
     assert page == MATRIX_WITH_BADGE_LABELS_THAT_ADD_NO_STATE[target]

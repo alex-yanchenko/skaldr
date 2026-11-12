@@ -800,9 +800,9 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
         )
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
-    for oversized in result.unsplittable_sections:
+    for unsplittable in result.unsplittable_sections:
         print(
-            f"warning: section '{oversized}' holds a part that cannot be split to fit --chunk {chunk} "
+            f"warning: section '{unsplittable}' holds a part that cannot be split to fit --chunk {chunk} "
             "(one block, or a heading with the block after it); that part stays whole",
             file=sys.stderr,
         )

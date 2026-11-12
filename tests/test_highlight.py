@@ -1,7 +1,7 @@
 import re
 from collections.abc import Iterator
 from html.parser import HTMLParser
-from typing import cast
+from typing import NoReturn, cast
 
 import pytest
 from markupsafe import Markup, escape
@@ -511,7 +511,7 @@ def test_a_pathological_block_past_the_size_cap_is_never_given_to_a_lexer(
 ) -> None:
     content = unit * (highlight.MAX_HIGHLIGHTED_CHARACTERS // len(unit) + 1)
 
-    def refuse_to_lex(name: str) -> Lexer:
+    def refuse_to_lex(name: str) -> NoReturn:
         raise AssertionError(f"a lexer for {name} was looked up for a block past the size cap")
 
     monkeypatch.setattr(highlight, "find_lexer", refuse_to_lex)

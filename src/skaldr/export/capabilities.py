@@ -884,7 +884,7 @@ def canvas_layout_has_too_many_columns(columns: int) -> bool:
     return columns > CANVAS_LAYOUT_COLUMN_LIMIT
 
 
-def writes_definitions_as_blocks(target: ExportTarget) -> bool:
+def writes_definitions_as_blocks(target: ExportTarget | None) -> bool:
     return target == "slack"
 
 

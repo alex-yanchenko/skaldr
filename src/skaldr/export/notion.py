@@ -915,7 +915,7 @@ def _section_label(section: Sequence[Node], heading_shift: int) -> str:
 @dataclass(frozen=True)
 class NotionChunks:
     chunks: tuple[str, ...]
-    oversized_sections: tuple[str, ...]
+    unsplittable_sections: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -942,13 +942,13 @@ def _sections(nodes: Sequence[Node], room: TableRoom) -> list[list[Node]]:
 def chunk_notion(nodes: Sequence[Node], budget: Budget, page_width: NotionWidth = "normal") -> NotionChunks:
     room = TableRoom.on_page(page_width, nodes)
     chunks: list[str] = []
-    oversized: list[str] = []
+    unsplittable: list[str] = []
     current_chunk = _Piece("", budget.nothing)
     for section in _sections(nodes, room):
         costed = [_CostedBlock(block, budget.cost(block)) for block in _rendered_blocks(section, room)]
         pieces = _section_pieces(costed, budget)
         if any(not budget.allows(piece.cost) for piece in pieces):
-            oversized.append(_section_label(section, room.heading_shift))
+            unsplittable.append(_section_label(section, room.heading_shift))
         for piece in pieces:
             if current_chunk.text and not budget.allows(current_chunk.cost + piece.cost):
                 chunks.append(current_chunk.text)
@@ -956,7 +956,7 @@ def chunk_notion(nodes: Sequence[Node], budget: Budget, page_width: NotionWidth 
             current_chunk = _Piece(current_chunk.text + piece.text, current_chunk.cost + piece.cost)
     if current_chunk.text:
         chunks.append(current_chunk.text)
-    return NotionChunks(tuple(chunks) or (render_notion(nodes, page_width),), tuple(oversized))
+    return NotionChunks(tuple(chunks) or (render_notion(nodes, page_width),), tuple(unsplittable))
 
 
 def _rendered_blocks_by_position(
