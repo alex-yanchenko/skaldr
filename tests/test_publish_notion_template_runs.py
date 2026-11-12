@@ -352,12 +352,11 @@ def test_an_apply_after_a_failed_fill_prints_the_fill_as_its_first_step(
 
     exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
 
-    assert (exit_code, capsys.readouterr().out.splitlines()[:2]) == (
+    assert (exit_code, capsys.readouterr().out) == (
         0,
-        [
-            f"notion page {NOTION_PAGE_ID}: fill     document {DOCUMENT_PAGE}",
-            f'notion page {NOTION_PAGE_ID}: create   section tools "Tools"',
-        ],
+        f"notion page {NOTION_PAGE_ID}: fill     document {DOCUMENT_PAGE}\n"
+        f'notion page {NOTION_PAGE_ID}: create   section tools "Tools"\n'
+        f"Published 2 steps. The publish state is in {state_path_for(path)}.\n",
     )
 
 

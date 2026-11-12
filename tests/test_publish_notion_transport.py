@@ -441,6 +441,17 @@ def test_an_unstamped_page_holding_only_this_documents_child_pages_is_archived()
     assert notion.pages[EMPTY_ROW].in_trash
 
 
+def test_an_archive_keys_an_unstamped_page_by_the_sections_skaldr_read_it_with() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
+    transport.read_item(created.item_id, created.comparable)
+
+    transport.archive_item(created.item_id, Archive(STAMP, _owned(created)))
+
+    assert notion.pages[created.item_id].in_trash
+
+
 def test_a_release_removes_skaldrs_sections_and_stamp_in_one_request_and_clears_only_set_owned_fields() -> (
     None
 ):
