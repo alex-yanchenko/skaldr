@@ -11,7 +11,7 @@ import time
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal, assert_never
+from typing import Literal
 
 from skaldr.errors import (
     ConnectorError,
@@ -29,11 +29,8 @@ from skaldr.export import (
     EXPORT_TARGETS,
     ExportTarget,
     RenderedExport,
-    export_adf,
-    export_markdown,
-    export_notion,
-    export_slack,
     render_export,
+    write_export,
 )
 from skaldr.guide_lookup import is_topic, list_topics, lookup
 from skaldr.models import Part, Report, content_files, load_report, package_path, package_text
@@ -790,17 +787,7 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
             )
         ).resolve()
         report = load_report(data_path)
-        match target:
-            case "notion":
-                result = export_notion(report, out_dir, chunk=chunk)
-            case "markdown":
-                result = export_markdown(report, out_dir)
-            case "adf":
-                result = export_adf(report, out_dir)
-            case "slack":
-                result = export_slack(report, out_dir)
-            case _:
-                assert_never(target)
+        result = write_export(out_dir, render_export(report, target, chunk=chunk))
     except (ReportError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -810,10 +797,9 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
             f"warning: {manifest} could not be read; pages an earlier export wrote were left in place",
             file=sys.stderr,
         )
-    for oversized in result.oversized_sections:
-        if target == "adf":
-            print(f"warning: {oversized}", file=sys.stderr)
-            continue
+    for warning in result.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    for oversized in result.unsplittable_sections:
         print(
             f"warning: section '{oversized}' holds a part that cannot be split to fit --chunk {chunk} "
             "(one block, or a heading with the block after it); that part stays whole",

@@ -7,7 +7,7 @@ from typing import Any, get_args
 import pytest
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion, render_export
+from skaldr.export import EXPORT_MANIFEST, ExportResult, render_export
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
@@ -101,7 +101,12 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
-from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
+from tests.factories.export_factory import (
+    CARDS_LABELLED_WITH_A_TRAILING_COLON,
+    OPEN_ROWS_BADGE,
+    export_markdown,
+    export_notion,
+)
 
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
@@ -2430,6 +2435,18 @@ def test_a_chunked_export_of_a_document_with_a_deep_heading_splits_where_it_did_
         "page.00.md": _section_text("Part 0", "z = 3", 20).replace("## ", "# ", 1),
         "page.01.md": "# Part 1\n### Zone C\n#### Bin 12\n```plain text\n" + "z = 3\n" * 20 + "```\n",
     }
+
+
+def test_a_chunked_render_names_the_sections_it_cannot_split_and_warns_of_none() -> None:
+    report = parse_report(make_report(blocks=heading_sections(1, "w = 4\n" * 40)))
+
+    rendered = render_export(report, "notion", chunk=50)
+
+    assert (list(rendered.pages), rendered.unsplittable_sections, rendered.warnings) == (
+        ["page.00.md"],
+        ("## Part 0",),
+        (),
+    )
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:

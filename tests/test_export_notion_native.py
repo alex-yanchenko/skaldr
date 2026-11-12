@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from skaldr.export import EXPORT_MANIFEST, export_notion, render_export
+from skaldr.export import EXPORT_MANIFEST, render_export
 from skaldr.export.budget import character_budget
 from skaldr.export.notion import NotionChunks, chunk_notion, render_notion, render_notion_regions
 from skaldr.export.runs import Chip, IndicatorMark, StatusMark
@@ -36,6 +36,7 @@ from skaldr.export_targets import ExportTarget
 from skaldr.models import parse_report
 from skaldr.richtext import Code, Plain
 from tests.factories import make_report, make_section, notion_of
+from tests.factories.export_factory import export_notion
 
 SITE_AND_OWNER = [{"label": "Site", "value": "West"}, {"label": "Owner:", "value": "ops"}]
 

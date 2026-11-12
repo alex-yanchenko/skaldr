@@ -19,7 +19,7 @@ from skaldr.export.slack import canvas_title, render_slack_document
 from skaldr.export.tree import LoweredDocument
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.frozen_model import FrozenModel
-from skaldr.models import Report
+from skaldr.models import NotionWidth, Report
 from skaldr.replace_file import replace_bytes, replace_file
 
 __all__ = [
@@ -29,12 +29,9 @@ __all__ = [
     "ExportResult",
     "ExportTarget",
     "RenderedExport",
-    "export_adf",
-    "export_markdown",
-    "export_notion",
-    "export_slack",
     "limit_refusal",
     "render_export",
+    "write_export",
 ]
 
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
@@ -75,7 +72,8 @@ NO_PAGE_CHROME: Final = PageChrome()
 class ExportResult:
     title: str
     files: tuple[Path, ...]
-    oversized_sections: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    unsplittable_sections: tuple[str, ...] = ()
     unreadable_manifest: bool = False
 
 
@@ -83,7 +81,8 @@ class ExportResult:
 class RenderedExport:
     title: str
     pages: Mapping[str, str]
-    oversized_sections: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    unsplittable_sections: tuple[str, ...] = ()
     icon: str | None = None
     cover: str | None = None
     files: Mapping[str, bytes] = field(default_factory=dict[str, bytes])
@@ -155,7 +154,8 @@ def _export_pages(
     out_dir: Path,
     title: str,
     pages: Mapping[str, str],
-    oversized_sections: tuple[str, ...] = (),
+    warnings: tuple[str, ...] = (),
+    unsplittable_sections: tuple[str, ...] = (),
     chrome: PageChrome = NO_PAGE_CHROME,
     image_files: Mapping[str, bytes] | None = None,
 ) -> ExportResult:
@@ -180,7 +180,7 @@ def _export_pages(
         if path.is_file():
             path.unlink()
     _write_manifest(out_dir, title, names, chrome)
-    return ExportResult(title, tuple(written), oversized_sections, earlier.unreadable_manifest)
+    return ExportResult(title, tuple(written), warnings, unsplittable_sections, earlier.unreadable_manifest)
 
 
 def _chunk_pages(chunks: Sequence[str]) -> dict[str, str]:
@@ -212,14 +212,27 @@ def _adf_pages(document: LoweredDocument) -> RenderedExport:
     return RenderedExport(title, {ADF_PAGE_NAME: adf_json(adf)}, warnings, refused_for_its_size=refused)
 
 
-def render_export(report: Report, target: ExportTarget) -> RenderedExport:
+def _notion_pages(document: LoweredDocument, notion_width: NotionWidth, chunk: int | None) -> RenderedExport:
+    if chunk is None:
+        page = render_notion(document.body, notion_width)
+        return RenderedExport(
+            document.title, {MARKDOWN_PAGE_NAME: page}, icon=document.icon, cover=document.cover
+        )
+    split = chunk_notion(document.body, character_budget(chunk), notion_width)
+    return RenderedExport(
+        document.title,
+        _chunk_pages(split.chunks),
+        unsplittable_sections=split.oversized_sections,
+        icon=document.icon,
+        cover=document.cover,
+    )
+
+
+def render_export(report: Report, target: ExportTarget, *, chunk: int | None = None) -> RenderedExport:
     document = _checked_document(report, target)
     match target:
         case "notion":
-            page = render_notion(document.body, report.meta.notion_width)
-            return RenderedExport(
-                document.title, {MARKDOWN_PAGE_NAME: page}, icon=document.icon, cover=document.cover
-            )
+            return _notion_pages(document, report.meta.notion_width, chunk)
         case "markdown":
             images = data_image_files(document.body)
             page = render_markdown_document(document, {src: image.name for src, image in images.items()})
@@ -238,31 +251,14 @@ def render_export(report: Report, target: ExportTarget) -> RenderedExport:
             assert_never(target)
 
 
-def _write_rendered(out_dir: Path, rendered: RenderedExport) -> ExportResult:
+def write_export(out_dir: Path, rendered: RenderedExport) -> ExportResult:
     chrome = PageChrome(rendered.icon, rendered.cover)
     return _export_pages(
-        out_dir, rendered.title, rendered.pages, rendered.oversized_sections, chrome, rendered.files
+        out_dir,
+        rendered.title,
+        rendered.pages,
+        rendered.warnings,
+        rendered.unsplittable_sections,
+        chrome,
+        rendered.files,
     )
-
-
-def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
-    if chunk is None:
-        return _write_rendered(out_dir, render_export(report, "notion"))
-    document = _checked_document(report, "notion")
-    split = chunk_notion(document.body, character_budget(chunk), report.meta.notion_width)
-    chrome = PageChrome(document.icon, document.cover)
-    return _export_pages(
-        out_dir, document.title, _chunk_pages(split.chunks), split.oversized_sections, chrome
-    )
-
-
-def export_markdown(report: Report, out_dir: Path) -> ExportResult:
-    return _write_rendered(out_dir, render_export(report, "markdown"))
-
-
-def export_adf(report: Report, out_dir: Path) -> ExportResult:
-    return _write_rendered(out_dir, render_export(report, "adf"))
-
-
-def export_slack(report: Report, out_dir: Path) -> ExportResult:
-    return _write_rendered(out_dir, render_export(report, "slack"))

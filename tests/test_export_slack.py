@@ -8,7 +8,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
+from skaldr.export import EXPORT_MANIFEST, ExportResult
 from skaldr.export.runs import Break, Chip, ExportRun, SectionLink, StatusMark, TonedLabel
 from skaldr.export.slack import render_slack, render_slack_regions
 from skaldr.export.tree import (
@@ -96,7 +96,7 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
-from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE, export_slack
 
 REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")

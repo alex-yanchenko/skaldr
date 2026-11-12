@@ -7,7 +7,7 @@ import pytest
 from markdown_it import MarkdownIt
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
-from skaldr.export import ExportResult, export_markdown, render_export
+from skaldr.export import ExportResult, render_export
 from skaldr.export import markdown as markdown_module
 from skaldr.export.adf import render_adf
 from skaldr.export.flanking import markers_flank
@@ -107,7 +107,11 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
-from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
+from tests.factories.export_factory import (
+    CARDS_LABELLED_WITH_A_TRAILING_COLON,
+    OPEN_ROWS_BADGE,
+    export_markdown,
+)
 
 
 def test_the_example_is_refused_for_github_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
