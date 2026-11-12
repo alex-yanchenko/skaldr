@@ -447,14 +447,6 @@ def require_jira(site: str | None = None) -> SignIn[JiraCredentials]:
     return sign_in
 
 
-def require_notion(workspace: str | None = None) -> SignIn[NotionCredentials]:
-    sign_in = load_notion(workspace)
-    if sign_in is None:
-        where = "" if workspace is None else f" workspace {printable_only(workspace)}"
-        raise AuthError(f"Not signed in to Notion{where}; run `skaldr auth notion`")
-    return sign_in
-
-
 def notion_client_from_environment() -> tuple[str | None, str | None]:
     return _environment(_NOTION_CLIENT_ID), _environment(_NOTION_CLIENT_SECRET)
 

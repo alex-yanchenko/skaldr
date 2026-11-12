@@ -108,9 +108,6 @@ class Outline:
     def tokens(self) -> int:
         return approximate_tokens("".join(self.source_lines))
 
-    def text_of(self, span: _Span) -> str:
-        return _text_between(self.source_lines, span)
-
 
 @dataclass(frozen=True)
 class _Placed:

@@ -36,7 +36,6 @@ from skaldr.auth.store import (
     normalise_site,
     refuse_an_unusable_keychain,
     require_jira,
-    require_notion,
     save_jira,
     stored_jira_sign_ins,
     stored_notion_sign_ins,
@@ -364,13 +363,8 @@ def test_a_notion_access_token_in_the_environment_is_skipped_when_a_workspace_is
             "Not signed in to Jira at https://example.atlassian.net; run `skaldr auth jira`",
         ),
         (lambda: require_jira("legacy"), "Not signed in to Jira at legacy; run `skaldr auth jira`"),
-        (lambda: require_notion(), "Not signed in to Notion; run `skaldr auth notion`"),
-        (
-            lambda: require_notion(WORKSPACE_ID),
-            f"Not signed in to Notion workspace {WORKSPACE_ID}; run `skaldr auth notion`",
-        ),
     ],
-    ids=["jira", "a jira site", "the legacy jira entry", "notion", "a notion workspace"],
+    ids=["jira", "a jira site", "the legacy jira entry"],
 )
 def test_requiring_a_sign_in_that_is_not_there_says_how_to_add_it(
     find: Callable[[], object], refusal: str
@@ -383,15 +377,8 @@ def test_requiring_a_sign_in_that_is_not_there_says_how_to_add_it(
 
 def test_requiring_a_sign_in_returns_the_matching_one() -> None:
     save_jira(make_jira_credentials())
-    seed_notion(make_notion_credentials())
 
-    assert (
-        require_jira("example.atlassian.net"),
-        require_notion("11111111-1111-4111-8111-111111111111"),
-    ) == (
-        SignIn(make_jira_credentials(), "keychain"),
-        SignIn(make_notion_credentials(), "keychain"),
-    )
+    assert require_jira("example.atlassian.net") == SignIn(make_jira_credentials(), "keychain")
 
 
 def test_a_legacy_jira_entry_is_read_and_moved_to_its_site_key(keychain: InMemoryKeyring) -> None:

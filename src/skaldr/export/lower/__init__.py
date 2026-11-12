@@ -72,13 +72,6 @@ def lower_regions(lowering: Lowering) -> tuple[BlockRegion, ...]:
     return tuple(lower_region(lowering, index) for index in range(len(lowering.report.blocks)))
 
 
-def region_for_section(regions: Sequence[BlockRegion], section_id: str) -> BlockRegion:
-    found = next((region for region in regions if region.section_id == section_id), None)
-    if found is None:
-        raise RegionNotFoundError(f"no top-level section has the id '{section_id}'")
-    return found
-
-
 def lower_region(lowering: Lowering, source_index: int) -> BlockRegion:
     blocks = lowering.report.blocks
     if source_index not in range(len(blocks)):
@@ -180,10 +173,6 @@ def _table_of_contents(report: models.Report, lowering: Lowering) -> tuple[Table
 
 def _lower_blocks(blocks: Sequence[models.AnyBlock], lowering: Lowering, depth: int) -> list[Node]:
     return [node for block in blocks for node in _lower_block(block, lowering, depth)]
-
-
-def lower_blocks(blocks: Sequence[models.AnyBlock], lowering: Lowering) -> list[Node]:
-    return _lower_blocks(blocks, lowering, 0)
 
 
 def _heading(block: models.Heading, lowering: Lowering, depth: int) -> list[Node]:

@@ -1,4 +1,3 @@
-import hashlib
 import json
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -169,16 +168,3 @@ def differing_parts(published: ItemContent, current: ItemContent) -> tuple[Part,
         *((COVER,) if published.cover != current.cover else ()),
         *(section_part(key) for key in (*changes.written, *changes.removed)),
     )
-
-
-def content_digest(content: ItemContent) -> str:
-    look = {name: value for name, value in (("icon", content.icon), ("cover", content.cover)) if value}
-    canonical = _canonical_json(
-        {
-            "title": content.title,
-            "sections": [[key, text] for key, text in content.sections.items()],
-            "fields": comparable(set_fields(content.fields)),
-            **look,
-        }
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

@@ -1,4 +1,5 @@
 import re
+import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ from skaldr.models import Report, Section
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import NO_SECTION_DEFAULTS, SectionDefaults, WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
-from skaldr.publish.drafts import Authored, authored_from
+from skaldr.publish.drafts import Authored, load_authored
 from skaldr.publish.ownership import (
     Ownership,
     refuse_to_archive_an_item_skaldr_does_not_own,
@@ -101,6 +102,11 @@ def make_garden_report(
             **overrides,
         }
     )
+
+
+def authored_from(data: dict[str, Any]) -> Authored:
+    with tempfile.TemporaryDirectory() as directory:
+        return load_authored(write_report(Path(directory), data))
 
 
 def authored_garden(**overrides: Any) -> Authored:

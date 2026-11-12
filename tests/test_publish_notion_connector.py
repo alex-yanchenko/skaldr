@@ -12,7 +12,7 @@ from skaldr.export.notion import notion_block_count
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.cli import installed_connectors, main
 from skaldr.publish.content import ItemContent
-from skaldr.publish.drafts import authored_from, draft_targets
+from skaldr.publish.drafts import draft_targets
 from skaldr.publish.jira import JiraConnector
 from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.notion.transport import SECTION_BLOCKS, SECTION_JSON_BYTES
@@ -29,6 +29,7 @@ from tests.factories.notion_factory import PERSON_ID, InMemoryNotion, Scripted, 
 from tests.factories.publish_factory import (
     DOC_ID,
     TARGET_LABEL,
+    authored_from,
     make_garden_blocks,
     make_garden_meta,
     make_notion_publish,

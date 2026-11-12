@@ -9,7 +9,7 @@ from skaldr.publish.connector import WriteGranularity
 from skaldr.publish.content import ItemContent
 from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import Applied, ApplyOutcome, Refused, apply_publish, prepare_publish
-from skaldr.publish.transport import FieldsWrite, ReplaceSection, Stamp
+from skaldr.publish.transport import FieldsWrite, Stamp
 from skaldr.publish_block.target import JsonFields
 from tests.factories.publish_factory import (
     DOC_ID,
@@ -106,18 +106,6 @@ def test_a_moved_section_is_written_at_its_new_place(tmp_path: Path) -> None:
         [("write_section", "page-1", "planting")],
         list(_drafted(path).sections),
     )
-
-
-def test_a_replace_whose_place_differs_from_where_the_section_sits_is_a_move() -> None:
-    sections = {"a": "A\n", "b": "B\n", "c": "C\n"}
-
-    moves = [
-        ReplaceSection("c", "C\n", "C\n", "a").moves_within(sections),
-        ReplaceSection("b", "B\n", "B2\n", "a").moves_within(sections),
-        ReplaceSection("a", "A\n", "A\n", None).moves_within(sections),
-    ]
-
-    assert moves == [True, False, False]
 
 
 @pytest.mark.parametrize(

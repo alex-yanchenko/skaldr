@@ -8,12 +8,13 @@ import pytest
 from skaldr.errors import PublishError
 from skaldr.publish import ContentLimit
 from skaldr.publish.content import COVER, FIELDS, ICON, TITLE, ItemContent, section_part
-from skaldr.publish.drafts import Authored, ItemDraft, authored_from, draft_targets
+from skaldr.publish.drafts import Authored, ItemDraft, draft_targets
 from tests.factories import make_report, make_section, make_table
 from tests.factories.publish_factory import (
     INTRO_KEY,
     TARGET_LABEL,
     FakeTransport,
+    authored_from,
     authored_garden,
     fake_registry,
     make_garden_meta,
