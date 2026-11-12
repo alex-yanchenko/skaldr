@@ -224,6 +224,16 @@ def test_a_notion_target_refuses_a_template_that_is_not_a_page_or_that_has_no_pa
             id="peek-view-dashed",
         ),
         pytest.param(f"https://www.notion.so/{NOTION_PAGE_ID}?v=1&p=", NOTION_PAGE_ID, id="empty-peek"),
+        pytest.param(
+            f"https://www.notion.so/{NOTION_PAGE_ID}?p=not-a-page&p={OTHER_NOTION_PAGE_ID}",
+            OTHER_NOTION_PAGE_ID,
+            id="repeated-peek-last-wins",
+        ),
+        pytest.param(
+            f"https://www.notion.so/{NOTION_PAGE_ID}?p={OTHER_NOTION_PAGE_ID}&p=not-a-page",
+            None,
+            id="repeated-peek-last-not-an-id",
+        ),
         pytest.param(f"https://www.notion.so/{NOTION_PAGE_ID}?v=1&p=not-a-page", None, id="peek-not-an-id"),
         pytest.param(
             f"https://example.com/{NOTION_PAGE_ID}?p={OTHER_NOTION_PAGE_ID}", None, id="peek-off-notion"

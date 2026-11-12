@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 from urllib.parse import SplitResult, parse_qs, urlsplit
 
 from pydantic import Field, model_validator
@@ -32,45 +33,50 @@ def _peeked_page(url: SplitResult) -> str | None:
     return None if peeked is None else peeked[-1]
 
 
-def _page_part_of_url(url: str) -> str | None:
-    parsed = _notion_url(url)
-    if parsed is None:
-        return None
-    peeked = _peeked_page(parsed)
-    return peeked if peeked is not None else parsed.path.rstrip("/").rsplit("/", 1)[-1]
-
-
-def notion_page_id(reference: str) -> str | None:
-    candidate = reference.strip()
-    if "://" in candidate:
-        page_part = _page_part_of_url(candidate)
-        if page_part is None:
-            return None
-        candidate = page_part
-    elif "/" in candidate:
-        return None
-    candidate = candidate.lower()
-    if DASHLESS_PAGE_ID.fullmatch(candidate):
-        return candidate
-    if DASHED_PAGE_ID.fullmatch(candidate):
-        return candidate.replace("-", "")
-    titled = TITLED_PAGE_ID.fullmatch(candidate)
+def _page_id_in(candidate: str) -> str | None:
+    lowered = candidate.lower()
+    if DASHLESS_PAGE_ID.fullmatch(lowered):
+        return lowered
+    if DASHED_PAGE_ID.fullmatch(lowered):
+        return lowered.replace("-", "")
+    titled = TITLED_PAGE_ID.fullmatch(lowered)
     return titled.group(1) if titled else None
 
 
+@dataclass(frozen=True)
+class _ReadReference:
+    page_id: str | None
+    peeked: str | None = None
+
+
+def _read_reference(reference: str) -> _ReadReference:
+    candidate = reference.strip()
+    if "://" not in candidate:
+        return _ReadReference(None if "/" in candidate else _page_id_in(candidate))
+    parsed = _notion_url(candidate)
+    if parsed is None:
+        return _ReadReference(None)
+    peeked = _peeked_page(parsed)
+    page_part = peeked if peeked is not None else parsed.path.rstrip("/").rsplit("/", 1)[-1]
+    return _ReadReference(_page_id_in(page_part), peeked)
+
+
+def notion_page_id(reference: str) -> str | None:
+    return _read_reference(reference).page_id
+
+
 def required_page_id(reference: str) -> str:
-    page_id = notion_page_id(reference)
-    parsed = _notion_url(reference.strip()) if "://" in reference else None
-    peeked = None if parsed is None else _peeked_page(parsed)
-    if page_id is None and peeked is not None:
+    read = _read_reference(reference)
+    if read.page_id is not None:
+        return read.page_id
+    peeked = read.peeked
+    if peeked is not None:
         raise ValueError(
             f"'{reference}' shows a page in peek view, and its `p` value '{peeked}' is not a Notion page id"
         )
-    if page_id is None:
-        raise ValueError(
-            f"'{reference}' is not a Notion page URL (notion.so, notion.site, notion.com) or a page id"
-        )
-    return page_id
+    raise ValueError(
+        f"'{reference}' is not a Notion page URL (notion.so, notion.site, notion.com) or a page id"
+    )
 
 
 class NotionWhere(FrozenModel):
