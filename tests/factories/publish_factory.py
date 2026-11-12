@@ -299,10 +299,14 @@ class FakeTransport:
             raise ItemNotFoundError(f"{item_id} is not on the service")
         return item.links if item.stamp == stamp else ()
 
+    def _refuse_another_stamp(self, item_id: str, stamp: Stamp) -> None:
+        held = self.items[item_id].stamp
+        if held is not None and held != stamp:
+            raise WriteRejectedError(f"{item_id} is not stamped with {stamp.named}")
+
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
         item = self.items[item_id]
-        if item.stamp is not None and item.stamp != request.stamp:
-            raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.named}")
+        self._refuse_another_stamp(item_id, request.stamp)
         if request.changes_nothing:
             return item.links
         self._write(("write_links", item_id, *(link.title for link in request.links)))
@@ -381,6 +385,7 @@ class FakeTransport:
             at = 0 if change.follows is None else list(sections).index(change.follows) + 1
             sections = dict([*pairs[:at], (change.key, self._stored(change.text)), *pairs[at:]])
         item.raw_sections = sections
+        item.stamp = item.stamp or request.stamp
         item.revision = self._bump()
         return self._after_write(item_id)
 
@@ -395,6 +400,7 @@ class FakeTransport:
             item.revision = self._bump()
             raise ConnectorError(DROPPED_AFTER_WRITE)
         item.raw_sections = stored
+        item.stamp = item.stamp or request.stamp
         item.revision = self._bump()
         return self._after_write(item_id)
 
@@ -406,8 +412,8 @@ class FakeTransport:
         cover = (f"cover {request.cover}",) if request.changes_the_cover else ()
         self._write(("write_fields", item_id, *title, *changed, *cleared, *icon, *cover))
         item = self.items[item_id]
-        if item.stamp != request.stamp:
-            raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.doc_id}")
+        self._refuse_another_stamp(item_id, request.stamp)
+        item.stamp = request.stamp
         nulled: JsonFields = (
             dict.fromkeys(request.cleared_fields) if self.reads_cleared_fields_as_null else {}
         )

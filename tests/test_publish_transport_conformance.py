@@ -143,6 +143,7 @@ class TransportUnderTest:
     expected_link: Callable[[str, str], ItemLink] = field(default=_fake_link)
     reads_links_with_the_item: bool = True
     stamp_refusal: Callable[[str, Stamp], str] = field(default=_fake_stamp_refusal)
+    stamps_on_a_fields_write: bool = True
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
@@ -267,6 +268,7 @@ TRANSPORTS = [
             expected_link=_jira_link,
             reads_links_with_the_item=False,
             stamp_refusal=_jira_stamp_refusal,
+            stamps_on_a_fields_write=False,
         ),
         id="jira",
     ),
@@ -495,6 +497,21 @@ def test_a_fields_write_for_another_section_of_the_document_is_rejected_and_chan
         created.comparable.fields,
         SECTION_STAMP,
     )
+
+
+def test_a_fields_write_to_an_unstamped_item_writes_it_and_stamps_it_where_the_service_stamps_on_writes(
+    under_test: TransportUnderTest,
+) -> None:
+    instance = under_test.make()
+    transport = instance.transport
+    item_id = instance.unstamped_item_id()
+    before = transport.read_item(item_id, ItemContent(title=""))
+
+    transport.write_fields(item_id, FieldsWrite("Garden guide", {}, before.comparable.title, {}, STAMP))
+    read = transport.read_item(item_id, ItemContent(title=""))
+
+    stamped = STAMP if under_test.stamps_on_a_fields_write else None
+    assert (before.stamp, read.comparable.title, read.stamp) == (None, "Garden guide", stamped)
 
 
 def test_the_icon_and_cover_an_item_is_created_with_read_back_and_a_fields_write_changes_and_clears_them(
