@@ -93,10 +93,10 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
 from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE, export_slack
+from tests.factories.golden_factory import assert_matches_golden
 
 REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
@@ -250,10 +250,8 @@ def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack
 
     export_slack(accepted_example("slack", reworked), out_dir)
 
-    assert (refused_block_types(reworked, "slack"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_REWORKED_EXAMPLE,
-        folder_texts(golden_of("slack")),
-    )
+    assert refused_block_types(reworked, "slack") == REFUSED_IN_THE_REWORKED_EXAMPLE
+    assert_matches_golden("slack", out_dir)
 
 
 @pytest.mark.parametrize(

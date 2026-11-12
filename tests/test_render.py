@@ -22,6 +22,7 @@ from skaldr.render import (
 from skaldr.version import skaldr_version
 from tests.conftest import REPO_ROOT
 from tests.factories import make_report
+from tests.factories.golden_factory import golden_mismatch
 from tests.factories.render_factory import inline_scripts, script_hash
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "example.html"
@@ -56,7 +57,13 @@ def test_example_render_matches_golden() -> None:
     given no source, so a golden carrying the embedded source block fails on 390 phantom lines."""
     report = load_report(REPO_ROOT / "data" / "example.yaml")
 
-    assert render_html(report) == _stamped_with_the_installed_version(GOLDEN.read_text(encoding="utf-8"))
+    mismatch = golden_mismatch(
+        GOLDEN.name,
+        _stamped_with_the_installed_version(GOLDEN.read_text(encoding="utf-8")),
+        render_html(report),
+    )
+
+    assert mismatch is None, mismatch
 
 
 def _stamped_with_the_installed_version(page: str) -> str:

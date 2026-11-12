@@ -22,10 +22,10 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
 from tests.factories.export_factory import export_adf
+from tests.factories.golden_factory import assert_matches_golden
 
 HI_DOCUMENT = {
     "version": 1,
@@ -53,10 +53,8 @@ def test_the_example_reworked_for_jira_less_the_blocks_adf_refuses_matches_the_a
 
     export_adf(accepted_example("adf"), out_dir)
 
-    assert (refused_block_types(example_for("adf"), "adf"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_EXAMPLE["adf"],
-        folder_texts(golden_of("adf")),
-    )
+    assert refused_block_types(example_for("adf"), "adf") == REFUSED_IN_THE_EXAMPLE["adf"]
+    assert_matches_golden("adf", out_dir)
 
 
 def test_an_adf_export_writes_the_body_as_page_adf_json_without_the_title(tmp_path: Path) -> None:

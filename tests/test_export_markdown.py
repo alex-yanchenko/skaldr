@@ -85,7 +85,6 @@ from tests.factories import (
     REFUSED_IN_THE_EXAMPLE,
     TEXT_X_BLOCK,
     accepted_example,
-    folder_texts,
     in_a_grid_cell,
     in_an_open_section,
     make_bullets,
@@ -104,7 +103,6 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
 from tests.factories.export_factory import (
@@ -112,6 +110,7 @@ from tests.factories.export_factory import (
     OPEN_ROWS_BADGE,
     export_markdown,
 )
+from tests.factories.golden_factory import assert_matches_golden
 
 
 def test_the_example_is_refused_for_github_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
@@ -128,10 +127,8 @@ def test_the_example_reworked_for_github_less_the_blocks_github_refuses_matches_
 
     export_markdown(accepted_example("markdown"), out_dir)
 
-    assert (refused_block_types(example_for("markdown"), "markdown"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_EXAMPLE["markdown"],
-        folder_texts(golden_of("markdown")),
-    )
+    assert refused_block_types(example_for("markdown"), "markdown") == REFUSED_IN_THE_EXAMPLE["markdown"]
+    assert_matches_golden("markdown", out_dir)
 
 
 API_LEGEND = (

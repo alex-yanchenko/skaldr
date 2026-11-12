@@ -98,7 +98,6 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
 from tests.factories.export_factory import (
@@ -107,6 +106,7 @@ from tests.factories.export_factory import (
     export_markdown,
     export_notion,
 )
+from tests.factories.golden_factory import assert_matches_golden
 
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
@@ -1393,10 +1393,8 @@ def test_the_example_reworked_for_notion_less_the_blocks_notion_refuses_matches_
 
     export_notion(accepted_example("notion"), out_dir)
 
-    assert (refused_block_types(example_for("notion"), "notion"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_EXAMPLE["notion"],
-        folder_texts(golden_of("notion")),
-    )
+    assert refused_block_types(example_for("notion"), "notion") == REFUSED_IN_THE_EXAMPLE["notion"]
+    assert_matches_golden("notion", out_dir)
 
 
 def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
