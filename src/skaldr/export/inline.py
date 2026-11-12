@@ -33,6 +33,10 @@ def label_text(label: str | None) -> str:
     return one_line(label or "").removesuffix(":").rstrip()
 
 
+def plain_label(label: str | None) -> Rich:
+    return plain(label or "")
+
+
 def plain(text: str) -> Rich:
     collapsed = one_line(text)
     return (Plain(collapsed),) if collapsed else ()

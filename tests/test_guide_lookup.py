@@ -433,7 +433,11 @@ def test_the_real_listing_indents_subsections_under_their_section(
     ]
 
 
-@pytest.mark.parametrize("query", ["example", "complete example", "A complete example"])
+@pytest.mark.parametrize(
+    "query",
+    ["example", "complete example", "A complete example"],
+    ids=["word-prefix", "phrase-from-a-word", "whole-title"],
+)
 def test_the_complete_example_is_a_section_the_guide_looks_up(
     query: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

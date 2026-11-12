@@ -236,7 +236,7 @@ def test_new_without_exactly_a_kind_and_a_file_prints_its_usage(
     )
 
 
-@pytest.mark.parametrize("flag", ["--help", "-h"])
+@pytest.mark.parametrize("flag", ["--help", "-h"], ids=["long", "short"])
 def test_new_help_prints_its_usage_and_kinds_and_exits_zero(
     flag: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

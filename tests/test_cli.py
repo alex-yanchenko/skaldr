@@ -823,7 +823,9 @@ def test_render_warns_with_the_singular_noun_for_one_unfilled_placeholder(
     assert capsys.readouterr().err == f"warning: {data_path}: 1 unfilled placeholder: t\n"
 
 
-@pytest.mark.parametrize("target", ["markdown", "notion", "adf", "slack"])
+@pytest.mark.parametrize(
+    "target", ["markdown", "notion", "adf", "slack"], ids=["markdown", "notion", "adf", "slack"]
+)
 def test_export_warns_on_stderr_about_unfilled_placeholders_and_still_succeeds(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], target: str
 ) -> None:

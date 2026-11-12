@@ -761,7 +761,7 @@ columns:
 ```
 
 Step fields are explicit, and skaldr never derives or renumbers them: `lane` (a lane's key), `col`
-(a column's key), `n` (the number shown, a free string such as `"1"`, `"3a"` or `"R1"`; an integer such as `1` is read as `"1"`), and
+(a column's key), `n` (the number shown, a free string such as `"1"`, `"3a"` or `"R1"`; an integer such as `1` is read as `"1"`, so quote a number with leading zeros or underscores, `"007"`, which YAML would read as 7), and
 `label`. Two steps in the same cell stack.
 
 Give steps an optional numeric `value` (points, hours, cost, headcount: whatever the matrix measures)

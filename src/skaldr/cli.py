@@ -177,7 +177,7 @@ def _new_help() -> str:
 
 def _run_new(arguments: list[str]) -> int:
     kinds = ", ".join(_NEW_KINDS)
-    if arguments[:1] in (["--help"], ["-h"]):
+    if arguments and arguments[0] in ("-h", "--help"):
         print(_new_help(), end="")
         return 0
     if len(arguments) != 2:

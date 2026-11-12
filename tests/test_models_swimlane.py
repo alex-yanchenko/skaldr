@@ -55,6 +55,14 @@ def test_swimlane_step_n_given_as_an_integer_is_its_string() -> None:
     assert [step.n for step in _swimlane_block(make_report(blocks=[block])).steps] == ["1", "0"]
 
 
+def test_swimlane_step_n_given_as_a_quoted_number_with_leading_zeros_keeps_them() -> None:
+    block = _swimlane(
+        lanes=["A"], columns=["C1"], steps=[{"lane": "A", "col": "C1", "n": "007", "label": "x"}]
+    )
+
+    assert [step.n for step in _swimlane_block(make_report(blocks=[block])).steps] == ["007"]
+
+
 @pytest.mark.parametrize("n", [True, 1.5, ["1"]], ids=["bool", "float", "list"])
 def test_swimlane_step_n_that_is_not_a_string_or_an_integer_is_refused(n: object) -> None:
     block = _swimlane(lanes=["A"], columns=["C1"], steps=[{"lane": "A", "col": "C1", "n": n, "label": "x"}])

@@ -17,7 +17,7 @@ from skaldr.export.capabilities import (
 )
 from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.glyphs import CALLOUT_ICON, tab_icon
-from skaldr.export.inline import ZERO_WIDTH_SPACE, bold, plain
+from skaldr.export.inline import ZERO_WIDTH_SPACE, bold, plain, plain_label
 from skaldr.export.markup import (
     DIVIDER_LINE,
     MarkupRuns,
@@ -742,7 +742,7 @@ def _quote_with_its_lists_lines(node: Quote, room: TableRoom) -> list[str]:
 
 
 def _fact_column(fact: LabelledValue) -> tuple[Node, ...]:
-    label, value = plain(fact.label or ""), fact.value
+    label, value = plain_label(fact.label), fact.value
     return (*((Paragraph(label, "muted"),) if label else ()), *((Paragraph(value),) if value else ()))
 
 
@@ -789,7 +789,7 @@ def _column_strip_lines(columns: Sequence[tuple[Node, ...]], room: TableRoom) ->
 
 
 def _key_value_table(node: KeyValueList) -> TableNode:
-    rows = tuple(TableRow((TableCell(plain(pair.label or "")), TableCell(pair.value))) for pair in node.pairs)
+    rows = tuple(TableRow((TableCell(plain_label(pair.label)), TableCell(pair.value))) for pair in node.pairs)
     return TableNode((), rows, header_column=True)
 
 

@@ -20,7 +20,7 @@ from skaldr.export.github_html import (
     underlined,
 )
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
-from skaldr.export.inline import plain
+from skaldr.export.inline import plain, plain_label
 from skaldr.export.lower.context import joined_by_breaks, toned
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -313,7 +313,7 @@ def _cell_widths(node: Columns) -> list[int | None]:
 def _card_header(card: Card) -> ExportRich:
     if card.badge is not None:
         return (Chip.on_one_line(card.label or "", card.badge),)
-    return toned(card.tone, plain(card.label or ""))
+    return toned(card.tone, plain_label(card.label))
 
 
 def _card_value(card: Card) -> ExportRich:
@@ -459,7 +459,7 @@ class _MarkdownWriter:
         return [*lines, "</tr>", "</table>"]
 
     def fact_strip_lines(self, node: FactStrip) -> list[str]:
-        header = tuple(TableCell(plain(fact.label or "")) for fact in node.facts)
+        header = tuple(TableCell(plain_label(fact.label)) for fact in node.facts)
         row = TableRow(tuple(TableCell(fact.value) for fact in node.facts))
         return self.table_lines(TableNode(header, (row,))) if node.facts else []
 

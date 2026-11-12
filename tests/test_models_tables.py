@@ -638,6 +638,13 @@ def test_totals_given_a_bare_column_key_is_the_same_as_a_column_mapping() -> Non
     assert shorthand == spelled_out
 
 
+def test_totals_given_null_stays_absent() -> None:
+    table = parse_report(make_report(blocks=[_table_with_totals(None)])).blocks[0]
+
+    assert isinstance(table, Table)
+    assert table.totals is None
+
+
 def test_totals_given_a_bare_key_that_is_not_a_number_column_names_it() -> None:
     with pytest.raises(ReportError, match=r"totals.column 'issue' must be a number column"):
         parse_report(make_report(blocks=[_table_with_totals("issue")]))

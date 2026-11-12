@@ -25,7 +25,8 @@ class SwimlaneStep(FrozenModel):
     )
     n: NonBlank = Field(
         description="The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never "
-        "derives or renumbers it, so it reads exactly as written. An integer such as 1 is read as '1'.",
+        "derives or renumbers it, so it reads exactly as written. An integer such as 1 is read as '1'; "
+        'quote a number with leading zeros or underscores ("007"), since YAML reads 007 as the number 7.',
     )
     label: NonBlank = Field(description="Step label, shown beside the number.")
     group: str | None = Field(
@@ -57,7 +58,7 @@ class SwimlaneStep(FrozenModel):
 
     @field_validator("n", mode="before", json_schema_input_type=NonBlank | int)
     @classmethod
-    def _an_integer_is_its_string(cls, value: Any) -> Any:
+    def _an_integer_is_its_string(cls, value: object) -> object:
         return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
 
     @property

@@ -5510,7 +5510,7 @@
               "type": "integer"
             }
           ],
-          "description": "The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written. An integer such as 1 is read as '1'.",
+          "description": "The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written. An integer such as 1 is read as '1'; quote a number with leading zeros or underscores (\"007\"), since YAML reads 007 as the number 7.",
           "title": "N"
         },
         "label": {
