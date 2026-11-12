@@ -57,7 +57,7 @@ should match pattern '\S'`. To leave an optional one empty, leave the field out.
 
 A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own. The one flag `--guide` accepts is `--list`, which only works with a bare `--guide`.
 
-The files skaldr writes itself (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) are written to a temporary file next to the file and then swapped into place, so a failed write leaves the earlier file as it was. A path that is a symlink gets the new text in its target and stays a link, a missing folder on the way to that target is created, and an existing file keeps its permissions. A read-only file is refused with an error naming it and left as it is. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text; if that write fails partway, such as on a full disk, the earlier bytes are written back, and so they are if the write is interrupted. A swapped file is flushed to disk before the swap and its folder after it (a folder that refuses the flush does not fail the write); a file rewritten in place is flushed after the write and its folder is not. The `--pdf` file follows the same rules: the headless browser prints into a temporary folder and skaldr swaps the finished PDF into place, so a browser that fails leaves an earlier PDF as it was, and a read-only PDF is refused before the browser starts.
+The files skaldr writes itself (the page, an export, the schema, an installed skill, the plan rule in `CLAUDE.md`) are written to a temporary file next to the file and then swapped into place, so a failed write leaves the earlier file as it was. A path you name that is a symlink (`-o`, `--export-dir`, `--pdf`, `--write-schema`) gets the new text in its target and stays a link, a missing folder on the way to that target is created, and an existing file keeps its permissions. A default path is different: when `out/<name>.html` or the default export folder is a symlink, or the `out` folder on the way to it is, skaldr refuses with an error naming the link and its target; remove the link or pass `-o` or `--export-dir`. This guards against links already in place when you run skaldr, such as ones that came with a cloned repository, and does not defend against a link swapped in during the run. In an export folder, a page file or the `.skaldr-export.json` manifest that is a symlink is refused the same way, whether or not the manifest lists it, and a symlinked manifest is not read. A read-only file is refused with an error naming it and left as it is. A file with more than one hard link, or a file in a folder you cannot write to, is rewritten in place instead, so every name for it sees the new text; if that write fails partway, such as on a full disk, the earlier bytes are written back, and so they are if the write is interrupted. A swapped file is flushed to disk before the swap and its folder after it (a folder that refuses the flush does not fail the write); a file rewritten in place is flushed after the write and its folder is not. The `--pdf` file follows the same rules: the headless browser prints into a temporary folder and skaldr swaps the finished PDF into place, so a browser that fails leaves an earlier PDF as it was, and a read-only PDF is refused before the browser starts.
 
 ## `meta`
 
@@ -1275,6 +1275,15 @@ blocks:
 Paths resolve relative to the file doing the including (not your shell's directory), so a set of
 fragments can move as a unit. Includes can nest; a file that includes itself (directly or through a
 chain) fails the build rather than looping. A missing fragment fails with the path that named it.
+A document inside a git work tree (a folder holding `.git`, as a folder or as the `gitdir:` file a
+linked worktree has) may include any file in that work tree, so `../shared/badges.yaml` works from a
+subfolder of the same repository. A plain file named `.git` does not count. When the document is in
+no repository, the root is the document's own folder. An include, nested ones included, that resolves
+outside that root (through `../` or a symlink) fails the build with the include and the root named.
+A document that reads more than 1,000 files through `!include` (a fan-out where many files include
+the same ones), or uses more than 10,000 YAML aliases (`*name`) across the file and everything it
+includes, nests so deeply that it cannot be read, or contains a node that refers to itself fails the
+build with an error, and `--check` carries on with the next file.
 `--check` and `--emit-json` resolve includes too, so validating a top file validates everything it
 pulls in, and the emitted JSON is fully flattened.
 
@@ -1536,7 +1545,12 @@ Every rendered page embeds its **editable YAML source** in an inert `<script id=
 block, placed *before* the stylesheet. So an agent handed a skaldr page (a local `.html`, or a
 shared artifact URL) recovers the source **without** wading through the rendered HTML/CSS:
 
-- `skaldr --extract-source report.html` (or an `http(s)://` URL) prints just the YAML.
+- `skaldr --extract-source report.html` (or an `http(s)://` URL) prints just the YAML. It refuses a
+  source that holds a terminal control character, naming the first one and its position, because a
+  page fetched from elsewhere could otherwise drive your terminal. The characters refused are U+0000
+  to U+001F except tab and newline, U+007F to U+009F, the bidirectional overrides U+202A to U+202E
+  and U+2066 to U+2069, and a carriage return that is not followed by a newline. A carriage return
+  before a newline is printed as it is.
 - Reading the top of the file (or a fetch) reaches the source block before the CSS.
 
 Slicing the text between the scissor markers yourself gives the YAML verbatim, with one exception the

@@ -2572,8 +2572,8 @@ def test_an_export_refuses_a_symlink_where_its_page_goes_and_leaves_its_target_a
         sorted(path.name for path in out_dir.iterdir()),
         target.read_text(encoding="utf-8") if target.exists() else None,
     ) == (
-        f"refusing to overwrite {out_dir / 'page.md'}, which is not on the {EXPORT_MANIFEST} list of "
-        "files skaldr wrote; move it away or choose another --export-dir",
+        f"refusing to overwrite {out_dir / 'page.md'}, which is a symlink, and an export does not write "
+        "through one; move it away or choose another --export-dir",
         True,
         ["page.md"],
         target_text,
@@ -2662,25 +2662,23 @@ def test_a_listed_page_that_is_no_longer_a_file_is_skipped_and_kept(
     )
 
 
-def test_a_page_name_that_is_a_symlink_gets_the_page_in_its_target_and_stays_a_link(tmp_path: Path) -> None:
+def test_a_listed_page_that_is_a_symlink_is_refused_and_its_target_is_left_alone(tmp_path: Path) -> None:
     page_target = tmp_path / "wiki" / "page.md"
-    manifest_target = tmp_path / "wiki" / "manifest.json"
     page_target.parent.mkdir()
     page_target.write_text("earlier page", encoding="utf-8")
-    manifest_target.write_text('{"title": "T", "files": ["page.md"]}', encoding="utf-8")
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     (out_dir / "page.md").symlink_to(page_target)
-    (out_dir / EXPORT_MANIFEST).symlink_to(manifest_target)
+    (out_dir / EXPORT_MANIFEST).write_text('{"title": "T", "files": ["page.md"]}', encoding="utf-8")
 
-    export_notion(parse_report(make_report()), out_dir)
+    with pytest.raises(ReportError) as refused:
+        export_notion(parse_report(make_report()), out_dir)
 
-    assert (
-        page_target.read_text(encoding="utf-8"),
-        (out_dir / "page.md").is_symlink(),
-        json.loads(manifest_target.read_text(encoding="utf-8")),
-        (out_dir / EXPORT_MANIFEST).is_symlink(),
-    ) == ("Hello.\n", True, {"title": "Test Report", "files": ["page.md"]}, True)
+    assert (str(refused.value), page_target.read_text(encoding="utf-8")) == (
+        f"refusing to overwrite {out_dir / 'page.md'}, which is a symlink, and an export does not write "
+        "through one; move it away or choose another --export-dir",
+        "earlier page",
+    )
 
 
 def test_a_replaced_page_keeps_the_permissions_it_had(tmp_path: Path) -> None:

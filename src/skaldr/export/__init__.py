@@ -117,6 +117,16 @@ def _is_taken_by_something_skaldr_did_not_write(path: Path, earlier: _EarlierExp
     return path.name not in earlier.pages and os.path.lexists(path)
 
 
+def _refuse_symlinks_in_the_export_folder(out_dir: Path, names: Collection[str]) -> None:
+    symlinks = [
+        path
+        for path in [*(out_dir / name for name in sorted(names)), out_dir / EXPORT_MANIFEST]
+        if path.is_symlink()
+    ]
+    if symlinks:
+        raise _refusal(symlinks, "a symlink, and an export does not write through one")
+
+
 def _refuse_to_overwrite_what_skaldr_did_not_write(
     out_dir: Path, names: Collection[str], earlier: _EarlierExport
 ) -> None:
@@ -142,6 +152,7 @@ def _export_pages(
     images = image_files or {}
     names = [*images, *pages]
     out_dir.mkdir(parents=True, exist_ok=True)
+    _refuse_symlinks_in_the_export_folder(out_dir, names)
     earlier = _earlier_export(out_dir / EXPORT_MANIFEST)
     _refuse_to_overwrite_what_skaldr_did_not_write(out_dir, names, earlier)
     written: list[Path] = []

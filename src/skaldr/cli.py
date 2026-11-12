@@ -48,12 +48,18 @@ from skaldr.render import (
     render_html,
     render_report,
 )
-from skaldr.replace_file import create_file, replace_file, resolved_path
+from skaldr.replace_file import (
+    create_file,
+    refuse_a_symlink_on_a_default_path,
+    replace_file,
+    resolved_path,
+)
 from skaldr.version import skaldr_version
 
 _FETCH_TIMEOUT_SECONDS = 30
 _FETCH_LIMIT_BYTES = 16 * 1024 * 1024
 _FETCH_CHUNK_BYTES = 64 * 1024
+_TERMINAL_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‪-‮⁦-⁩]|\r(?!\n)")
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
 
@@ -80,9 +86,12 @@ _PLAN_RULE_BLOCK = re.compile(
 )
 
 
-def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
+def _resolve_out_path(data_path: Path, out_arg: str | None, *, writes_html: bool) -> Path:
     """The HTML output path: the explicit `-o` value, or a default `out/<data-stem>.html` under the cwd."""
-    return resolved_path(Path(out_arg)) if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
+    if out_arg:
+        return resolved_path(Path(out_arg))
+    default = Path.cwd() / "out" / f"{data_path.stem}.html"
+    return refuse_a_symlink_on_a_default_path(default, Path.cwd(), "-o") if writes_html else default
 
 
 _PUBLISH_COMMANDS = frozenset({"publish", "diff", "status"})
@@ -515,7 +524,7 @@ def main(argv: list[str] | None = None) -> int:
 
     data_path = Path(args.data[0]).resolve()
     try:
-        out_path = _resolve_out_path(data_path, args.out)
+        out_path = _resolve_out_path(data_path, args.out, writes_html=_writes_an_html_page(args))
     except OSError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -700,13 +709,22 @@ def _extract_source(target: str) -> int:
         if target.startswith(("http://", "https://")):
             html = _fetch_page(target).decode("utf-8")
         else:
-            html = Path(target).read_text(encoding="utf-8")
+            html = Path(target).read_bytes().decode("utf-8")
     except (OSError, ValueError) as err:
         print(f"error: could not read {target}: {err}", file=sys.stderr)
         return 1
     source = extract_source(html)
     if source is None:
         print(f"error: no embedded skaldr source found in {target}", file=sys.stderr)
+        return 1
+    control = _TERMINAL_CONTROL.search(source)
+    if control is not None:
+        print(
+            f"error: the embedded source in {target} holds the control character "
+            f"U+{ord(control.group()):04X} at position {control.start()}, "
+            "which a terminal would act on; skaldr will not print it",
+            file=sys.stderr,
+        )
         return 1
     print(source, end="")
     return 0
@@ -736,10 +754,14 @@ def _reject_flags_that_do_not_fit_an_export(
 
 
 def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
-    out_dir = (
-        Path(export_dir) if export_dir is not None else Path("out") / f"{data_path.stem}.{target}"
-    ).resolve()
     try:
+        out_dir = (
+            Path(export_dir)
+            if export_dir is not None
+            else refuse_a_symlink_on_a_default_path(
+                Path.cwd() / "out" / f"{data_path.stem}.{target}", Path.cwd(), "--export-dir"
+            )
+        ).resolve()
         report = load_report(data_path)
         match target:
             case "notion":

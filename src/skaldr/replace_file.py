@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from skaldr.errors import ReadOnlyFileError, TargetAlreadyExistsError
+from skaldr.errors import DefaultPathIsASymlinkError, ReadOnlyFileError, TargetAlreadyExistsError
 
 
 def resolved_path(path: Path) -> Path:
@@ -13,6 +13,18 @@ def resolved_path(path: Path) -> Path:
     if resolved.is_symlink():
         raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(path))
     return resolved
+
+
+def refuse_a_symlink_on_a_default_path(path: Path, inside: Path, option_to_write_elsewhere: str) -> Path:
+    for part in (path, *path.parents):
+        if part == inside:
+            break
+        if part.is_symlink():
+            raise DefaultPathIsASymlinkError(
+                f"{part} is a symlink to {part.resolve()}, so skaldr will not write through it; "
+                f"remove it or pass {option_to_write_elsewhere} to write elsewhere"
+            )
+    return path
 
 
 def _refuse_a_read_only_file(path: Path) -> None:
