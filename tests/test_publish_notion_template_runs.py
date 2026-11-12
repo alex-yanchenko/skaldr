@@ -309,6 +309,85 @@ def test_a_page_left_empty_by_a_fill_that_failed_is_adopted_and_filled_by_the_ne
     assert notion.markdown_of(TOOLS_PAGE) == plain.markdown_of(TOOLS_PAGE)
 
 
+def test_a_dry_run_after_a_failed_fill_sends_no_write_and_lists_the_fill_as_a_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.requests.clear()
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path)], registry=_registry(notion))
+
+    writes = [(request.method, request.url.path) for request in notion.requests if request.method != "GET"]
+    assert (exit_code, writes, notion.markdown_of(DOCUMENT_PAGE), capsys.readouterr().out) == (
+        0,
+        [],
+        "",
+        f"notion page {NOTION_PAGE_ID}: 1 to create, 0 to update, 0 to archive, 1 to fill\n"
+        f"  fill     document {DOCUMENT_PAGE}\n"
+        '  create   section tools "Tools"\n'
+        f"Dry run: nothing was sent. Publish with `skaldr publish {path} --apply`.\n",
+    )
+
+
+def test_an_apply_after_a_failed_fill_prints_the_fill_as_its_first_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    assert (exit_code, capsys.readouterr().out) == (
+        0,
+        f"notion page {NOTION_PAGE_ID}: fill     document {DOCUMENT_PAGE}\n"
+        f'notion page {NOTION_PAGE_ID}: create   section tools "Tools"\n'
+        f"Published 2 steps. The publish state is in {state_path_for(path)}.\n",
+    )
+
+
+def test_a_page_left_with_only_an_empty_block_after_a_failed_fill_is_filled_by_the_next_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.click_below_the_last_block(DOCUMENT_PAGE)
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    plain = _notion()
+    main(
+        ["publish", str(write_garden_report(tmp_path / "plain", publish=make_notion_publish())), "--apply"],
+        registry=_registry(plain),
+    )
+    assert (exit_code, capsys.readouterr().err, notion.markdown_of(DOCUMENT_PAGE)) == (
+        0,
+        "",
+        plain.markdown_of(DOCUMENT_PAGE),
+    )
+
+
 def test_a_page_a_person_wrote_in_after_a_failed_fill_is_not_filled_over_by_the_next_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -327,22 +406,14 @@ def test_a_page_a_person_wrote_in_after_a_failed_fill_is_not_filled_over_by_the_
 
     rerun = main(["publish", str(path), "--apply"], registry=_registry(notion))
 
-    replaced = [
-        request
-        for request in notion.requests
-        if request.method == "PATCH" and b"replace_content" in request.content
-    ]
-    assert (
-        rerun,
-        replaced,
-        "My own notes" in notion.markdown_of(DOCUMENT_PAGE),
-        capsys.readouterr().err,
-    ) == (
+    assert (rerun, notion.writes(), notion.markdown_of(DOCUMENT_PAGE), capsys.readouterr().err) == (
         1,
         [],
-        True,
-        f"error: Notion page {DOCUMENT_PAGE_ID} changed after skaldr read it, so nothing was written; "
-        "publish again\n",
+        "My own notes",
+        f"error: notion page {NOTION_PAGE_ID}, document ({DOCUMENT_PAGE}) carries no skaldr stamp and holds "
+        "content that is not what skaldr was creating there (section content skaldr did not publish), so "
+        "skaldr will not adopt it; if it is the item skaldr created, empty it in Notion and publish again, "
+        f"and if it is not, delete its entry from `pending_creates` in {state_path_for(path)}\n",
     )
 
 

@@ -32,8 +32,10 @@ from skaldr.publish.notion.transport import (
     SECTION_JSON_BYTES,
     NotionTransport,
 )
+from skaldr.publish.ownership import Ownership
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     LinksWrite,
@@ -61,6 +63,7 @@ from tests.factories.notion_factory import (
 
 PARENT_PAGE_ID = "fedcba9876543210fedcba9876543210"
 STAMP = Stamp("garden-handbook", None)
+ARCHIVE = Archive(STAMP)
 STAMP_LINE = 'Published with skaldr from document garden-handbook {color="gray"}'
 WELCOME = "## Welcome\nWelcome to the garden.\n"
 PLANTING = "## Planting\nSow in spring.\n"
@@ -69,6 +72,7 @@ DATABASE_TARGET = NotionTarget.model_validate(make_notion_target())
 PAGE_TARGET = NotionTarget.model_validate(make_notion_target(where={"parent_page": PARENT_PAGE_ID}))
 FIRST_PAGE = numbered_id(1).replace("-", "")
 EMPTY_ROW = numbered_id(900).replace("-", "")
+OWN_EMPTY_ROW = Ownership((ItemContent(title="Blank page"),))
 SEEDLING = "🌱"
 SUNFLOWER = "🌻"
 COVER_URL = "https://example.com/garden.png"
@@ -107,6 +111,10 @@ def _created(
     created = transport.create_item(NewItem(target, STAMP, content))
     notion.requests.clear()
     return transport, created
+
+
+def _owned(created: RemoteItem) -> Ownership:
+    return Ownership((created.comparable,), frozenset(created.comparable.fields))
 
 
 def _title(text: str, name: str = "title") -> dict[str, Any]:
@@ -381,8 +389,8 @@ def test_a_page_in_the_trash_is_not_found_and_archiving_it_again_sends_nothing()
     notion = _notion()
     transport, created = _created(notion)
 
-    transport.archive_item(created.item_id)
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     assert [(method, path, body) for method, path, body in _sent(notion) if method != "GET"] == [
         ("PATCH", f"/v1/pages/{created.item_id}", {"in_trash": True})
@@ -395,9 +403,53 @@ def test_archiving_a_page_notion_no_longer_has_sends_nothing() -> None:
     notion = _notion()
     transport = notion.transport()
 
-    transport.archive_item(numbered_id(77))
+    transport.archive_item(numbered_id(77), ARCHIVE)
 
     assert notion.writes() == []
+
+
+CHILD_PAGE = numbered_id(5).replace("-", "")
+
+
+def _an_unstamped_page_holding_a_child_page() -> tuple[InMemoryNotion, NotionTransport]:
+    notion = _notion()
+    notion.add_page(EMPTY_ROW, "Plans", f'<page url="https://www.notion.so/Seeds-{CHILD_PAGE}">Seeds</page>')
+    transport = notion.transport()
+    transport.read_item(EMPTY_ROW, ItemContent(title=""))
+    return notion, transport
+
+
+def test_an_unstamped_page_holding_a_child_page_of_another_document_is_not_archived() -> None:
+    notion, transport = _an_unstamped_page_holding_a_child_page()
+
+    with pytest.raises(WriteRejectedError) as refused:
+        transport.archive_item(EMPTY_ROW, Archive(STAMP, Ownership((ItemContent(title="Plans"),))))
+
+    assert (str(refused.value), notion.pages[EMPTY_ROW].in_trash) == (
+        f"Notion page {EMPTY_ROW} carries no skaldr stamp and holds content skaldr did not write (child page "
+        f"{CHILD_PAGE}), so skaldr will not archive it",
+        False,
+    )
+
+
+def test_an_unstamped_page_holding_only_this_documents_child_pages_is_archived() -> None:
+    notion, transport = _an_unstamped_page_holding_a_child_page()
+    owned = Ownership((ItemContent(title="Plans"),), own_child_ids=frozenset([CHILD_PAGE]))
+
+    transport.archive_item(EMPTY_ROW, Archive(STAMP, owned))
+
+    assert notion.pages[EMPTY_ROW].in_trash
+
+
+def test_an_archive_keys_an_unstamped_page_by_the_sections_skaldr_read_it_with() -> None:
+    notion = _notion()
+    transport, created = _created(notion)
+    notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
+    transport.read_item(created.item_id, created.comparable)
+
+    transport.archive_item(created.item_id, Archive(STAMP, _owned(created)))
+
+    assert notion.pages[created.item_id].in_trash
 
 
 def test_a_release_removes_skaldrs_sections_and_stamp_in_one_request_and_clears_only_set_owned_fields() -> (
@@ -844,7 +896,7 @@ def test_a_fields_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back() 
     notion.edit_by_hand(created.item_id, f"\n{STAMP_LINE}", "")
 
     written = transport.write_fields(
-        created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, {}, STAMP)
+        created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, {}, STAMP, ownership=_owned(created))
     )
 
     assert (_patches(notion), written.stamp, notion.markdown_of(created.item_id)) == (
@@ -870,6 +922,7 @@ def test_a_section_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back()
             ReplaceSection("planting", read.raw_sections["planting"], "## Planting\nSow in May.\n", "intro"),
             read.raw_sections,
             STAMP,
+            ownership=_owned(created),
         ),
     )
 
@@ -891,7 +944,8 @@ def test_a_content_write_to_a_page_whose_stamp_was_deleted_puts_the_stamp_back()
     notion.requests.clear()
 
     written = transport.write_content(
-        created.item_id, ContentWrite({"intro": WELCOME, "tools": TOOLS}, read.raw_sections, STAMP)
+        created.item_id,
+        ContentWrite({"intro": WELCOME, "tools": TOOLS}, read.raw_sections, STAMP, _owned(created)),
     )
 
     assert (written.stamp, notion.markdown_of(created.item_id)) == (
@@ -959,7 +1013,8 @@ def test_a_fields_write_refused_before_sending_does_not_put_a_deleted_stamp_back
         match=r"^the Notion property 'Status' is a select property, so skaldr sends it a text, not 3$",
     ):
         transport.write_fields(
-            created.item_id, FieldsWrite(CONTENT.title, {"Status": 3}, CONTENT.title, {}, STAMP)
+            created.item_id,
+            FieldsWrite(CONTENT.title, {"Status": 3}, CONTENT.title, {}, STAMP, ownership=_owned(created)),
         )
     assert notion.writes() == []
 
@@ -1375,7 +1430,9 @@ def test_an_empty_unstamped_page_gives_a_section_write_nothing_to_place_it_next_
     raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
 
     with pytest.raises(WriteRejectedError) as caught:
-        transport.write_section(EMPTY_ROW, SectionRequest(AddSection("tools", TOOLS, None), raw, STAMP))
+        transport.write_section(
+            EMPTY_ROW, SectionRequest(AddSection("tools", TOOLS, None), raw, STAMP, ownership=OWN_EMPTY_ROW)
+        )
 
     assert (str(caught.value), notion.writes()) == (
         f"Notion page {EMPTY_ROW} holds nothing skaldr can place the section next to",
@@ -1389,7 +1446,7 @@ def test_an_empty_unstamped_page_gives_a_content_write_nothing_to_place_it_next_
     raw = transport.read_item(EMPTY_ROW, ItemContent(title="")).raw_sections
 
     with pytest.raises(WriteRejectedError) as caught:
-        transport.write_content(EMPTY_ROW, ContentWrite({"tools": TOOLS}, raw, STAMP))
+        transport.write_content(EMPTY_ROW, ContentWrite({"tools": TOOLS}, raw, STAMP, OWN_EMPTY_ROW))
 
     assert (str(caught.value), notion.writes()) == (
         f"Notion page {EMPTY_ROW} holds nothing skaldr can place its content next to",
@@ -1403,7 +1460,7 @@ def test_a_fields_write_to_a_page_emptied_by_hand_puts_the_stamp_back_as_its_who
     notion.edit_by_hand(created.item_id, f"{WELCOME}{PLANTING}{STAMP_LINE}", "")
 
     written = transport.write_fields(
-        created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, {}, STAMP)
+        created.item_id, FieldsWrite("Garden guide", {}, CONTENT.title, {}, STAMP, ownership=_owned(created))
     )
 
     stamp_only = {"type": "replace_content", "replace_content": {"new_str": f"{STAMP_LINE}\n"}}

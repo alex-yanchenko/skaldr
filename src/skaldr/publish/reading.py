@@ -2,7 +2,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import assert_never
+from typing import Literal, assert_never
 
 from skaldr.errors import ItemNotFoundError, PublishError, WriteRejectedError
 from skaldr.publish.content import (
@@ -17,15 +17,14 @@ from skaldr.publish.content import (
     with_parts,
 )
 from skaldr.publish.drafts import ItemDraft, item_label
-from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
+from skaldr.publish.ownership import HeldContent, Ownership, holds_content, holds_no_body, unwritten_parts
+from skaldr.publish.plan import CreateStep, ItemRef, LeftEmpty, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
 from skaldr.publish.transport import (
     FillsAPageLeftEmpty,
-    NewItem,
     RefusesFieldsAnItemCannotHold,
     RemoteItem,
-    Stamp,
     Transport,
     is_unset,
 )
@@ -95,17 +94,84 @@ def missing_message(missing: MissingItem, service: Service) -> str:
     )
 
 
-def _has_content(remote: RemoteItem) -> bool:
-    return (
-        any(text.strip() for text in remote.comparable.sections.values())
-        or bool(remote.child_ids)
-        or bool(remote.set_properties)
+RefusedWrite = Literal["write to", "archive", "release"]
+
+
+def ownership_of(
+    item: PublishedItem,
+    draft: ItemDraft | None,
+    transport: Transport,
+    state: PublishState,
+    also_read: Sequence[ItemContent] = (),
+) -> Ownership:
+    in_flight = [] if item.writing is None else [transport.comparable_draft(item.writing.rendered)]
+    drafted = [] if draft is None else [transport.comparable_draft(draft.content)]
+    copies = (transport.comparable_form(item.remote), *in_flight, *also_read, *drafted)
+    return Ownership(copies, frozenset(state.item_ids), state.doc_id)
+
+
+def _unwritten_parts(remote: RemoteItem, ownership: Ownership) -> tuple[str, ...]:
+    return () if remote.doc_id is not None else unwritten_parts(remote.held, ownership)
+
+
+def _unwritten_parts_of_a_published_item(
+    remote: RemoteItem, item: PublishedItem, ownership: Ownership
+) -> tuple[str, ...]:
+    finishing_its_own_archive = item.retiring is not None and remote.archived_for == ownership.doc_id
+    if remote.doc_id is None and finishing_its_own_archive:
+        return unwritten_parts(HeldContent(remote.held.title, {}), ownership)
+    return _unwritten_parts(remote, ownership)
+
+
+@dataclass(frozen=True)
+class UnownedItem:
+    item: ItemRef
+    item_id: str
+    refused: RefusedWrite
+    parts: tuple[str, ...]
+
+
+def _refused_write(item: PublishedItem, draft: ItemDraft | None) -> RefusedWrite:
+    if draft is not None:
+        return "write to"
+    return "archive" if item.origin == "created" else "release"
+
+
+def refuse_items_skaldr_did_not_write(prepared: Prepared, unowned: Sequence[UnownedItem]) -> None:
+    if not unowned:
+        return
+    first = unowned[0]
+    service = SERVICE_NAMES[prepared.target_named(first.item.target).service()]
+    raise PublishError(
+        f"{first.item.label} ({first.item_id}) carries no skaldr stamp and holds content that is not what "
+        f"skaldr last wrote there ({', '.join(first.parts)}), so skaldr will not {first.refused} it. If it "
+        "is this document's item, put its stamp back, or copy anything worth keeping into the YAML and then "
+        f"empty it in {service}, and publish again; if it is not, remove its entry from "
+        f"{prepared.state_path}"
     )
 
 
+def _refuse_to_adopt_what_skaldr_did_not_create(
+    prepared: Prepared, pending: PendingCreate, remote: RemoteItem, transport: Transport, service: Service
+) -> None:
+    ref = ItemRef(pending.target, pending.section_id)
+    draft = prepared.draft_of(ref)
+    drafted = [] if draft is None else [transport.comparable_draft(draft.content)]
+    ownership = Ownership(
+        (ItemContent(title=pending.title), *drafted), frozenset(prepared.state.item_ids), prepared.doc_id
+    )
+    parts = _unwritten_parts(remote, ownership)
+    if parts:
+        raise PublishError(
+            f"{ref.label} ({remote.item_id}) carries no skaldr stamp and holds content that is not what "
+            f"skaldr was creating there ({', '.join(parts)}), so skaldr will not adopt it; if it is the item "
+            f"skaldr created, empty it in {SERVICE_NAMES[service]} and publish again, and if it is not, "
+            f"delete its entry from `pending_creates` in {prepared.state_path}"
+        )
+
+
 def _left_empty_by_the_create(remote: RemoteItem) -> bool:
-    holds_text = any(text.strip() for text in remote.comparable.sections.values())
-    return remote.doc_id is None and not holds_text and not remote.child_ids
+    return remote.doc_id is None and holds_no_body(remote.held)
 
 
 def _settled(
@@ -196,7 +262,7 @@ def _rendered_where_it_matches(remote: ItemContent, draft: ItemContent, transpor
     return ItemContent(title=title, sections=sections, fields=fields, icon=icon, cover=cover)
 
 
-def _adopted(remote: RemoteItem, draft: ItemDraft | None, transport: Transport) -> PublishedItem:
+def adopted_item(remote: RemoteItem, draft: ItemDraft | None, transport: Transport) -> PublishedItem:
     rendered = (
         remote.comparable
         if draft is None
@@ -218,8 +284,15 @@ def _pending_target(prepared: Prepared, pending: PendingCreate) -> TargetBase:
     return target_type.model_validate(pending.target_as_written)
 
 
-def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> PublishState:
+@dataclass(frozen=True)
+class SettledCreates:
+    state: PublishState
+    left_empty: Mapping[ItemRef, LeftEmpty]
+
+
+def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> SettledCreates:
     state = prepared.state
+    left_empty: dict[ItemRef, LeftEmpty] = {}
     for pending in prepared.state.pending_creates:
         item_id = pending.into_id or pending.created_id
         if item_id is None:
@@ -228,10 +301,13 @@ def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> Pu
         transport = transports.for_target(pending.target, target)
         remote = _read_or_none(transport, item_id, NOT_YET_PUBLISHED)
         ref = ItemRef(pending.target, pending.section_id)
+        draft = prepared.draft_of(ref)
         created_by_skaldr = pending.into_id is None
         if remote is not None and created_by_skaldr:
             refuse_another_documents_item(ref, remote, prepared.doc_id)
-        draft = prepared.draft_of(ref)
+            _refuse_to_adopt_what_skaldr_did_not_create(
+                prepared, pending, remote, transport, target.service()
+            )
         if (
             remote is not None
             and created_by_skaldr
@@ -239,15 +315,15 @@ def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> Pu
             and _left_empty_by_the_create(remote)
             and isinstance(transport, FillsAPageLeftEmpty)
         ):
-            stamp = Stamp(prepared.doc_id, ref.section_id)
-            remote = transport.fill_a_page_left_empty(item_id, NewItem(target, stamp, draft.content))
+            left_empty[ref] = LeftEmpty(item_id, remote.raw_sections)
+            continue
         remaining = [held for held in state.pending_creates if held != pending]
         state = state.model_copy(update={"pending_creates": remaining})
         if remote is not None and (created_by_skaldr or remote.doc_id == prepared.doc_id):
-            held = _adopted(remote, prepared.draft_of(ref), transport)
+            held = adopted_item(remote, draft, transport)
             origin: ItemOrigin = "created" if created_by_skaldr else "adopted"
             state = with_item(state, ref, target, held.model_copy(update={"origin": origin}))
-    return state
+    return SettledCreates(state, left_empty)
 
 
 @dataclass(frozen=True)
@@ -255,6 +331,7 @@ class PublishedReadings:
     readings: list[Reading]
     state: PublishState
     missing: list[MissingItem]
+    unowned: list[UnownedItem]
 
 
 def _refuse_fields_the_item_cannot_hold(
@@ -272,6 +349,7 @@ def _refuse_fields_the_item_cannot_hold(
 def read_published(prepared: Prepared, transports: Transports) -> PublishedReadings:
     readings: list[Reading] = []
     missing: list[MissingItem] = []
+    unowned: list[UnownedItem] = []
     state = prepared.state
     for label, published_target in prepared.state.targets.items():
         transport = transports.for_target(label)
@@ -290,6 +368,11 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
                 missing.append(MissingItem(ref, item.item_id))
                 continue
             refuse_another_documents_item(ref, read, prepared.doc_id)
+            parts = _unwritten_parts_of_a_published_item(
+                read, item, ownership_of(item, draft, transport, prepared.state)
+            )
+            if parts:
+                unowned.append(UnownedItem(ref, item.item_id, _refused_write(item, draft), parts))
             _refuse_fields_the_item_cannot_hold(ref, transport, item.item_id, draft)
             remote = replace(read, comparable=_owned_part_of(read.comparable, owners))
             if item.retiring is not None:
@@ -310,7 +393,7 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
             if (edited or still_reported) and remote.edited_by is not None:
                 remote = replace(remote, edited_by=transport.editor_name(remote.edited_by))
             readings.append(Reading(ref, settled, remote, edited, still_reported, saved_copy))
-    return PublishedReadings(readings, state, missing)
+    return PublishedReadings(readings, state, missing, unowned)
 
 
 def _read_written_into(
@@ -327,16 +410,21 @@ def _read_written_into(
             "name an existing empty page, or publish under one with `parent_page` instead"
         ) from exc
     refuse_another_documents_item(step.item, remote, prepared.doc_id)
-    holds_this_draft = not differing_parts(
-        transport.comparable_draft(step.draft.content),
-        _owned_part_of(remote.comparable, [step.draft.content]),
-    )
-    if remote.doc_id is None and _has_content(remote) and not holds_this_draft:
+    ownership = Ownership((transport.comparable_draft(step.draft.content),), judges_the_title_and_look=False)
+    if _unwritten_parts(remote, ownership):
         raise PublishError(
             f"{step.item.label}: {into_id} already holds content and carries no skaldr stamp, so skaldr will "
             "not write into it; empty the page, or publish under it with `parent_page` instead"
         )
     return remote
+
+
+def stamped_with_this_document(written_into: Mapping[ItemRef, RemoteItem]) -> dict[ItemRef, str]:
+    return {
+        ref: remote.doc_id
+        for ref, remote in written_into.items()
+        if remote.doc_id is not None and holds_content(remote.held)
+    }
 
 
 def read_items_written_into(

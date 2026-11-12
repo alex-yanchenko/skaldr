@@ -1,5 +1,6 @@
 import re
-from urllib.parse import urlsplit
+from dataclasses import dataclass
+from urllib.parse import SplitResult, parse_qs, urlsplit
 
 from pydantic import Field, model_validator
 
@@ -9,6 +10,7 @@ from skaldr.services import NotionService
 
 NO_TEMPLATE = "none"
 NOTION_HOSTS = ("notion.so", "notion.site", "notion.com")
+PEEK_PAGE_KEY = "p"
 DASHLESS_PAGE_ID_LENGTH = 32
 DASHLESS_PAGE_ID = re.compile(rf"[0-9a-f]{{{DASHLESS_PAGE_ID_LENGTH}}}")
 DASHED_PAGE_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -19,38 +21,62 @@ def _is_notion_host(host: str) -> bool:
     return any(host == domain or host.endswith(f".{domain}") for domain in NOTION_HOSTS)
 
 
-def _last_url_segment(url: str) -> str | None:
+def _notion_url(url: str) -> SplitResult | None:
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or not _is_notion_host(parsed.hostname or ""):
         return None
-    return parsed.path.rstrip("/").rsplit("/", 1)[-1]
+    return parsed
 
 
-def notion_page_id(reference: str) -> str | None:
-    candidate = reference.strip()
-    if "://" in candidate:
-        segment = _last_url_segment(candidate)
-        if segment is None:
-            return None
-        candidate = segment
-    elif "/" in candidate:
-        return None
-    candidate = candidate.lower()
-    if DASHLESS_PAGE_ID.fullmatch(candidate):
-        return candidate
-    if DASHED_PAGE_ID.fullmatch(candidate):
-        return candidate.replace("-", "")
-    titled = TITLED_PAGE_ID.fullmatch(candidate)
+def _peeked_page(url: SplitResult) -> str | None:
+    peeked = parse_qs(url.query).get(PEEK_PAGE_KEY)
+    return None if peeked is None else peeked[-1]
+
+
+def _page_id_in(candidate: str) -> str | None:
+    lowered = candidate.lower()
+    if DASHLESS_PAGE_ID.fullmatch(lowered):
+        return lowered
+    if DASHED_PAGE_ID.fullmatch(lowered):
+        return lowered.replace("-", "")
+    titled = TITLED_PAGE_ID.fullmatch(lowered)
     return titled.group(1) if titled else None
 
 
+@dataclass(frozen=True)
+class _ReadReference:
+    page_id: str | None
+    peeked: str | None = None
+
+
+def _read_reference(reference: str) -> _ReadReference:
+    candidate = reference.strip()
+    if "://" not in candidate:
+        return _ReadReference(None if "/" in candidate else _page_id_in(candidate))
+    parsed = _notion_url(candidate)
+    if parsed is None:
+        return _ReadReference(None)
+    peeked = _peeked_page(parsed)
+    page_part = peeked if peeked is not None else parsed.path.rstrip("/").rsplit("/", 1)[-1]
+    return _ReadReference(_page_id_in(page_part), peeked)
+
+
+def notion_page_id(reference: str) -> str | None:
+    return _read_reference(reference).page_id
+
+
 def required_page_id(reference: str) -> str:
-    page_id = notion_page_id(reference)
-    if page_id is None:
+    read = _read_reference(reference)
+    if read.page_id is not None:
+        return read.page_id
+    peeked = read.peeked
+    if peeked is not None:
         raise ValueError(
-            f"'{reference}' is not a Notion page URL (notion.so, notion.site, notion.com) or a page id"
+            f"'{reference}' shows a page in peek view, and its `p` value '{peeked}' is not a Notion page id"
         )
-    return page_id
+    raise ValueError(
+        f"'{reference}' is not a Notion page URL (notion.so, notion.site, notion.com) or a page id"
+    )
 
 
 class NotionWhere(FrozenModel):

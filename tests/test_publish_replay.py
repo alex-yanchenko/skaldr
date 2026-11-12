@@ -16,12 +16,13 @@ from skaldr.publish.engine import (
     RemoteEdit,
     apply_publish,
     diff_publish,
+    dry_run_publish,
     prepare_publish,
     publish_status,
 )
-from skaldr.publish.plan import ItemRef
+from skaldr.publish.plan import ItemRef, describe_plan
 from skaldr.publish.state import held_state_lock, load_state, state_path_for
-from skaldr.publish.transport import Stamp
+from skaldr.publish.transport import NewItem, RemoteItem, Stamp
 from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
 from tests.factories.publish_factory import (
     DOC_ID,
@@ -163,6 +164,147 @@ def test_an_unfinished_create_whose_stamp_did_not_read_back_is_recorded_as_creat
         "page-2",
         "created",
         [],
+    )
+
+
+def test_a_dry_run_after_a_create_left_its_item_empty_sends_nothing_and_plans_the_fill(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    pending = _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+
+    dry_run = dry_run_publish(prepare_publish(path, fake_registry(transport)))
+
+    assert (describe_plan(dry_run.plan), dry_run.refusal, transport.writes(), _pending_creates(path)) == (
+        [
+            f"{TARGET_LABEL}: 0 to create, 0 to update, 0 to archive, 1 to fill",
+            "  fill     section tools page-2",
+        ],
+        None,
+        [],
+        pending,
+    )
+
+
+def test_a_dry_run_stopped_by_a_remote_edit_still_shows_the_fill_an_interrupted_create_needs(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+    transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
+
+    dry_run = dry_run_publish(prepare_publish(path, fake_registry(transport)))
+
+    assert (describe_plan(dry_run.plan), [edit.item for edit in dry_run.edits], transport.writes()) == (
+        [
+            f"{TARGET_LABEL}: 0 to create, 0 to update, 0 to archive, 1 to fill",
+            "  fill     section tools page-2",
+        ],
+        [DOCUMENT],
+        [],
+    )
+
+
+@pytest.mark.parametrize(
+    "blank_line", [pytest.param(None, id="nothing-left"), pytest.param("\n", id="a-blank-line-left")]
+)
+def test_an_apply_after_a_create_left_its_item_empty_fills_it_as_a_step_and_records_it_as_created(
+    tmp_path: Path, blank_line: str | None
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2", blank_line)
+
+    outcome = _publish(path, transport)
+    state = load_state(state_path_for(path), DOC_ID)
+    tools = state.targets[TARGET_LABEL].sections["tools"]
+
+    assert (outcome, transport.writes(), tools.item_id, tools.origin, state.pending_creates) == (
+        Applied(("fill     section tools page-2",)),
+        [("fill", "page-2")],
+        "page-2",
+        "created",
+        [],
+    )
+    assert transport.items["page-2"].content == transport.comparable_form(_drafted(path, "tools"))
+    assert transport.items["page-2"].stamp == Stamp(DOC_ID, "tools")
+
+
+def test_a_page_a_person_wrote_in_between_the_dry_run_and_the_apply_is_not_filled(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    pending = _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+    dry_run_publish(prepare_publish(path, fake_registry(transport)))
+    transport.edit_section_by_hand("page-2", "notes", "Bring gloves.\n")
+    refusal = (
+        f"{TOOLS.label} (page-2) carries no skaldr stamp and holds content that is not what skaldr was "
+        "creating there (section notes), so skaldr will not adopt it; if it is the item skaldr created, "
+        "empty it in Notion and publish again, and if it is not, delete its entry from `pending_creates` in "
+        f"{state_path_for(path)}"
+    )
+
+    with pytest.raises(PublishError, match=f"^{re.escape(refusal)}$"):
+        _publish(path, transport)
+    assert (transport.writes(), transport.items["page-2"].raw_sections, _pending_creates(path)) == (
+        [],
+        {"notes": "Bring gloves.\n"},
+        pending,
+    )
+
+
+def test_the_links_after_a_fill_use_the_page_the_fill_read_back_and_do_not_read_it_again(
+    tmp_path: Path,
+) -> None:
+    both = {
+        "doc_id": DOC_ID,
+        "targets": [
+            {"to": "notion", "where": {"parent_page": NOTION_PAGE_ID}, "split": ["tools"]},
+            {**make_jira_target(), "split": ["tools"]},
+        ],
+    }
+    path = write_garden_report(tmp_path, publish=both)
+    transport = FakeTransport()
+    _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+
+    _publish(path, transport)
+
+    link_calls = [call[:2] for call in transport.calls if call[0] in ("read_links", "write_links")]
+    assert link_calls == [
+        ("write_links", "page-1"),
+        ("write_links", "page-2"),
+        ("write_links", "page-3"),
+        ("write_links", "page-4"),
+    ]
+
+
+class WritesInThePageJustBeforeTheFill(FakeTransport):
+    def fill_a_page_left_empty(self, item_id: str, request: NewItem, /) -> RemoteItem:
+        self.edit_section_by_hand(item_id, "notes", "Bring gloves.\n")
+        return super().fill_a_page_left_empty(item_id, request)
+
+
+def test_a_fill_is_refused_when_the_page_gained_text_after_skaldr_read_it(tmp_path: Path) -> None:
+    path = write_garden_report(tmp_path)
+    transport = WritesInThePageJustBeforeTheFill()
+    pending = _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+
+    with pytest.raises(
+        WriteRejectedError,
+        match=f"^{re.escape('the layout skaldr sent for page-2 is not the one on the service')}$",
+    ):
+        _publish(path, transport)
+    assert (transport.writes(), transport.items["page-2"].raw_sections, _pending_creates(path)) == (
+        [],
+        {"notes": "Bring gloves.\n"},
+        pending,
     )
 
 

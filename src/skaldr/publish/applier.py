@@ -11,9 +11,11 @@ from skaldr.publish.content import (
     with_fields_named,
     with_parts,
 )
+from skaldr.publish.ownership import Ownership
 from skaldr.publish.plan import (
     ArchiveStep,
     CreateStep,
+    FillStep,
     ItemRef,
     PublishPlan,
     ReleaseStep,
@@ -27,6 +29,7 @@ from skaldr.publish.plan import (
     published_item,
 )
 from skaldr.publish.prepared import Prepared, Transports, with_item
+from skaldr.publish.reading import adopted_item, ownership_of
 from skaldr.publish.state import (
     InFlightWrite,
     PendingCreate,
@@ -39,8 +42,10 @@ from skaldr.publish.state import (
 from skaldr.publish.transport import (
     NO_SECTIONS,
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
+    FillsAPageLeftEmpty,
     NewItem,
     PlacesItsCreates,
     RawSections,
@@ -141,7 +146,7 @@ class Applier:
         self.remote[ref] = replace(
             remote,
             comparable=with_parts(self._comparable(ref, item), read_back, parts),
-            raw_sections=_raw_with_written_parts(self._raw_sections(ref), remote.raw_sections, parts),
+            raw_sections=self._raw_after_write(ref, remote, parts),
         )
         written = item.model_copy(
             update={
@@ -153,6 +158,18 @@ class Applier:
             }
         )
         return with_item(self.state, ref, target_plan.target, written)
+
+    def _raw_after_write(self, ref: ItemRef, remote: RemoteItem, parts: Sequence[Part]) -> RawSections:
+        before = self.remote.get(ref)
+        kept = _raw_with_written_parts(self._raw_sections(ref), remote.raw_sections, parts)
+        if before is None or before.stamp is not None or remote.stamp is None:
+            return kept
+        unchanged = {
+            key
+            for key in remote.raw_sections
+            if remote.comparable.sections.get(key) == before.comparable.sections.get(key)
+        }
+        return {key: remote.raw_sections[key] if key in unchanged else text for key, text in kept.items()}
 
     def _raw_sections(self, ref: ItemRef) -> RawSections:
         return self.remote[ref].raw_sections if ref in self.remote else NO_SECTIONS
@@ -194,7 +211,9 @@ class Applier:
                 self.state, ref, target_plan.target, item.model_copy(update={"rendered": rendered})
             )
         transport = self.transports.for_target(ref.target)
-        request = SectionRequest(write, raw_sections, self._stamp(ref), item.published_sections)
+        request = SectionRequest(
+            write, raw_sections, self._stamp(ref), item.published_sections, self._ownership(ref)
+        )
         return self._written(
             target_plan,
             ref,
@@ -205,12 +224,22 @@ class Applier:
     def _stamp(self, ref: ItemRef) -> Stamp:
         return Stamp(self.prepared.doc_id, ref.section_id)
 
+    def _ownership(self, ref: ItemRef) -> Ownership:
+        transport = self.transports.for_target(ref.target)
+        read = [self.remote[ref].comparable] if ref in self.remote else []
+        return ownership_of(self._item(ref), self.prepared.draft_of(ref), transport, self.state, read)
+
     def _write_content(self, target_plan: TargetPlan, step: WriteContentStep) -> PublishState:
         item = self._item(step.item)
         rendered = item.rendered.model_copy(update={"sections": step.content.sections})
         parts = [section_part(key) for key in (*step.written, *step.removed)]
         transport = self.transports.for_target(step.item.target)
-        request = ContentWrite(step.content.sections, self._raw_sections(step.item), self._stamp(step.item))
+        request = ContentWrite(
+            step.content.sections,
+            self._raw_sections(step.item),
+            self._stamp(step.item),
+            self._ownership(step.item),
+        )
         return self._written(
             target_plan,
             step.item,
@@ -232,6 +261,7 @@ class Applier:
             previous_icon=now.icon,
             previous_cover=now.cover,
             published=item.published_sections,
+            ownership=self._ownership(step.item),
         )
         rendered = item.rendered.model_copy(
             update={
@@ -269,6 +299,8 @@ class Applier:
         match step:
             case CreateStep():
                 return self._created(target_plan, step)
+            case FillStep():
+                return self._filled(target_plan, step)
             case WriteFieldsStep():
                 return self._write_fields(target_plan, step)
             case WriteSectionStep():
@@ -279,8 +311,9 @@ class Applier:
                 return self._write_content(target_plan, step)
             case ArchiveStep():
                 transport = self.transports.for_target(target_plan.label)
+                archive = Archive(self._stamp(step.item), self._ownership(step.item))
                 return self._retired(
-                    target_plan, step.item, "archive", lambda: transport.archive_item(step.item_id)
+                    target_plan, step.item, "archive", lambda: transport.archive_item(step.item_id, archive)
                 )
             case ReleaseStep():
                 transport = self.transports.for_target(target_plan.label)
@@ -296,6 +329,27 @@ class Applier:
                 )
             case _:
                 assert_never(step)
+
+    def _filled(self, target_plan: TargetPlan, step: FillStep) -> PublishState:
+        transport = self.transports.for_target(target_plan.label)
+        assert isinstance(transport, FillsAPageLeftEmpty)
+        request = NewItem(
+            target_plan.target,
+            self._stamp(step.item),
+            step.draft.content,
+            into_raw_sections=step.read_sections,
+        )
+        remote = transport.fill_a_page_left_empty(step.item_id, request)
+        self.remote[step.item] = remote
+        filled = adopted_item(remote, step.draft, transport).model_copy(update={"origin": "created"})
+        state = with_item(self.state, step.item, target_plan.target, filled)
+        remaining = [
+            pending
+            for pending in state.pending_creates
+            if (pending.target, pending.section_id, pending.created_id)
+            != (step.item.target, step.item.section_id, step.item_id)
+        ]
+        return state.model_copy(update={"pending_creates": remaining})
 
     def _created(self, target_plan: TargetPlan, step: CreateStep) -> PublishState:
         parent = None if step.item.section_id is None else self._item(ItemRef(step.item.target, None))

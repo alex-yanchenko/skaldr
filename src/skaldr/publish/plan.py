@@ -20,6 +20,7 @@ from skaldr.publish.content import (
 )
 from skaldr.publish.drafts import ItemDraft, TargetDraft, item_label, section_label
 from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState
+from skaldr.publish.transport import RawSections
 from skaldr.publish_block import TargetBase
 from skaldr.services import SERVICE_NAMES, SERVICES, Service
 
@@ -39,6 +40,21 @@ class CreateStep:
     item: ItemRef
     draft: ItemDraft
     into_id: str | None = None
+    replaces_content_stamped_with: str | None = None
+
+
+@dataclass(frozen=True)
+class FillStep:
+    item: ItemRef
+    draft: ItemDraft
+    item_id: str
+    read_sections: RawSections
+
+
+@dataclass(frozen=True)
+class LeftEmpty:
+    item_id: str
+    read_sections: RawSections
 
 
 @dataclass(frozen=True)
@@ -86,6 +102,7 @@ class WriteContentStep:
 
 Step = (
     CreateStep
+    | FillStep
     | WriteFieldsStep
     | WriteSectionStep
     | RemoveSectionStep
@@ -168,6 +185,8 @@ def _retired(ref: ItemRef, item: PublishedItem) -> Step:
 class _RemoteFacts:
     rewritten: Mapping[ItemRef, Collection[Part]]
     missing: Collection[ItemRef]
+    left_empty: Mapping[ItemRef, LeftEmpty]
+    stamped_into: Mapping[ItemRef, str]
 
 
 def _target_plan(
@@ -178,9 +197,14 @@ def _target_plan(
     for item in draft.items:
         ref = ItemRef(draft.label, item.section_id)
         existing = published_item(published, item.section_id)
+        left_empty = facts.left_empty.get(ref)
+        if existing is None and left_empty is not None:
+            creates.append(FillStep(ref, item, left_empty.item_id, left_empty.read_sections))
+            continue
         if existing is None or ref in facts.missing:
             into_id = connector.existing_item_id(draft.target) if item.section_id is None else None
-            creates.append(CreateStep(ref, item, into_id))
+            stamped = None if into_id is None else facts.stamped_into.get(ref)
+            creates.append(CreateStep(ref, item, into_id, replaces_content_stamped_with=stamped))
             continue
         updates += item_steps(ref, existing.rendered, item, connector.writes, facts.rewritten.get(ref, ()))
     drafted = {item.section_id for item in draft.sections}
@@ -250,10 +274,12 @@ def plan_publish(
     registry: ConnectorRegistry,
     rewritten: Mapping[ItemRef, Collection[Part]] = MappingProxyType({}),
     missing: Collection[ItemRef] = (),
+    left_empty: Mapping[ItemRef, LeftEmpty] = MappingProxyType({}),
+    stamped_into: Mapping[ItemRef, str] = MappingProxyType({}),
 ) -> PublishPlan:
     _refuse_shared_items(state)
     drafted = {draft.label for draft in drafts}
-    facts = _RemoteFacts(rewritten, missing)
+    facts = _RemoteFacts(rewritten, missing, left_empty, stamped_into)
     return PublishPlan(
         (
             *(
@@ -271,9 +297,16 @@ def plan_publish(
 
 def describe_step(step: Step) -> str:
     match step:
+        case CreateStep() if step.replaces_content_stamped_with is not None:
+            return (
+                f"adopt    {item_label(step.item.section_id)} into {step.into_id} (replaces content stamped "
+                f"with doc_id '{step.replaces_content_stamped_with}')"
+            )
         case CreateStep():
             into = f" into {step.into_id}" if step.into_id else ""
             return f'create   {item_label(step.item.section_id)} "{step.draft.content.title}"{into}'
+        case FillStep():
+            return f"fill     {item_label(step.item.section_id)} {step.item_id}"
         case WriteFieldsStep():
             return (
                 f"update   {item_label(step.item.section_id)}: {', '.join(part.label for part in step.parts)}"
@@ -298,9 +331,11 @@ def _counts(steps: Sequence[Step]) -> str:
     creates = sum(isinstance(step, CreateStep) for step in steps)
     archives = sum(isinstance(step, ArchiveStep) for step in steps)
     releases = sum(isinstance(step, ReleaseStep) for step in steps)
-    updates = len(steps) - creates - archives - releases
+    fills = sum(isinstance(step, FillStep) for step in steps)
+    updates = len(steps) - creates - archives - releases - fills
     counted = f"{creates} to create, {updates} to update, {archives} to archive"
-    return f"{counted}, {releases} to release" if releases else counted
+    released = f"{counted}, {releases} to release" if releases else counted
+    return f"{released}, {fills} to fill" if fills else released
 
 
 def describe_plan(plan: PublishPlan) -> list[str]:

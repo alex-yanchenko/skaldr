@@ -5,11 +5,13 @@ from typing import Protocol, runtime_checkable
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish.content import ItemContent, Part, is_unset, same_value
+from skaldr.publish.ownership import NOTHING_WRITTEN, HeldContent, Ownership
 
 __all__ = [
     "NO_PUBLISHED",
     "NO_SECTIONS",
     "AddSection",
+    "Archive",
     "ContentWrite",
     "FieldsWrite",
     "FillsAPageLeftEmpty",
@@ -113,10 +115,26 @@ class RemoteItem:
     child_ids: tuple[str, ...] = ()
     set_properties: tuple[str, ...] = ()
     links: tuple[ShownLink, ...] | None = None
+    properties_the_service_sets: tuple[str, ...] = ()
+    labelled_for: frozenset[str] | None = None
+    archived_for: str | None = None
 
     @property
     def doc_id(self) -> str | None:
         return None if self.stamp is None else self.stamp.doc_id
+
+    @property
+    def held(self) -> HeldContent:
+        judged = [name for name in self.set_properties if name not in self.properties_the_service_sets]
+        return HeldContent(
+            self.comparable.title,
+            self.comparable.sections,
+            self.child_ids,
+            {name: self.comparable.fields.get(name) for name in judged},
+            self.comparable.icon,
+            self.comparable.cover,
+            self.labelled_for,
+        )
 
 
 @dataclass(frozen=True)
@@ -165,6 +183,7 @@ class SectionRequest:
     raw_sections: RawSections
     stamp: Stamp
     published: PublishedSections = NO_PUBLISHED
+    ownership: Ownership = NOTHING_WRITTEN
 
 
 @dataclass(frozen=True)
@@ -172,6 +191,13 @@ class ContentWrite:
     sections: Mapping[str, str]
     raw_sections: RawSections
     stamp: Stamp
+    ownership: Ownership = NOTHING_WRITTEN
+
+
+@dataclass(frozen=True)
+class Archive:
+    stamp: Stamp
+    ownership: Ownership = NOTHING_WRITTEN
 
 
 @dataclass(frozen=True)
@@ -194,6 +220,7 @@ class FieldsWrite:
     previous_icon: str | None = None
     previous_cover: str | None = None
     published: PublishedSections = NO_PUBLISHED
+    ownership: Ownership = NOTHING_WRITTEN
 
     @property
     def changes_the_icon(self) -> bool:
@@ -254,7 +281,7 @@ class Transport(Protocol):
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem: ...
 
-    def archive_item(self, item_id: str, /) -> None: ...
+    def archive_item(self, item_id: str, request: Archive, /) -> None: ...
 
     def release_item(self, item_id: str, request: Release, /) -> None: ...
 

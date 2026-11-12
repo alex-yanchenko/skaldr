@@ -50,10 +50,17 @@ from skaldr.publish.notion.properties import (
     title_request,
     title_text,
 )
-from skaldr.publish.notion.responses import Page
+from skaldr.publish.notion.responses import Page, StatusValue
 from skaldr.publish.notion.template import check_the_template_is_empty
+from skaldr.publish.ownership import (
+    HeldContent,
+    Ownership,
+    refuse_to_archive_an_item_skaldr_does_not_own,
+    refuse_unstamped_content_skaldr_did_not_write,
+)
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -127,6 +134,38 @@ def _with_nothing_sent(prepare: Callable[[], Answer]) -> Answer:
 
 def _page_named(item_id: str) -> str:
     return f"Notion page {item_id}"
+
+
+def _status_properties(page: Page) -> tuple[str, ...]:
+    return tuple(name for name, value in page.properties.items() if isinstance(value, StatusValue))
+
+
+def _remote_item(item_id: str, page: Page, markdown: str, layout: Mapping[str, str]) -> RemoteItem:
+    keyed = keyed_page(markdown, layout)
+    edited_at = page.last_edited_time.isoformat()
+    return RemoteItem(
+        item_id,
+        ItemContent(
+            title=title_text(page),
+            sections=dict(keyed.sections),
+            fields=property_fields(page),
+            icon=icon_text(page),
+            cover=cover_text(page),
+        ),
+        keyed.raw_sections,
+        keyed.stamp,
+        marker=edited_at,
+        edited_by=page.last_edited_by.id,
+        edited_at=edited_at,
+        child_ids=keyed.child_ids,
+        set_properties=set_property_names(page),
+        links=keyed.links,
+        properties_the_service_sets=_status_properties(page),
+    )
+
+
+def _held(page: Page, markdown: str, layout: Mapping[str, str]) -> HeldContent:
+    return _remote_item(_page_key(page.id), page, markdown, layout).held
 
 
 def _with_children_of_removed_sections(
@@ -274,6 +313,7 @@ class NotionTransport:
             kept = carried_into(current.get(change.key, ""), self._people.as_written(change.text))
         after = list(placed_section(current, change.key, kept, follows).items())
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
+        self._refuse_an_unstamped_page_skaldr_did_not_write(item_id, keyed, markdown, request.ownership)
         replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
         if replacement is None:
             raise WriteRejectedError(
@@ -284,6 +324,7 @@ class NotionTransport:
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
+        self._refuse_an_unstamped_page_skaldr_did_not_write(item_id, keyed, markdown, request.ownership)
         current = keyed.raw_sections
         after = _with_children_of_removed_sections(
             current,
@@ -311,6 +352,10 @@ class NotionTransport:
         stamp = keyed_page(markdown, layout).stamp
         if stamp is not None and stamp != request.stamp:
             raise WriteRejectedError(f"Notion page {item_id} is not stamped with {request.stamp.named}")
+        if stamp is None:
+            refuse_unstamped_content_skaldr_did_not_write(
+                _page_named(item_id), _held(page, markdown, layout), request.ownership, "write to"
+            )
         title = title_request(request.title, title_property_name(page)) if request.changes_the_title else {}
         values: JsonFields = {**request.changed_fields, **dict.fromkeys(request.cleared_fields)}
         properties = {**title, **self._property_requests(page, values)}
@@ -324,12 +369,29 @@ class NotionTransport:
             page = self._api.update_page(item_id, body)
         return self._remote(item_id, page, markdown, layout)
 
-    def archive_item(self, item_id: str, /) -> None:
+    def archive_item(self, item_id: str, request: Archive, /) -> None:
         try:
-            self._live_page(item_id)
+            page = self._live_page(item_id)
         except ItemNotFoundError:
             return
+        markdown = self._api.page_markdown(item_id).markdown
+        layout = self._read.layouts.get(_page_key(item_id), {})
+        stamp = keyed_page(markdown, layout).stamp
+        refuse_to_archive_an_item_skaldr_does_not_own(
+            _page_named(item_id),
+            None if stamp is None else stamp.doc_id,
+            _held(page, markdown, layout),
+            request.stamp.doc_id,
+            request.ownership,
+        )
         self._api.update_page(item_id, {"in_trash": True})
+
+    def _refuse_an_unstamped_page_skaldr_did_not_write(
+        self, item_id: str, keyed: KeyedPage, markdown: str, ownership: Ownership
+    ) -> None:
+        if keyed.stamp is None:
+            held = _held(self._live_page(item_id), markdown, keyed.raw_sections)
+            refuse_unstamped_content_skaldr_did_not_write(_page_named(item_id), held, ownership, "write to")
 
     def release_item(self, item_id: str, request: Release, /) -> None:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
@@ -403,28 +465,10 @@ class NotionTransport:
         return page
 
     def _remote(self, item_id: str, page: Page, markdown: str, layout: Mapping[str, str]) -> RemoteItem:
-        keyed = keyed_page(markdown, layout)
-        self._read.layouts[_page_key(item_id)] = keyed.sections
+        remote = _remote_item(item_id, page, markdown, layout)
+        self._read.layouts[_page_key(item_id)] = remote.comparable.sections
         self._property_names_read[_page_key(item_id)] = tuple(page.properties)
-        edited_at = page.last_edited_time.isoformat()
-        return RemoteItem(
-            item_id,
-            ItemContent(
-                title=title_text(page),
-                sections=dict(keyed.sections),
-                fields=property_fields(page),
-                icon=icon_text(page),
-                cover=cover_text(page),
-            ),
-            keyed.raw_sections,
-            keyed.stamp,
-            marker=edited_at,
-            edited_by=page.last_edited_by.id,
-            edited_at=edited_at,
-            child_ids=keyed.child_ids,
-            set_properties=set_property_names(page),
-            links=keyed.links,
-        )
+        return remote
 
     def _send(self, item_id: str, sections: Mapping[str, str], replacement: Replacement) -> str:
         _refuse_unknown_blocks(item_id, sections, replacement)

@@ -26,6 +26,9 @@ from tests.factories.auth_factory import site_refusal
 
 OTHER_NOTION_PAGE_ID = "fedcba9876543210fedcba9876543210"
 OTHER_NOTION_PAGE_URL = f"https://www.notion.so/Page-Template-{OTHER_NOTION_PAGE_ID}"
+PEEK_URL = (
+    f"https://www.notion.so/{NOTION_PAGE_ID}?v=00112233445566778899aabbccddeeff&p={OTHER_NOTION_PAGE_ID}&pm=s"
+)
 SPLIT_ON_INNER: dict[str, Any] = {"doc_id": "plan", "targets": [make_notion_target(split=["inner"])]}
 SOURCE_WITH_PUBLISH = f"""\
 version: 1
@@ -214,6 +217,27 @@ def test_a_notion_target_refuses_a_template_that_is_not_a_page_or_that_has_no_pa
         pytest.param(f"ftp://www.notion.so/{NOTION_PAGE_ID}", None, id="non-http-scheme"),
         pytest.param(f"example.com/x-{NOTION_PAGE_ID}", None, id="path-without-scheme"),
         pytest.param("https://www.notion.so/no-id-here", None, id="no-id"),
+        pytest.param(PEEK_URL, OTHER_NOTION_PAGE_ID, id="peek-view"),
+        pytest.param(
+            f"https://www.notion.so/{NOTION_PAGE_ID}?p=fedcba98-7654-3210-fedc-ba9876543210",
+            OTHER_NOTION_PAGE_ID,
+            id="peek-view-dashed",
+        ),
+        pytest.param(f"https://www.notion.so/{NOTION_PAGE_ID}?v=1&p=", NOTION_PAGE_ID, id="empty-peek"),
+        pytest.param(
+            f"https://www.notion.so/{NOTION_PAGE_ID}?p=not-a-page&p={OTHER_NOTION_PAGE_ID}",
+            OTHER_NOTION_PAGE_ID,
+            id="repeated-peek-last-wins",
+        ),
+        pytest.param(
+            f"https://www.notion.so/{NOTION_PAGE_ID}?p={OTHER_NOTION_PAGE_ID}&p=not-a-page",
+            None,
+            id="repeated-peek-last-not-an-id",
+        ),
+        pytest.param(f"https://www.notion.so/{NOTION_PAGE_ID}?v=1&p=not-a-page", None, id="peek-not-an-id"),
+        pytest.param(
+            f"https://example.com/{NOTION_PAGE_ID}?p={OTHER_NOTION_PAGE_ID}", None, id="peek-off-notion"
+        ),
     ],
 )
 def test_a_notion_page_id_comes_from_a_notion_url_or_a_bare_id(reference: str, page_id: str | None) -> None:
@@ -238,6 +262,12 @@ def test_a_notion_page_id_comes_from_a_notion_url_or_a_bare_id(reference: str, p
             f"{NOTION_WHERE_ERROR}'https://www.notion.so/no-id-here' is not a Notion page URL "
             "(notion.so, notion.site, notion.com) or a page id",
             id="no-page-id",
+        ),
+        pytest.param(
+            {"parent_page": f"https://www.notion.so/{NOTION_PAGE_ID}?v=1&p=not-a-page&pm=s"},
+            f"{NOTION_WHERE_ERROR}'https://www.notion.so/{NOTION_PAGE_ID}?v=1&p=not-a-page&pm=s' shows a "
+            "page in peek view, and its `p` value 'not-a-page' is not a Notion page id",
+            id="peek-value-not-an-id",
         ),
     ],
 )

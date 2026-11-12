@@ -12,9 +12,15 @@ from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import NO_SECTION_DEFAULTS, SectionDefaults, WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
+from skaldr.publish.ownership import (
+    Ownership,
+    refuse_to_archive_an_item_skaldr_does_not_own,
+    refuse_unstamped_content_skaldr_did_not_write,
+)
 from skaldr.publish.state import PublishState
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -187,6 +193,7 @@ class FakeTransport:
     _creating_into_without_a_stamp: bool = False
     _leaving_unfinished: int | None = None
     _editing_during_write: tuple[str, str, str] | None = None
+    _unstamping_during_write: str | None = None
 
     def leave_a_create_unfinished(self, count_from_now: int) -> None:
         self._leaving_unfinished = self._writes + count_from_now
@@ -261,6 +268,26 @@ class FakeTransport:
     def stamp_by_hand(self, item_id: str, stamp: Stamp | None) -> None:
         self.items[item_id].stamp = stamp
 
+    def empty_item_by_hand(self, item_id: str, blank_line: str | None = None) -> None:
+        item = self.items[item_id]
+        item.raw_sections = {} if blank_line is None else {"blank": blank_line}
+        item.stamp = None
+        item.revision = self._bump()
+
+    def fill_a_page_left_empty(self, item_id: str, request: NewItem, /) -> RemoteItem:
+        self._refuse_a_stale_layout(item_id, request.into_raw_sections)
+        self._write(("fill", item_id))
+        item = self.items[item_id]
+        content = self.comparable_form(request.content)
+        item.title = content.title
+        item.raw_sections = dict(content.sections)
+        item.fields = self._kept_fields({**item.fields, **content.fields})
+        item.icon = content.icon or item.icon
+        item.cover = content.cover or item.cover
+        item.stamp = request.stamp
+        item.revision = self._bump()
+        return self._after_write(item_id)
+
     def set_icon_by_hand(self, item_id: str, icon: str | None) -> None:
         self.items[item_id].icon = icon
         self.report_an_edit_without_changing_content(item_id, ICON)
@@ -299,10 +326,14 @@ class FakeTransport:
             raise ItemNotFoundError(f"{item_id} is not on the service")
         return item.links if item.stamp == stamp else ()
 
+    def _refuse_another_stamp(self, item_id: str, stamp: Stamp) -> None:
+        held = self.items[item_id].stamp
+        if held is not None and held != stamp:
+            raise WriteRejectedError(f"{item_id} is not stamped with {stamp.named}")
+
     def write_links(self, item_id: str, request: LinksWrite, /) -> tuple[ShownLink, ...]:
         item = self.items[item_id]
-        if item.stamp is not None and item.stamp != request.stamp:
-            raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.named}")
+        self._refuse_another_stamp(item_id, request.stamp)
         if request.changes_nothing:
             return item.links
         self._write(("write_links", item_id, *(link.title for link in request.links)))
@@ -366,8 +397,14 @@ class FakeTransport:
             raise CreatedButUnfinishedError(f"{UNFINISHED_CREATE} {item_id}", item_id)
         return self._after_write(item_id)
 
+    def _refuse_unstamped_content_skaldr_did_not_write(self, item_id: str, ownership: Ownership) -> None:
+        remote = self._remote(item_id)
+        if remote.stamp is None:
+            refuse_unstamped_content_skaldr_did_not_write(item_id, remote.held, ownership, "write to")
+
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         change = request.change
+        self._refuse_unstamped_content_skaldr_did_not_write(item_id, request.ownership)
         self._write(("write_section", item_id, change.key))
         self._refuse_a_stale_layout(item_id, request.raw_sections)
         item = self.items[item_id]
@@ -381,10 +418,12 @@ class FakeTransport:
             at = 0 if change.follows is None else list(sections).index(change.follows) + 1
             sections = dict([*pairs[:at], (change.key, self._stored(change.text)), *pairs[at:]])
         item.raw_sections = sections
+        item.stamp = item.stamp or request.stamp
         item.revision = self._bump()
         return self._after_write(item_id)
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
+        self._refuse_unstamped_content_skaldr_did_not_write(item_id, request.ownership)
         self._write(("write_content", item_id))
         self._refuse_a_stale_layout(item_id, request.raw_sections)
         item = self.items[item_id]
@@ -395,6 +434,7 @@ class FakeTransport:
             item.revision = self._bump()
             raise ConnectorError(DROPPED_AFTER_WRITE)
         item.raw_sections = stored
+        item.stamp = item.stamp or request.stamp
         item.revision = self._bump()
         return self._after_write(item_id)
 
@@ -404,10 +444,11 @@ class FakeTransport:
         cleared = tuple(f"clear {name}" for name in sorted(request.cleared_fields))
         icon = (f"icon {request.icon}",) if request.changes_the_icon else ()
         cover = (f"cover {request.cover}",) if request.changes_the_cover else ()
+        self._refuse_unstamped_content_skaldr_did_not_write(item_id, request.ownership)
         self._write(("write_fields", item_id, *title, *changed, *cleared, *icon, *cover))
         item = self.items[item_id]
-        if item.stamp != request.stamp:
-            raise WriteRejectedError(f"{item_id} is not stamped with {request.stamp.doc_id}")
+        self._refuse_another_stamp(item_id, request.stamp)
+        item.stamp = request.stamp
         nulled: JsonFields = (
             dict.fromkeys(request.cleared_fields) if self.reads_cleared_fields_as_null else {}
         )
@@ -425,7 +466,11 @@ class FakeTransport:
     def editor_name(self, user_id: str, /) -> str:
         return user_id
 
-    def archive_item(self, item_id: str, /) -> None:
+    def archive_item(self, item_id: str, request: Archive, /) -> None:
+        remote = self._remote(item_id)
+        refuse_to_archive_an_item_skaldr_does_not_own(
+            item_id, remote.doc_id, remote.held, request.stamp.doc_id, request.ownership
+        )
         self._write(("archive", item_id))
         self.items[item_id].archived = True
         self._drop_the_connection_if_asked()
@@ -491,12 +536,19 @@ class FakeTransport:
     def edit_by_hand_during_the_next_write(self, item_id: str, key: str, text: str) -> None:
         self._editing_during_write = (item_id, key, text)
 
+    def unstamp_and_edit_by_hand_during_the_next_write(self, item_id: str, key: str, text: str) -> None:
+        self._editing_during_write = (item_id, key, text)
+        self._unstamping_during_write = item_id
+
     def _after_write(self, item_id: str) -> RemoteItem:
         if self._editing_during_write is not None:
             edited_id, key, text = self._editing_during_write
             self._editing_during_write = None
             self.edit_section_by_hand(edited_id, key, text)
             self.items[item_id].revision = self._bump()
+        if self._unstamping_during_write is not None:
+            self.items[self._unstamping_during_write].stamp = None
+            self._unstamping_during_write = None
         self._drop_the_connection_if_asked()
         return self._remote(item_id)
 
