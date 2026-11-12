@@ -585,13 +585,17 @@ def main(argv: list[str] | None = None) -> int:
     for path in written:
         print(f"OK  {path}")
     print(_build_summary(report))
+    _warn_of_unfilled_placeholders(data_path, report)
+    return 0
+
+
+def _warn_of_unfilled_placeholders(data_path: Path, report: Report) -> None:
     unfilled = find_placeholders(report)
     if unfilled:
         print(
             f"warning: {data_path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
             file=sys.stderr,
         )
-    return 0
 
 
 def _recorded_render(out_path: Path) -> RecordedRender | None:
@@ -795,6 +799,7 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
         )
     for path in result.files:
         print(f"OK  {path}")
+    _warn_of_unfilled_placeholders(data_path, report)
     return 0
 
 

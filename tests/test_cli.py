@@ -818,9 +818,23 @@ def test_render_warns_with_the_singular_noun_for_one_unfilled_placeholder(
 ) -> None:
     data_path = _write(tmp_path, make_report(meta={"title": "{{t}}"}))
 
-    main([str(data_path), "-o", str(tmp_path / "report.html")])
+    assert main([str(data_path), "-o", str(tmp_path / "report.html")]) == 0
 
     assert capsys.readouterr().err == f"warning: {data_path}: 1 unfilled placeholder: t\n"
+
+
+@pytest.mark.parametrize("target", ["markdown", "notion", "adf", "slack"])
+def test_export_warns_on_stderr_about_unfilled_placeholders_and_still_succeeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], target: str
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "{{url}} and {{ticket}}."}]))
+
+    exit_code = main([str(data_path), "--export", target, "--export-dir", str(tmp_path / "out")])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        0,
+        f"warning: {data_path}: 2 unfilled placeholders: ticket, url\n",
+    )
 
 
 def test_render_without_unfilled_placeholders_prints_nothing_on_stderr(

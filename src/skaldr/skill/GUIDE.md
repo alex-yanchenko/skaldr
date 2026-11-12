@@ -210,7 +210,7 @@ other blank until you fill in the URL.
 
 A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts too, even though those fields are plain text and show the `{{name}}` as written.
 
-- Rendering a page with blanks still succeeds, and prints `warning: file.yaml: 2 unfilled placeholders: ticket, url` on stderr after the `OK` lines.
+- Rendering a page or exporting a document with blanks still succeeds, and prints `warning: file.yaml: 2 unfilled placeholders: ticket, url` on stderr after the `OK` lines. Only `--check --strict` fails.
 - `skaldr --check file.yaml` reports the count (`… (2 unfilled placeholders: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
   you run before "final". Under the failing line it lists each blank with the fields that hold it:
