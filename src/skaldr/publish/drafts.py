@@ -8,12 +8,12 @@ from typing import assert_never, cast
 
 from skaldr import models
 from skaldr.errors import PublishError
+from skaldr.export import limit_refusal
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import Lowering, assemble_item_page, lower_regions, lowering_for
 from skaldr.export.tree import BlockRegion, LoweredDocument, PagePart, Region
 from skaldr.publish.connector import (
     NO_SECTION_DEFAULTS,
-    SPLIT_ADVICE,
     Connector,
     ConnectorRegistry,
     ContentLimit,
@@ -225,10 +225,8 @@ def _refuse_what_cannot_fit(
         for what, text in measured:
             size = limit.measure(text)
             if size > limit.maximum:
-                raise PublishError(
-                    f"{label}, {item_label(draft.section_id)}: {what} has {size:,} {limit.unit}, over the "
-                    f"{limit.maximum:,} a {service} {limit.scope} can take; {SPLIT_ADVICE}"
-                )
+                refusal = limit_refusal(what, size, limit.unit, limit.maximum, service, limit.scope)
+                raise PublishError(f"{label}, {item_label(draft.section_id)}: {refusal}")
 
 
 def _target_draft(context: _TargetContext, regions: Sequence[BlockRegion]) -> TargetDraft:

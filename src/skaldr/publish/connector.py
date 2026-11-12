@@ -12,7 +12,6 @@ from skaldr.publish_block import PUBLISH_TARGET_TYPES, TargetBase
 from skaldr.publish_block.target import JsonFields
 from skaldr.services import Service
 
-SPLIT_ADVICE = "split the document further with `split`, or shorten it"
 LimitScope = Literal["section", "item"]
 WriteGranularity = Literal["section", "content"]
 

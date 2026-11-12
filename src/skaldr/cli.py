@@ -811,8 +811,12 @@ def _draft_the_publish_targets(path: Path, report: Report) -> None:
     draft_targets(load_authored(path), installed_connectors())
 
 
-def _refuse_an_export_too_big_to_publish(rendered: RenderedExport) -> None:
-    if rendered.refused_for_its_size is not None:
+def _publishes_to_jira(report: Report) -> bool:
+    return report.publish is not None and any(target.service() == "jira" for target in report.publish.targets)
+
+
+def _refuse_an_export_too_big_to_publish(report: Report, rendered: RenderedExport) -> None:
+    if rendered.refused_for_its_size is not None and not _publishes_to_jira(report):
         raise ReportError(rendered.refused_for_its_size)
 
 
@@ -831,7 +835,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
             unfilled = find_placeholders(report)
             _draft_the_publish_targets(path, report)
             for target in dict.fromkeys(targets):
-                _refuse_an_export_too_big_to_publish(render_export(report, target))
+                _refuse_an_export_too_big_to_publish(report, render_export(report, target))
         except (ReportError, PublishError, ConnectorError) as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)
