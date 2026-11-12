@@ -247,6 +247,29 @@ def test_a_date_with_a_label_and_a_date_range_with_a_label_are_accepted_by_the_a
     )
 
 
+def test_a_code_label_is_bold_text_above_the_code_block_and_the_document_validates() -> None:
+    block = {"type": "code", "label": "Undo last commit", "content": "git reset HEAD~1", "lang": "shell"}
+
+    document = json.loads(
+        json.dumps(render_adf_document(lower_report(parse_report(make_report(blocks=[block])))))
+    )
+
+    assert (document["content"], _problems(document)) == (
+        [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Undo last commit", "marks": [{"type": "strong"}]}],
+            },
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "shell"},
+                "content": [{"type": "text", "text": "git reset HEAD~1"}],
+            },
+        ],
+        [],
+    )
+
+
 def test_the_badge_and_state_blocks_are_accepted_by_the_adf_schema() -> None:
     lowered = lower_report(parse_report(make_report(blocks=BADGE_AND_STATE_BLOCKS, badges=API_BADGES)))
 

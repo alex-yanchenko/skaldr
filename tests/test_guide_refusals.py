@@ -35,10 +35,7 @@ COLOUR_OR_HIGHLIGHT_NESTED_ROW = (
     "a highlight inside a colour or a colour inside a highlight, nested either way, "
     "or a highlight in a toned walkthrough step's title"
 )
-NOTION_INLINE_CODE_ROW = (
-    "an inline `` `code` `` span holding a closing tag (`</`) or a backtick, "
-    "including a `code` block's `label`"
-)
+NOTION_INLINE_CODE_ROW = "an inline `` `code` `` span holding a closing tag (`</`) or a backtick"
 NOTION_CODE_LINE_ROW = (
     "a `code` block with a line that is only `</callout>`, `</details>`, `</column>` or `</tab>`, "
     "or only `<callout>`"

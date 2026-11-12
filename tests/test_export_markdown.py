@@ -302,6 +302,12 @@ def test_a_page_cover_is_an_image_under_the_icon_led_title() -> None:
     )
 
 
+def test_a_code_label_is_bold_text_above_the_block() -> None:
+    block = {"type": "code", "label": "Undo last commit", "content": "git reset HEAD~1", "lang": "shell"}
+
+    assert markdown_of([block]) == "**Undo last commit**\n\n```shell\ngit reset HEAD~1\n```\n"
+
+
 def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link_urls() -> None:
     text = r"a *b* c_d [x] <y> ~n c:\d AT&T &amp; and `a*b [c]` via [x_y](https://example.com/a_b?q=[1])"
 

@@ -772,6 +772,40 @@ def test_a_second_list_in_one_list_item_is_rejected() -> None:
     )
 
 
+def test_a_code_label_is_bold_text_above_the_block() -> None:
+    block = {"type": "code", "label": "Undo last commit", "content": "git reset HEAD~1", "lang": "shell"}
+
+    assert slack_of([block]) == "**Undo last commit**\n\n```shell\ngit reset HEAD~1\n```\n"
+
+
+def test_a_timeline_event_separates_its_title_from_its_body_with_the_fact_separator() -> None:
+    block = {
+        "type": "timeline",
+        "items": [
+            {
+                "time": "Mon",
+                "title": "Release 2.4 shipped",
+                "body": "Rolled out to all regions.",
+                "state": "done",
+            },
+            {"time": "Tue", "title": "Review"},
+        ],
+    }
+
+    assert (
+        slack_of([block])
+        == "* ✅ **Mon**: Release 2.4 shipped · Rolled out to all regions.\n* **Tue**: Review\n"
+    )
+
+
+def test_a_timeline_inside_a_panel_separates_its_title_from_its_body_the_same_way() -> None:
+    timeline = {"type": "timeline", "items": [{"time": "Mon", "title": "Shipped", "body": "All regions."}]}
+
+    assert slack_of([{"type": "panel", "title": "Log", "blocks": [timeline]}]) == (
+        "::: {.callout}\n**Log**\n\n* **Mon**: Shipped · All regions.\n:::\n"
+    )
+
+
 def test_a_paragraph_inside_a_list_item_joins_the_item_text() -> None:
     node = make_bullets(
         make_list_entry("Drift", make_paragraph("first"), make_paragraph("second")),

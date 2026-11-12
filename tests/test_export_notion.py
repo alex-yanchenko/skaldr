@@ -946,15 +946,9 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
     )
 
 
-def test_a_code_label_holding_a_backtick_is_refused_for_notion() -> None:
-    report = parse_report(make_report(blocks=[{"type": "code", "label": "a`b", "content": "x"}]))
-
-    with pytest.raises(ExportRejectedError) as raised:
-        render_export(report, "notion")
-
-    assert str(raised.value) == (
-        "Notion cannot show inline code holding a backtick, as in 'a`b', at blocks.0.code; "
-        "write the code in a code block, or without the backtick"
+def test_a_code_label_holding_a_backtick_is_bold_text_for_notion() -> None:
+    assert (
+        notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "**a\\`b**\n```plain text\nx\n```\n"
     )
 
 

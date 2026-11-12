@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Final, Literal, NoReturn, TypeGuard, assert_never
 
@@ -69,6 +69,7 @@ from skaldr.export.tree import (
     TableNode,
     TableOfContents,
     Tabs,
+    Timeline,
     Toggle,
     ToneName,
     canvas_heading_shift,
@@ -102,7 +103,7 @@ CELL_TEXT_CHECK: Final = "☐ "
 CELL_LIST_INDENT: Final = "  "
 FACT_SEPARATOR: Final = " · "
 Place = Literal["top", "callout", "column"]
-OwnFormNode = FactStrip | DefinitionList | Cards | LinkCard
+OwnFormNode = FactStrip | DefinitionList | Cards | Timeline | LinkCard
 CanvasNode = GenericNode | OwnFormNode
 
 
@@ -336,6 +337,20 @@ def _canvas_cards(node: Cards) -> list[_CanvasBlock]:
     return blocks
 
 
+def _event_on_one_line(entry: ListEntry) -> ListEntry:
+    bodies = [child.text for child in entry.children if isinstance(child, Paragraph)]
+    text = spaced_runs([run for run in (entry.text, *bodies) if run], FACT_SEPARATOR)
+    return replace(entry, text=text, children=())
+
+
+def _canvas_timeline(node: Timeline) -> list[_CanvasBlock]:
+    return [
+        _canvas_list(replace(written, entries=tuple(map(_event_on_one_line, written.entries))))
+        for written in folded([node])
+        if isinstance(written, ListNode)
+    ]
+
+
 def _canvas_link_card(node: LinkCard) -> list[_CanvasBlock]:
     detail = Paragraph(plain(link_card_detail(node)), authored_at=node.authored_at)
     return [_BareUrl(node.url), detail]
@@ -349,6 +364,8 @@ def _written_in_its_own_form(node: Node, place: Place) -> TypeGuard[OwnFormNode]
             return place == "top" and _a_canvas_keeps_the_url_as_the_text_of_a_bare_paragraph(node.url)
         case Cards():
             return place == "top"
+        case Timeline():
+            return True
         case _:
             return False
 
@@ -365,6 +382,8 @@ def _canvas_block(node: CanvasNode, place: Place) -> list[_CanvasBlock]:
             return _canvas_definitions(node, place)
         case Cards():
             return _canvas_cards(node)
+        case Timeline():
+            return _canvas_timeline(node)
         case LinkCard():
             return _canvas_link_card(node)
         case _:

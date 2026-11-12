@@ -316,17 +316,17 @@ def test_a_media_block_keeps_its_kind_url_and_caption(block: dict[str, Any], nod
     [
         pytest.param(
             {"label": "q.sql", "content": "select 1\n\n"},
-            (Paragraph((Code("q.sql"),)), CodeBlock("select 1", "sql")),
+            (Paragraph(bold("q.sql")), CodeBlock("select 1", "sql")),
             id="suffix",
         ),
         pytest.param(
             {"label": "fix.ts", "content": "+a", "mode": "diff"},
-            (Paragraph((Code("fix.ts"),)), CodeBlock("+a", "diff")),
+            (Paragraph(bold("fix.ts")), CodeBlock("+a", "diff")),
             id="diff",
         ),
         pytest.param(
             {"label": "notes.unknown", "content": "x"},
-            (Paragraph((Code("notes.unknown"),)), CodeBlock("x", "")),
+            (Paragraph(bold("notes.unknown")), CodeBlock("x", "")),
             id="unmapped-suffix",
         ),
         pytest.param({"content": "plain"}, (CodeBlock("plain", ""),), id="no-label"),
@@ -335,7 +335,7 @@ def test_a_media_block_keeps_its_kind_url_and_caption(block: dict[str, Any], nod
         ),
         pytest.param(
             {"label": "q.sql", "content": "x", "lang": "plain text"},
-            (Paragraph((Code("q.sql"),)), CodeBlock("x", "plain text")),
+            (Paragraph(bold("q.sql")), CodeBlock("x", "plain text")),
             id="lang-wins-over-the-label-suffix",
         ),
         pytest.param(
@@ -345,7 +345,7 @@ def test_a_media_block_keeps_its_kind_url_and_caption(block: dict[str, Any], nod
         ),
         pytest.param(
             {"label": "run.sh\n# injected", "content": "x"},
-            (Paragraph((Code("run.sh # injected"),)), CodeBlock("x", "")),
+            (Paragraph(bold("run.sh # injected")), CodeBlock("x", "")),
             id="label-stays-on-one-line",
         ),
     ],

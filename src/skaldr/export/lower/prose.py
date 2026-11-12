@@ -34,7 +34,7 @@ from skaldr.export.tree import (
     TimelineEvent,
     ToneName,
 )
-from skaldr.richtext import Code, Link, Plain
+from skaldr.richtext import Link, Plain
 
 
 def _marked(mark: Mark, text: ExportRich) -> ExportRich:
@@ -196,7 +196,7 @@ def lower_meter(block: models.Meter) -> list[Node]:
 
 
 def lower_code(block: models.Code) -> list[Node]:
-    label: list[Node] = [Paragraph((Code(one_line(block.label)),))] if block.label else []
+    label: list[Node] = [Paragraph(bold(one_line(block.label)))] if block.label else []
     language = "diff" if block.mode == "diff" else block_code_language(block)
     return [*label, CodeBlock(block.content.rstrip("\n"), language)]
 
