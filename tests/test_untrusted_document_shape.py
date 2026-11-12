@@ -1,14 +1,14 @@
-import time
 from pathlib import Path
 
 import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ReportError
-from skaldr.models import load_report, parse_report
+from skaldr.models import content_files, load_report, parse_report
 from tests.factories import make_report
 
 _NESTS_TOO_DEEPLY = "nests too deeply or refers to itself"
+_NOT_AN_ITEM = "Input should be a valid dictionary or instance of ListItem"
 
 
 def _alias_bomb(levels: int) -> str:
@@ -20,38 +20,63 @@ def _alias_bomb(levels: int) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _shared_nest(levels: int) -> object:
-    node: object = ["lol"] * 10
+def _shared_nest(levels: int, leaf: str) -> object:
+    node: object = [leaf] * 10
     for _ in range(levels):
         node = [node] * 10
     return node
 
 
-def test_a_493_byte_alias_bomb_is_refused_at_once(tmp_path: Path) -> None:
+def _deep_document_text() -> str:
+    return "version: 1\nmeta: {title: Deep}\nblocks: " + "[" * 5000 + "]" * 5000 + "\n"
+
+
+def _include_fan_out(folder: Path, levels: int) -> Path:
+    for level in range(levels):
+        include = f"- !include f{level + 1}.yaml\n"
+        (folder / f"f{level}.yaml").write_text(include * 2, encoding="utf-8")
+    (folder / f"f{levels}.yaml").write_text("- type: text\n  body: x\n", encoding="utf-8")
+    document = folder / "main.yaml"
+    document.write_text("version: 1\nmeta: {title: T}\nblocks: !include f0.yaml\n", encoding="utf-8")
+    return document
+
+
+def test_an_alias_bomb_is_refused_with_the_validation_errors_of_its_shape(tmp_path: Path) -> None:
     document = tmp_path / "bomb.yaml"
     document.write_text(_alias_bomb(8), encoding="utf-8")
 
-    started = time.monotonic()
     with pytest.raises(ReportError) as refused:
         load_report(document)
-    elapsed = time.monotonic() - started
 
-    assert elapsed < 1.0
-    assert str(refused.value).startswith("invalid content data: blocks.0.list.items.0")
+    assert str(refused.value) == "invalid content data: " + "; ".join(
+        [
+            *(f"blocks.0.list.items.{position}.ListItem: {_NOT_AN_ITEM}" for position in range(10)),
+            *(f"x{level}: Extra inputs are not permitted" for level in range(8)),
+        ]
+    )
 
 
-def test_a_container_shared_by_many_references_is_walked_once() -> None:
+class _TextThatCountsItsChecks(str):
+    checks = 0
+
+    def encode(self, encoding: str = "utf-8", errors: str = "strict") -> bytes:
+        type(self).checks += 1
+        assert type(self).checks < 1000, "a shared container was walked again"
+        return super().encode(encoding, errors)
+
+
+def test_a_container_shared_by_many_references_is_checked_once() -> None:
+    _TextThatCountsItsChecks.checks = 0
     document = {
         "version": 1,
         "meta": {"title": "Bomb"},
-        "blocks": [{"type": "list", "items": _shared_nest(8)}],
+        "blocks": [{"type": "list", "items": _shared_nest(8, _TextThatCountsItsChecks("lol"))}],
     }
 
-    started = time.monotonic()
     with pytest.raises(ReportError):
         parse_report(document)
 
-    assert time.monotonic() - started < 1.0
+    assert _TextThatCountsItsChecks.checks == 10
 
 
 def test_a_document_with_more_aliases_than_the_limit_is_refused(
@@ -69,8 +94,8 @@ def test_a_document_with_more_aliases_than_the_limit_is_refused(
         load_report(document)
 
     assert str(refused.value) == (
-        f"{document} uses more than 3 YAML aliases; no real document needs that many, "
-        "and a flood of them is how a YAML bomb is built"
+        f"{document} uses more than 3 YAML aliases, counting every file it includes; no real document "
+        "needs that many, and a flood of them is how a YAML bomb is built"
     )
 
 
@@ -87,6 +112,60 @@ def test_a_document_with_exactly_the_alias_limit_still_loads(
     assert [block.model_dump(mode="json")["body"] for block in load_report(document).blocks] == ["x", "x"]
 
 
+def test_aliases_are_counted_across_the_files_a_document_includes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("skaldr.models.loading._MAX_ALIASES", 3)
+    fragment = tmp_path / "fragment.yaml"
+    fragment.write_text(
+        "- &n {type: text, body: x}\n- *n\n- *n\n",
+        encoding="utf-8",
+    )
+    document = tmp_path / "main.yaml"
+    document.write_text(
+        "version: 1\nmeta: {title: &t x}\nnote: [*t, *t]\nblocks: !include fragment.yaml\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ReportError) as refused:
+        load_report(document)
+
+    assert str(refused.value) == (
+        f"{fragment} uses more than 3 YAML aliases, counting every file it includes; no real document "
+        "needs that many, and a flood of them is how a YAML bomb is built"
+    )
+
+
+def test_a_document_reading_more_files_than_the_limit_through_include_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("skaldr.models.loading._MAX_FILES", 5)
+    document = _include_fan_out(tmp_path, 3)
+
+    with pytest.raises(ReportError) as refused:
+        load_report(document)
+
+    assert str(refused.value) == (
+        f"the document reads more than 5 files through !include, reaching {tmp_path / 'f3.yaml'}; no real "
+        "document needs that many, and a fan-out of includes is how an include bomb is built"
+    )
+
+
+def test_a_document_reading_exactly_the_file_limit_still_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("skaldr.models.loading._MAX_FILES", 16)
+    document = _include_fan_out(tmp_path, 3)
+
+    assert len(content_files(document)) == 16
+
+
+def test_a_fan_out_of_includes_is_refused_at_the_default_file_limit(tmp_path: Path) -> None:
+    document = _include_fan_out(tmp_path, 12)
+
+    with pytest.raises(ReportError, match=r"^the document reads more than 1000 files through !include, "):
+        load_report(document)
+
+
 def test_a_self_referencing_alias_is_a_report_error(tmp_path: Path) -> None:
     document = tmp_path / "loop.yaml"
     document.write_text(
@@ -99,9 +178,7 @@ def test_a_self_referencing_alias_is_a_report_error(tmp_path: Path) -> None:
 
 def test_deep_nesting_is_a_report_error_naming_the_file(tmp_path: Path) -> None:
     document = tmp_path / "deep.yaml"
-    document.write_text(
-        "version: 1\nmeta: {title: Deep}\nblocks: " + "[" * 5000 + "]" * 5000 + "\n", encoding="utf-8"
-    )
+    document.write_text(_deep_document_text(), encoding="utf-8")
 
     with pytest.raises(ReportError) as refused:
         load_report(document)
@@ -134,9 +211,7 @@ def test_check_keeps_going_after_a_file_that_nests_too_deeply(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     deep = tmp_path / "a.yaml"
-    deep.write_text(
-        "version: 1\nmeta: {title: Deep}\nblocks: " + "[" * 5000 + "]" * 5000 + "\n", encoding="utf-8"
-    )
+    deep.write_text(_deep_document_text(), encoding="utf-8")
     fine = tmp_path / "b.yaml"
     fine.write_text(
         "version: 1\nmeta: {title: Fine}\nblocks:\n  - {type: text, body: ok}\n", encoding="utf-8"

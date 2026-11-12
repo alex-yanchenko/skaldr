@@ -1,4 +1,5 @@
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
@@ -37,10 +38,10 @@ def _first_unencodable(text: str) -> str | None:
 _NESTS_TOO_DEEPLY = "the document nests too deeply or refers to itself"
 
 
+@dataclass
 class _Walk:
-    def __init__(self) -> None:
-        self.visited: set[int] = set()
-        self.active: set[int] = set()
+    visited: set[int] = field(default_factory=set[int])
+    active: set[int] = field(default_factory=set[int])
 
     def enter(self, container: object) -> bool:
         if id(container) in self.active:

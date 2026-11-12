@@ -1275,13 +1275,15 @@ blocks:
 Paths resolve relative to the file doing the including (not your shell's directory), so a set of
 fragments can move as a unit. Includes can nest; a file that includes itself (directly or through a
 chain) fails the build rather than looping. A missing fragment fails with the path that named it.
-An include may reach any file inside the git work tree that holds the top document, so
-`../shared/badges.yaml` works from a subfolder of the same repository. When the document is in no
-repository, the root is the document's own folder. An include, nested ones included, that resolves
+A document inside a git work tree (a folder holding `.git`, as a folder or as the `gitdir:` file a
+linked worktree has) may include any file in that work tree, so `../shared/badges.yaml` works from a
+subfolder of the same repository. A plain file named `.git` does not count. When the document is in
+no repository, the root is the document's own folder. An include, nested ones included, that resolves
 outside that root (through `../` or a symlink) fails the build with the include and the root named.
-A file that uses more than 10,000 YAML aliases (`*name`), nests so deeply that it cannot be read, or
-contains a node that refers to itself fails the build with an error, and `--check` carries on with
-the next file.
+A document that reads more than 1,000 files through `!include` (a fan-out where many files include
+the same ones), or uses more than 10,000 YAML aliases (`*name`) across the file and everything it
+includes, nests so deeply that it cannot be read, or contains a node that refers to itself fails the
+build with an error, and `--check` carries on with the next file.
 `--check` and `--emit-json` resolve includes too, so validating a top file validates everything it
 pulls in, and the emitted JSON is fully flattened.
 
