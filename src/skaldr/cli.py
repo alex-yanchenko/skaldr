@@ -28,6 +28,7 @@ from skaldr.export import (
     EXPORT_MANIFEST,
     EXPORT_TARGETS,
     ExportTarget,
+    RenderedExport,
     export_adf,
     export_markdown,
     export_notion,
@@ -810,6 +811,11 @@ def _draft_the_publish_targets(path: Path, report: Report) -> None:
     draft_targets(load_authored(path), installed_connectors())
 
 
+def _refuse_an_export_too_big_to_publish(rendered: RenderedExport) -> None:
+    if rendered.refused_for_its_size is not None:
+        raise ReportError(rendered.refused_for_its_size)
+
+
 def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequence[ExportTarget] = ()) -> int:
     """Validate each content file and print one line per file, returning 1 if any file is invalid — it
     drops straight into a pre-commit hook or CI over a glob. Validation includes a render pass (no HTML
@@ -825,7 +831,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
             unfilled = find_placeholders(report)
             _draft_the_publish_targets(path, report)
             for target in dict.fromkeys(targets):
-                render_export(report, target)
+                _refuse_an_export_too_big_to_publish(render_export(report, target))
         except (ReportError, PublishError, ConnectorError) as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)

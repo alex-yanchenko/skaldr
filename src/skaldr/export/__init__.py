@@ -38,6 +38,7 @@ __all__ = [
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
 MARKDOWN_PAGE_NAME: Final = "page.md"
 ADF_PAGE_NAME: Final = "page.adf.json"
+SPLIT_ADVICE: Final = "split the document further with `split`, or shorten it"
 ExportedFileName = Annotated[
     str,
     StringConstraints(
@@ -78,6 +79,7 @@ class RenderedExport:
     icon: str | None = None
     cover: str | None = None
     files: Mapping[str, bytes] = field(default_factory=dict[str, bytes])
+    refused_for_its_size: str | None = None
 
 
 @dataclass(frozen=True)
@@ -181,8 +183,14 @@ def _adf_pages(document: LoweredDocument) -> RenderedExport:
         if size > JIRA_DESCRIPTION_LIMIT
         else ()
     )
+    refused = (
+        f"the item has {size:,} characters of ADF, over the {JIRA_DESCRIPTION_LIMIT:,} a Jira item can take; "
+        f"{SPLIT_ADVICE}"
+        if size > JIRA_DESCRIPTION_LIMIT
+        else None
+    )
     title = title_led_by_its_icon(document.title, document.icon)
-    return RenderedExport(title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
+    return RenderedExport(title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit, refused_for_its_size=refused)
 
 
 def render_export(report: Report, target: ExportTarget) -> RenderedExport:

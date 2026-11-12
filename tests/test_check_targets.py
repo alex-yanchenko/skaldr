@@ -6,13 +6,14 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.export import lower as lower_module
-from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT
+from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length, render_adf_document
 from skaldr.export.lower import Lowering, lower_report
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import Report, parse_report
 from skaldr.publish import drafts as drafts_module
 from skaldr.publish.cli import installed_connectors
 from skaldr.publish.cli import main as publish_main
+from skaldr.publish.connector import SPLIT_ADVICE
 from skaldr.publish.jira import JiraConnector
 from skaldr.publish.jira import connector as jira_connector_module
 from skaldr.publish.jira.description import description_length
@@ -175,6 +176,36 @@ def test_check_for_slack_refuses_a_canvas_the_export_refuses_for_its_size_and_wr
         "\n\n1 file failed\n",
         False,
     )
+
+
+def test_check_for_adf_fails_a_description_over_jiras_limit_in_the_words_of_the_publish_plan(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "text", "body": "x" * JIRA_DESCRIPTION_LIMIT}]
+    data_path = write_report(tmp_path, make_report(blocks=blocks))
+    export_dir = tmp_path / "exported"
+    size = compact_adf_length(render_adf_document(lower_report(parse_report(make_report(blocks=blocks)))))
+
+    exit_code = main(
+        ["--check", str(data_path), "--for", "adf", "--export", "adf", "--export-dir", str(export_dir)]
+    )
+
+    assert (exit_code, capsys.readouterr().err, export_dir.exists()) == (
+        1,
+        f"FAIL  {data_path}: the item has {size:,} characters of ADF, over the 32,767 a Jira item can take; "
+        f"{SPLIT_ADVICE}\n\n1 file failed\n",
+        False,
+    )
+
+
+def test_check_for_adf_passes_a_description_at_jiras_limit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "text", "body": "x" * 100}]
+    data_path = write_report(tmp_path, make_report(blocks=blocks))
+
+    assert main(["--check", str(data_path), "--for", "adf"]) == 0
+    assert capsys.readouterr().out == f"OK    {data_path}\n"
 
 
 def test_check_of_a_jira_target_over_the_description_limit_fails_with_the_publish_refusal(
