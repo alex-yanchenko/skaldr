@@ -276,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
     if arguments[:1] and arguments[0] in _PUBLISH_COMMANDS:
         return _run_publish(arguments)
     parser = argparse.ArgumentParser(
+        prog="skaldr",
         description="Render a skaldr content file to an HTML page.",
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
         "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`. List a large "
