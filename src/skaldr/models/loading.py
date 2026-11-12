@@ -1,3 +1,4 @@
+import os
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -17,9 +18,62 @@ from skaldr.models.report import Index, Report
 # load failure is a ReportError, so cap the depth to keep that contract. Real docs never nest this far.
 _MAX_INCLUDE_DEPTH = 50
 
+_MAX_ALIASES = 10_000
+
+
+class _TooManyAliasesError(Exception):
+    pass
+
+
+class _AliasBoundedLoader(yaml.SafeLoader):
+    def __init__(self, stream: str) -> None:
+        super().__init__(stream)
+        self._aliases_seen = 0
+
+    def compose_node(self, parent: yaml.Node | None, index: int) -> yaml.Node | None:
+        if self.check_event(yaml.AliasEvent):  # pyright: ignore[reportUnknownMemberType]
+            self._aliases_seen += 1
+            if self._aliases_seen > _MAX_ALIASES:
+                raise _TooManyAliasesError
+        return super().compose_node(parent, index)
+
+
+class _IncludeRoot(NamedTuple):
+    folder: Path
+    kind: str
+
+
+def _include_root(document: Path) -> _IncludeRoot:
+    try:
+        own_folder = document.parent.resolve()
+    except (OSError, RuntimeError) as err:
+        raise ReportError(f"could not resolve {document}: {err}") from err
+    for folder in (own_folder, *own_folder.parents):
+        if os.path.lexists(folder / ".git"):
+            return _IncludeRoot(folder, "git work tree")
+    return _IncludeRoot(own_folder, "folder")
+
+
+def _refuse_an_include_outside(root: _IncludeRoot, includer: Path, target: str) -> Path:
+    included = includer.parent / target
+    try:
+        resolved = included.resolve()
+    except (OSError, RuntimeError) as err:
+        raise ReportError(f"could not resolve {included}: {err}") from err
+    if not resolved.is_relative_to(root.folder):
+        raise ReportError(
+            f"!include {target} in {includer} resolves to {resolved}, outside {root.folder}, "
+            f"the {root.kind} that holds the document"
+        )
+    return included
+
 
 def _load_yaml_with_includes(
-    path: Path, ancestors: tuple[Path, ...], loaded: list[Path], text: str | None = None
+    path: Path,
+    ancestors: tuple[Path, ...],
+    loaded: list[Path],
+    text: str | None = None,
+    root: _IncludeRoot | None = None,
 ) -> Any:
     """Parse a YAML file, resolving `!include <relative-path>` tags by splicing in the parsed content
     of the referenced file. Paths resolve relative to the *including* file's directory (not the cwd),
@@ -34,11 +88,12 @@ def _load_yaml_with_includes(
         raise ReportError(f"circular !include: {chain}")
     if len(ancestors) >= _MAX_INCLUDE_DEPTH:
         raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path}, likely a mistake")
+    include_root = root if root is not None else _include_root(path)
     if text is None:
         text = read_text_file(path)
     loaded.append(resolved)
 
-    class _IncludeLoader(yaml.SafeLoader):
+    class _IncludeLoader(_AliasBoundedLoader):
         """SafeLoader subclass — `!include` scoped to this file's dir; keeps `yaml.load` safe."""
 
     def _construct_include(loader: yaml.SafeLoader, node: yaml.Node) -> Any:
@@ -49,13 +104,21 @@ def _load_yaml_with_includes(
             raise ReportError(f"!include in {path} needs a file path")
         if Path(target).is_absolute():
             raise ReportError(f"!include in {path} must be a relative path, not absolute: {target}")
-        return _load_yaml_with_includes(path.parent / target, (*ancestors, resolved), loaded)
+        included = _refuse_an_include_outside(include_root, path, target)
+        return _load_yaml_with_includes(included, (*ancestors, resolved), loaded, root=include_root)
 
     _IncludeLoader.add_constructor("!include", _construct_include)
     try:
         return yaml.load(text, Loader=_IncludeLoader)
     except yaml.YAMLError as err:
         raise ReportError(f"invalid YAML in {path}: {err}") from err
+    except RecursionError as err:
+        raise ReportError(f"{path} nests too deeply or refers to itself") from err
+    except _TooManyAliasesError as err:
+        raise ReportError(
+            f"{path} uses more than {_MAX_ALIASES} YAML aliases; no real document needs that many, "
+            "and a flood of them is how a YAML bomb is built"
+        ) from err
 
 
 def _index_of(data: object) -> object:
@@ -88,8 +151,8 @@ def _part_file(index_path: Path, part_path: str) -> Path:
     return part
 
 
-def _loaded_part(path: Path) -> _LoadedPart:
-    data = _load_yaml_with_includes(path, (), [])
+def _loaded_part(path: Path, root: _IncludeRoot) -> _LoadedPart:
+    data = _load_yaml_with_includes(path, (), [], root=root)
     if isinstance(_index_of(data), Mapping):
         raise ReportError(f"part {path} is itself an index; an index lists document files, not other indexes")
     try:
@@ -246,7 +309,8 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
     if data.get("publish") is not None:
         raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
     intro = _intro_blocks(data)
-    parts = [_loaded_part(_part_file(path, part_path)) for part_path in index.parts]
+    root = _include_root(path)
+    parts = [_loaded_part(_part_file(path, part_path), root) for part_path in index.parts]
     _refuse_a_doc_id_published_twice(parts)
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
@@ -306,8 +370,9 @@ def names_an_index(data: object) -> bool:
 
 def content_files(path: Path) -> tuple[Path, ...]:
     loaded: list[Path] = []
-    index = _index_of(_load_yaml_with_includes(path, (), loaded))
+    root = _include_root(path)
+    index = _index_of(_load_yaml_with_includes(path, (), loaded, root=root))
     if index is not None:
         for part_path in _parsed_index(index).parts:
-            _load_yaml_with_includes(_part_file(path, part_path), (), loaded)
+            _load_yaml_with_includes(_part_file(path, part_path), (), loaded, root=root)
     return tuple(loaded)
