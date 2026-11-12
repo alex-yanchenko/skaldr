@@ -30,6 +30,7 @@ from skaldr.publish.reading import (
     remote_edits,
     settle_interrupted_creates,
     shown_token,
+    with_adoptions_named,
 )
 from skaldr.publish.state import PendingCreate, PublishState, held_state_lock, save_state
 from skaldr.publish.transport import RemoteItem
@@ -247,7 +248,7 @@ def _applied_with(
     written_into = read_items_written_into(prepared, plan, transports, preflight.written_into)
     remote = {**written_into, **{reading.item: reading.remote for reading in preflight.readings}}
     applier = Applier(prepared, transports, remote, on_step, prepared.state)
-    applied = applier.run(plan)
+    applied = applier.run(with_adoptions_named(plan, written_into))
     linked = apply_links(prepared, applier.state, transports, applier.remote, on_step)
     return Applied((*applied.steps, *linked))
 
@@ -274,7 +275,7 @@ def dry_run_publish(prepared: Prepared) -> DryRun:
         edits = remote_edits(preflight.prepared, preflight.edited)
         return DryRun(prepared.plan, edits, refusal_message(Refused(edits, "edited")))
     plan = plan_publish(settled.drafts, settled.state, settled.registry, left_empty=preflight.left_empty)
-    return DryRun(plan, (), None, link_steps(planned))
+    return DryRun(with_adoptions_named(plan, preflight.written_into), (), None, link_steps(planned))
 
 
 def _changes_of_item(

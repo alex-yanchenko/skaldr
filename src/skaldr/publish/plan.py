@@ -39,6 +39,7 @@ class CreateStep:
     item: ItemRef
     draft: ItemDraft
     into_id: str | None = None
+    replaces_content_stamped_with: str | None = None
 
 
 @dataclass(frozen=True)
@@ -284,6 +285,11 @@ def plan_publish(
 
 def describe_step(step: Step) -> str:
     match step:
+        case CreateStep() if step.replaces_content_stamped_with is not None:
+            return (
+                f"adopt    {item_label(step.item.section_id)} into {step.into_id} (replaces content stamped "
+                f"with doc_id '{step.replaces_content_stamped_with}')"
+            )
         case CreateStep():
             into = f" into {step.into_id}" if step.into_id else ""
             return f'create   {item_label(step.item.section_id)} "{step.draft.content.title}"{into}'

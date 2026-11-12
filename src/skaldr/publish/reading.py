@@ -17,7 +17,7 @@ from skaldr.publish.content import (
     with_parts,
 )
 from skaldr.publish.drafts import ItemDraft, item_label
-from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
+from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan, Step
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
 from skaldr.publish.transport import (
@@ -408,6 +408,29 @@ def _read_written_into(
             "not write into it; empty the page, or publish under it with `parent_page` instead"
         )
     return remote
+
+
+def _named_if_it_replaces_stamped_content(step: Step, written_into: Mapping[ItemRef, RemoteItem]) -> Step:
+    if not isinstance(step, CreateStep) or step.into_id is None:
+        return step
+    remote = written_into.get(step.item)
+    if remote is None or remote.doc_id is None or not _has_content(remote):
+        return step
+    return replace(step, replaces_content_stamped_with=remote.doc_id)
+
+
+def with_adoptions_named(plan: PublishPlan, written_into: Mapping[ItemRef, RemoteItem]) -> PublishPlan:
+    return PublishPlan(
+        tuple(
+            replace(
+                target,
+                steps=tuple(
+                    _named_if_it_replaces_stamped_content(step, written_into) for step in target.steps
+                ),
+            )
+            for target in plan.targets
+        )
+    )
 
 
 def read_items_written_into(
