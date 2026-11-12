@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, parse_qs, urlsplit
 
 from pydantic import Field, model_validator
 
@@ -9,6 +9,7 @@ from skaldr.services import NotionService
 
 NO_TEMPLATE = "none"
 NOTION_HOSTS = ("notion.so", "notion.site", "notion.com")
+PEEK_PAGE_KEY = "p"
 DASHLESS_PAGE_ID_LENGTH = 32
 DASHLESS_PAGE_ID = re.compile(rf"[0-9a-f]{{{DASHLESS_PAGE_ID_LENGTH}}}")
 DASHED_PAGE_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -19,20 +20,33 @@ def _is_notion_host(host: str) -> bool:
     return any(host == domain or host.endswith(f".{domain}") for domain in NOTION_HOSTS)
 
 
-def _last_url_segment(url: str) -> str | None:
+def _notion_url(url: str) -> SplitResult | None:
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or not _is_notion_host(parsed.hostname or ""):
         return None
-    return parsed.path.rstrip("/").rsplit("/", 1)[-1]
+    return parsed
+
+
+def _peeked_page(url: SplitResult) -> str | None:
+    peeked = parse_qs(url.query).get(PEEK_PAGE_KEY)
+    return None if peeked is None else peeked[-1]
+
+
+def _page_part_of_url(url: str) -> str | None:
+    parsed = _notion_url(url)
+    if parsed is None:
+        return None
+    peeked = _peeked_page(parsed)
+    return peeked if peeked is not None else parsed.path.rstrip("/").rsplit("/", 1)[-1]
 
 
 def notion_page_id(reference: str) -> str | None:
     candidate = reference.strip()
     if "://" in candidate:
-        segment = _last_url_segment(candidate)
-        if segment is None:
+        page_part = _page_part_of_url(candidate)
+        if page_part is None:
             return None
-        candidate = segment
+        candidate = page_part
     elif "/" in candidate:
         return None
     candidate = candidate.lower()
@@ -46,6 +60,12 @@ def notion_page_id(reference: str) -> str | None:
 
 def required_page_id(reference: str) -> str:
     page_id = notion_page_id(reference)
+    parsed = _notion_url(reference.strip()) if "://" in reference else None
+    peeked = None if parsed is None else _peeked_page(parsed)
+    if page_id is None and peeked is not None:
+        raise ValueError(
+            f"'{reference}' shows a page in peek view, and its `p` value '{peeked}' is not a Notion page id"
+        )
     if page_id is None:
         raise ValueError(
             f"'{reference}' is not a Notion page URL (notion.so, notion.site, notion.com) or a page id"
