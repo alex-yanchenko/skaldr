@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.3.1](https://github.com/alex-yanchenko/skaldr/compare/v4.3.0...v4.3.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **docs:** match the docs to the code, reach every guide section and even out export labels ([#262](https://github.com/alex-yanchenko/skaldr/issues/262)) ([d276836](https://github.com/alex-yanchenko/skaldr/commit/d276836ccaaf57ce4d43b0468487930f3981ab8c))
+* **publish:** write nothing on a dry run and judge ownership by one rule everywhere ([#264](https://github.com/alex-yanchenko/skaldr/issues/264)) ([aaf800b](https://github.com/alex-yanchenko/skaldr/commit/aaf800ba073b1902a9cf9a280bdcb89382eded81))
+* **security:** harden skaldr against untrusted documents, repositories and pages ([#261](https://github.com/alex-yanchenko/skaldr/issues/261)) ([585120a](https://github.com/alex-yanchenko/skaldr/commit/585120ab519d4c7793b1c4106dde7056f93423e7))
+
+
+### Code Refactoring
+
+* **export:** one export path, shared canvas limits and a tighter test suite ([#265](https://github.com/alex-yanchenko/skaldr/issues/265)) ([b766eb0](https://github.com/alex-yanchenko/skaldr/commit/b766eb0e35013c9947a4b25c629ef413e57cfc3a))
+
 ## [4.3.0](https://github.com/alex-yanchenko/skaldr/compare/v4.2.0...v4.3.0) (2026-10-28)
 
 
