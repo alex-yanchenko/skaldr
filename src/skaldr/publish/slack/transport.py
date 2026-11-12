@@ -14,6 +14,7 @@ from skaldr.publish.keyed import (
     refuse_a_change_since_the_read,
     refused_when_not_found,
 )
+from skaldr.publish.ownership import HeldContent, refuse_to_archive_an_item_skaldr_does_not_own
 from skaldr.publish.slack.api import SlackApi, markdown_content
 from skaldr.publish.slack.canvas_markdown import (
     ARCHIVED_TITLE_MARKER,
@@ -160,7 +161,7 @@ class SlackTransport:
             self._api.edit_canvas(item_id, _rename(request.title))
         return self._remote(item_id, self._markdown(item_id), layout)
 
-    def archive_item(self, item_id: str, _request: Archive, /) -> None:
+    def archive_item(self, item_id: str, request: Archive, /) -> None:
         try:
             markdown = self._markdown_of_any_canvas(item_id)
         except ItemNotFoundError:
@@ -173,6 +174,13 @@ class SlackTransport:
         if not keyed.opens_with_the_archived_line:
             if read is not None:
                 refuse_a_change_since_the_read(_canvas_named(item_id), read, keyed.raw_sections)
+            refuse_to_archive_an_item_skaldr_does_not_own(
+                _canvas_named(item_id),
+                None if keyed.stamp is None else keyed.stamp.doc_id,
+                HeldContent(keyed.title, keyed.sections),
+                request.stamp.doc_id,
+                request.ownership,
+            )
             doc_id = None if keyed.stamp is None else keyed.stamp.doc_id
             self._replace_body(item_id, [archived_line(doc_id), *keyed.below_the_stamp])
         elif keyed.stamp_at is not None:
@@ -288,9 +296,9 @@ class SlackTransport:
         self._read.layouts[item_id] = keyed.raw_sections
         return RemoteItem(
             item_id,
-            ItemContent(title=keyed.title, sections=keyed.sections_without_the_archived_line),
+            ItemContent(title=keyed.title, sections=keyed.sections),
             keyed.raw_sections,
-            keyed.stamp,
+            keyed.stamp_or_archived_line,
             marker=_digest(markdown),
             links=keyed.links,
         )

@@ -9,7 +9,9 @@ import httpx2
 from typing_extensions import override
 
 from skaldr.export.notion import notion_block_count
+from skaldr.publish import ConnectorRegistry
 from skaldr.publish.notion.api import NotionApi
+from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.notion.transport import NotionTransport
 from skaldr.publish_block import notion_page_id
 
@@ -40,6 +42,10 @@ def dashed(page_id: str) -> str:
 
 def numbered_id(number: int) -> str:
     return f"{number:08x}-0000-4000-8000-{number:012x}"
+
+
+def notion_registry(notion: "InMemoryNotion") -> ConnectorRegistry:
+    return ConnectorRegistry([NotionConnector(http=notion.mock(), sleep=lambda _: None)])
 
 
 def as_notion_stores(markdown: str) -> str:

@@ -10,6 +10,7 @@ from skaldr.export.lower import assemble_item_page, lower_regions, lowering_for
 from skaldr.models import parse_report
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.cli import installed_connectors, main
+from skaldr.publish.slack.canvas_markdown import archived_line
 from skaldr.publish.slack.connector import SlackConnector
 from skaldr.publish.slack.transport import SlackTransport
 from skaldr.publish.state import load_state, state_path_for
@@ -427,6 +428,34 @@ def test_an_archive_whose_rename_failed_is_renamed_by_the_next_publish(tmp_path:
         0,
         "Garden handbook (archived by skaldr)",
         {},
+    )
+
+
+def test_an_archive_whose_rename_failed_finishes_and_keeps_what_a_person_wrote_below_the_stamp(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    slack.add_block_by_hand(TOOLS_CANVAS, 99, "Bring gloves.")
+    write_garden_report(tmp_path, publish=_slack_publish())
+    slack.fail_next("canvases.edit", "internal_error", operation="rename")
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    capsys.readouterr()
+
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (
+        stopped,
+        finished,
+        capsys.readouterr().err,
+        slack.canvases[TOOLS_CANVAS].title,
+        slack.markdown_of(TOOLS_CANVAS),
+    ) == (
+        1,
+        0,
+        "",
+        "Tools (archived by skaldr)",
+        f"# Tools (archived by skaldr)\n\n{archived_line('garden-handbook')}\n\nBring gloves.\n",
     )
 
 

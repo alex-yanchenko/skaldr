@@ -10,6 +10,7 @@ from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
 from skaldr.publish.jira.description import layout_of, section_text
 from skaldr.publish.jira.transport import JiraTransport
 from skaldr.publish.notion.page_markdown import keyed_page, stamp_line
+from skaldr.publish.ownership import Ownership
 from skaldr.publish.transport import (
     AddSection,
     Archive,
@@ -46,6 +47,7 @@ DOC_LABEL = "skaldr-garden-handbook"
 STAMP = Stamp(DOC_ID, None)
 SECTION_STAMP = Stamp(DOC_ID, "planting")
 ARCHIVE = Archive(STAMP)
+ARCHIVE_OF_NOTES = Archive(STAMP, Ownership((ItemContent(title="Notes"),)))
 LONGEST_LINKABLE_DOC_ID = "garden-" + "a" * 192
 TARGET = JiraTarget.model_validate(make_jira_target(where={"project": "DEMO", "issue_type": "Task"}))
 UNDER_A_PARENT = JiraTarget.model_validate(
@@ -1067,7 +1069,7 @@ def test_archiving_an_issue_without_a_stamp_comments_without_a_doc_id_and_stamps
     jira = FakeJira()
     jira.seed("DEMO-3", summary="Notes")
 
-    _transport(jira).archive_item("DEMO-3", ARCHIVE)
+    _transport(jira).archive_item("DEMO-3", ARCHIVE_OF_NOTES)
 
     issue = jira.issues["DEMO-3"]
     assert (issue.comments, issue.fields["status"], issue.properties) == (
@@ -1102,7 +1104,7 @@ def test_an_unreadable_stamp_stops_a_read_and_an_archive(stamp: JsonValue) -> No
     with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
         transport.read_item("DEMO-3", ItemContent(title=""))
     with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
-        transport.archive_item("DEMO-3", ARCHIVE)
+        transport.archive_item("DEMO-3", ARCHIVE_OF_NOTES)
     assert jira.issues["DEMO-3"].comments == []
 
 
@@ -1406,7 +1408,7 @@ def test_an_issue_whose_status_jira_does_not_name_cannot_be_archived(status: Jso
         issue.fields["status"] = status
 
     with pytest.raises(ConnectorError, match=_exactly("Jira did not say which status DEMO-3 is in")):
-        _transport(jira).archive_item("DEMO-3", ARCHIVE)
+        _transport(jira).archive_item("DEMO-3", ARCHIVE_OF_NOTES)
     assert (issue.comments, issue.properties) == ([], {})
 
 

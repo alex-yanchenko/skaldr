@@ -14,7 +14,7 @@ STAMP_PATTERN: Final = stamp_pattern("")
 ARCHIVED_TITLE_MARKER: Final = " (archived by skaldr)"
 ARCHIVED_WORDS: Final = "skaldr archived this canvas:"
 ARCHIVED_PATTERN: Final = re.compile(
-    rf"{re.escape(ARCHIVED_WORDS)} the document (?:\S+ )?no longer publishes here\."
+    rf"{re.escape(ARCHIVED_WORDS)} the document (?:(?P<doc_id>\S+) )?no longer publishes here\."
 )
 FENCE_OPENING: Final = re.compile(r"(`{3,}|~{3,})")
 CONTAINER_OPENING: Final = re.compile(rf"{CANVAS_FENCE}\s*\{{")
@@ -228,10 +228,12 @@ class KeyedCanvas:
         return self.title.endswith(ARCHIVED_TITLE_MARKER)
 
     @property
-    def sections_without_the_archived_line(self) -> dict[str, str]:
-        if not self.opens_with_the_archived_line:
-            return self.sections
-        return replace(self, content_start=self.content_start + 1).sections
+    def stamp_or_archived_line(self) -> Stamp | None:
+        if self.stamp is not None or not self.content:
+            return self.stamp
+        archived = ARCHIVED_PATTERN.fullmatch(self.content[0].raw.strip())
+        doc_id = None if archived is None else archived.group("doc_id")
+        return None if doc_id is None else Stamp(doc_id, None)
 
     def _owned_spans(
         self, rendered: Mapping[str, str], saved_remote: Mapping[str, str]

@@ -2,14 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from skaldr.publish import ConnectorRegistry
 from skaldr.publish.cli import main
 from skaldr.publish.engine import Applied, apply_publish, dry_run_publish, prepare_publish
-from skaldr.publish.notion.connector import NotionConnector
 from skaldr.publish.plan import describe_plan
 from tests.factories import NOTION_PAGE_ID
 from tests.factories.auth_factory import make_notion_credentials, seed_notion
-from tests.factories.notion_factory import InMemoryNotion
+from tests.factories.notion_factory import InMemoryNotion, notion_registry
 from tests.factories.publish_factory import (
     DOC_ID,
     INTO_LABEL,
@@ -32,10 +30,12 @@ def test_a_page_stamped_with_this_doc_id_that_the_state_file_does_not_record_is_
     path = write_garden_report(tmp_path, publish=INTO_THE_PAGE)
 
     dry_run = dry_run_publish(prepare_publish(path, fake_registry(transport)))
+    written_by_the_dry_run = transport.writes()
     outcome = apply_publish(prepare_publish(path, fake_registry(transport)))
 
-    assert (describe_plan(dry_run.plan), outcome) == (
+    assert (describe_plan(dry_run.plan), written_by_the_dry_run, outcome) == (
         [f"{INTO_LABEL}: 1 to create, 0 to update, 0 to archive", f"  {ADOPTION}"],
+        [],
         Applied((ADOPTION,)),
     )
 
@@ -59,7 +59,7 @@ def test_a_second_document_with_the_same_doc_id_says_it_replaces_the_page_the_fi
     seed_notion(make_notion_credentials())
     notion = InMemoryNotion()
     notion.add_page(NOTION_PAGE_ID, "Team plans")
-    registry = ConnectorRegistry([NotionConnector(http=notion.mock(), sleep=lambda _: None)])
+    registry = notion_registry(notion)
     main(["publish", str(write_garden_report(tmp_path, publish=INTO_THE_PAGE)), "--apply"], registry=registry)
     (tmp_path / "copy").mkdir()
     copy = write_garden_report(

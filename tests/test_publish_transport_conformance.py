@@ -8,6 +8,7 @@ from skaldr.errors import ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import ItemContent, Part, differing_parts, section_part
 from skaldr.publish.jira.description import description_doc, section_blocks, section_text
 from skaldr.publish.jira.transport import STAMP_PROPERTY, JiraTransport
+from skaldr.publish.ownership import Ownership
 from skaldr.publish.transport import (
     AddSection,
     Archive,
@@ -16,7 +17,6 @@ from skaldr.publish.transport import (
     ItemLink,
     LinksWrite,
     NewItem,
-    PublishedSections,
     Release,
     RemoteItem,
     RemoveSection,
@@ -150,7 +150,6 @@ class TransportUnderTest:
     stamp_refusal: Callable[[str, Stamp], str] = field(default=_fake_stamp_refusal)
     stamps_on_a_fields_write: bool = True
     item_named: Callable[[str], str] = field(default=_as_written)
-    checks_what_it_archives: bool = True
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
@@ -182,13 +181,16 @@ def _notion() -> Instance:
     def edit_section_by_hand(item_id: str, key: str, text: str) -> None:
         notion.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
 
+    def teammates_item_id() -> str:
+        return notion.add_page(numbered_id(901), "Team notes", TEAMMATES_TEXT)
+
     return Instance(
         notion.transport(),
         empty_page,
         edit_section_by_hand,
         lambda: len(notion.writes()),
         lambda: empty_page,
-        lambda: notion.add_page(numbered_id(901), "Team notes", TEAMMATES_TEXT),
+        teammates_item_id,
     )
 
 
@@ -268,6 +270,10 @@ def _slack_link(item_id: str, title: str) -> ItemLink:
     return ItemLink(f"{WORKSPACE_URL}docs/{TEAM_ID}/{item_id}", title)
 
 
+def _slack_canvas_named(item_id: str) -> str:
+    return f"Slack canvas {item_id}"
+
+
 def _slack_stamp_refusal(item_id: str, stamp: Stamp) -> str:
     return f"Slack canvas {item_id} is not stamped with {stamp.named}"
 
@@ -318,7 +324,7 @@ TRANSPORTS = [
             form_fixture=SLACK_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,
             expected_link=_slack_link,
             stamp_refusal=_slack_stamp_refusal,
-            checks_what_it_archives=False,
+            item_named=_slack_canvas_named,
         ),
         id="slack",
     ),
@@ -395,15 +401,9 @@ def test_an_archived_item_reads_as_not_found_and_archiving_again_is_harmless(
         instance.transport.read_item(created.item_id, _content(under_test))
 
 
-def _unless_it_checks_what_it_archives(under_test: TransportUnderTest) -> None:
-    if not under_test.checks_what_it_archives:
-        pytest.skip("this transport leaves the ownership of what it archives to the engine")
-
-
 def test_an_archive_of_an_item_stamped_for_another_document_is_rejected_and_changes_nothing(
     under_test: TransportUnderTest,
 ) -> None:
-    _unless_it_checks_what_it_archives(under_test)
     instance, created = _created(under_test, Stamp(OTHER_DOC_ID, None))
 
     with pytest.raises(WriteRejectedError) as refused:
@@ -420,18 +420,19 @@ def test_an_archive_of_an_item_stamped_for_another_document_is_rejected_and_chan
 def test_an_archive_of_an_unstamped_item_holding_content_skaldr_did_not_write_is_rejected_and_changes_nothing(
     under_test: TransportUnderTest,
 ) -> None:
-    _unless_it_checks_what_it_archives(under_test)
     instance = under_test.make()
     item_id = instance.teammates_item_id()
+    read = instance.transport.read_item(item_id, ItemContent(title=""))
     writes_before = instance.count_writes()
 
     with pytest.raises(WriteRejectedError) as refused:
         instance.transport.archive_item(item_id, ARCHIVE)
 
-    read = instance.transport.read_item(item_id, ItemContent(title=""))
-    assert (str(refused.value), instance.count_writes() - writes_before, read.stamp) == (
-        f"{under_test.item_named(item_id)} carries no skaldr stamp and holds content skaldr did not write, "
-        "so skaldr will not archive it",
+    unwritten = ", ".join(["the title", *(f"section {key}" for key in read.comparable.sections)])
+    reread = instance.transport.read_item(item_id, ItemContent(title=""))
+    assert (str(refused.value), instance.count_writes() - writes_before, reread.stamp) == (
+        f"{under_test.item_named(item_id)} carries no skaldr stamp and holds content skaldr did not write "
+        f"({unwritten}), so skaldr will not archive it",
         0,
         None,
     )
@@ -442,13 +443,57 @@ def test_an_unstamped_item_holding_what_skaldr_last_wrote_is_archived(under_test
     transport = instance.transport
     unstamped = instance.teammates_item_id()
     read = transport.read_item(unstamped, ItemContent(title=""))
-    saved = PublishedSections(dict(read.comparable.sections), dict(read.comparable.sections))
 
-    transport.archive_item(unstamped, Archive(STAMP, saved))
+    transport.archive_item(unstamped, Archive(STAMP, Ownership((read.comparable,))))
 
     with pytest.raises(ItemNotFoundError):
         transport.read_item(unstamped, ItemContent(title=""))
     assert transport.read_item(created.item_id, _content(under_test)).stamp == STAMP
+
+
+def _write_fields(transport: Transport, item_id: str, read: RemoteItem, _spade: str) -> RemoteItem:
+    return transport.write_fields(item_id, FieldsWrite("Garden guide", {}, read.comparable.title, {}, STAMP))
+
+
+def _write_a_section(transport: Transport, item_id: str, read: RemoteItem, spade: str) -> RemoteItem:
+    return transport.write_section(
+        item_id, SectionRequest(AddSection("tools", spade, None), read.raw_sections, STAMP)
+    )
+
+
+def _write_content(transport: Transport, item_id: str, read: RemoteItem, spade: str) -> RemoteItem:
+    return transport.write_content(item_id, ContentWrite({"tools": spade}, read.raw_sections, STAMP))
+
+
+WRITERS_THAT_CHECK_OWNERSHIP = [param for param in TRANSPORTS if param.id != "slack"]
+
+
+@pytest.mark.parametrize("under_test", WRITERS_THAT_CHECK_OWNERSHIP)
+@pytest.mark.parametrize(
+    "write",
+    [
+        pytest.param(_write_fields, id="fields"),
+        pytest.param(_write_a_section, id="section"),
+        pytest.param(_write_content, id="content"),
+    ],
+)
+def test_a_write_to_an_unstamped_item_holding_content_skaldr_did_not_write_is_rejected_and_sends_nothing(
+    under_test: TransportUnderTest, write: Callable[[Transport, str, RemoteItem, str], RemoteItem]
+) -> None:
+    instance = under_test.make()
+    item_id = instance.teammates_item_id()
+    read = instance.transport.read_item(item_id, ItemContent(title=""))
+    writes_before = instance.count_writes()
+
+    with pytest.raises(WriteRejectedError) as refused:
+        write(instance.transport, item_id, read, under_test.spell("Spade.\n"))
+
+    unwritten = ", ".join(["the title", *(f"section {key}" for key in read.comparable.sections)])
+    assert (str(refused.value), instance.count_writes() - writes_before) == (
+        f"{under_test.item_named(item_id)} carries no skaldr stamp and holds content skaldr did not write "
+        f"({unwritten}), so skaldr will not write to it",
+        0,
+    )
 
 
 def test_a_release_clears_the_sections_the_named_fields_and_the_stamp_and_can_be_repeated(
@@ -599,7 +644,12 @@ def test_a_fields_write_to_an_unstamped_item_writes_it_and_stamps_it_where_the_s
     item_id = instance.unstamped_item_id()
     before = transport.read_item(item_id, ItemContent(title=""))
 
-    transport.write_fields(item_id, FieldsWrite("Garden guide", {}, before.comparable.title, {}, STAMP))
+    transport.write_fields(
+        item_id,
+        FieldsWrite(
+            "Garden guide", {}, before.comparable.title, {}, STAMP, ownership=Ownership((before.comparable,))
+        ),
+    )
     read = transport.read_item(item_id, ItemContent(title=""))
 
     stamped = STAMP if under_test.stamps_on_a_fields_write else None

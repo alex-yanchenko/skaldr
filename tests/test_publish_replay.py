@@ -188,6 +188,27 @@ def test_a_dry_run_after_a_create_left_its_item_empty_sends_nothing_and_plans_th
     )
 
 
+def test_a_dry_run_stopped_by_a_remote_edit_still_shows_the_fill_an_interrupted_create_needs(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+    transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
+
+    dry_run = dry_run_publish(prepare_publish(path, fake_registry(transport)))
+
+    assert (describe_plan(dry_run.plan), [edit.item for edit in dry_run.edits], transport.writes()) == (
+        [
+            f"{TARGET_LABEL}: 0 to create, 0 to update, 0 to archive, 1 to fill",
+            "  fill     section tools page-2",
+        ],
+        [DOCUMENT],
+        [],
+    )
+
+
 def test_an_apply_after_a_create_left_its_item_empty_fills_it_as_a_step_and_records_it_as_created(
     tmp_path: Path,
 ) -> None:

@@ -379,24 +379,14 @@ def test_a_page_a_person_wrote_in_after_a_failed_fill_is_not_filled_over_by_the_
 
     rerun = main(["publish", str(path), "--apply"], registry=_registry(notion))
 
-    replaced = [
-        request
-        for request in notion.requests
-        if request.method == "PATCH" and b"replace_content" in request.content
-    ]
-    assert (
-        rerun,
-        replaced,
-        "My own notes" in notion.markdown_of(DOCUMENT_PAGE),
-        capsys.readouterr().err,
-    ) == (
+    assert (rerun, notion.writes(), notion.markdown_of(DOCUMENT_PAGE), capsys.readouterr().err) == (
         1,
         [],
-        True,
+        "My own notes",
         f"error: notion page {NOTION_PAGE_ID}, document ({DOCUMENT_PAGE}) carries no skaldr stamp and holds "
-        "content that is not what skaldr was creating there, so skaldr will not adopt it; if it is the item "
-        "skaldr created, empty it in Notion and publish again, and if it is not, delete its entry from "
-        f"`pending_creates` in {state_path_for(path)}\n",
+        "content that is not what skaldr was creating there (section content skaldr did not publish), so "
+        "skaldr will not adopt it; if it is the item skaldr created, empty it in Notion and publish again, "
+        f"and if it is not, delete its entry from `pending_creates` in {state_path_for(path)}\n",
     )
 
 

@@ -87,6 +87,10 @@ class PublishState(FrozenModel):
     targets: dict[str, PublishedTarget] = Field(default_factory=dict[str, PublishedTarget])
     pending_creates: list[PendingCreate] = Field(default_factory=list[PendingCreate])
 
+    @property
+    def item_ids(self) -> frozenset[str]:
+        return frozenset(item.item_id for target in self.targets.values() for _, item in target.held_items())
+
 
 def state_path_for(document_path: Path) -> Path:
     return document_path.with_name(document_path.stem + STATE_FILE_SUFFIX)

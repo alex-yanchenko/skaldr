@@ -11,7 +11,7 @@ from skaldr.errors import (
     WriteRejectedError,
 )
 from skaldr.publish.content import ItemContent
-from skaldr.publish.transport import Archive, RawSections, Stamp
+from skaldr.publish.transport import RawSections
 
 UNKEYED_SECTION: Final = "content skaldr did not publish"
 
@@ -95,20 +95,6 @@ def refuse_a_change_since_the_read(item: str, read: RawSections, now: RawSection
     if list(now.items()) != list(read.items()):
         raise WriteRejectedError(
             f"{item} changed after skaldr read it, so nothing was written; publish again"
-        )
-
-
-def refuse_to_archive_what_skaldr_did_not_write(
-    item: str, stamp: Stamp | None, sections: Mapping[str, str], saved: Mapping[str, str], request: Archive
-) -> None:
-    if stamp is not None and stamp.doc_id != request.stamp.doc_id:
-        raise WriteRejectedError(
-            f"{item} is not stamped with doc_id '{request.stamp.doc_id}', so skaldr will not archive it"
-        )
-    if stamp is None and any(text.strip() and saved.get(key) != text for key, text in sections.items()):
-        raise WriteRejectedError(
-            f"{item} carries no skaldr stamp and holds content skaldr did not write, so skaldr will not "
-            "archive it"
         )
 
 

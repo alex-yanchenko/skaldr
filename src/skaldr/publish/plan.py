@@ -178,6 +178,7 @@ class _RemoteFacts:
     rewritten: Mapping[ItemRef, Collection[Part]]
     missing: Collection[ItemRef]
     left_empty: Mapping[ItemRef, str]
+    stamped_into: Mapping[ItemRef, str]
 
 
 def _target_plan(
@@ -193,7 +194,8 @@ def _target_plan(
             continue
         if existing is None or ref in facts.missing:
             into_id = connector.existing_item_id(draft.target) if item.section_id is None else None
-            creates.append(CreateStep(ref, item, into_id))
+            stamped = None if into_id is None else facts.stamped_into.get(ref)
+            creates.append(CreateStep(ref, item, into_id, replaces_content_stamped_with=stamped))
             continue
         updates += item_steps(ref, existing.rendered, item, connector.writes, facts.rewritten.get(ref, ()))
     drafted = {item.section_id for item in draft.sections}
@@ -264,10 +266,11 @@ def plan_publish(
     rewritten: Mapping[ItemRef, Collection[Part]] = MappingProxyType({}),
     missing: Collection[ItemRef] = (),
     left_empty: Mapping[ItemRef, str] = MappingProxyType({}),
+    stamped_into: Mapping[ItemRef, str] = MappingProxyType({}),
 ) -> PublishPlan:
     _refuse_shared_items(state)
     drafted = {draft.label for draft in drafts}
-    facts = _RemoteFacts(rewritten, missing, left_empty)
+    facts = _RemoteFacts(rewritten, missing, left_empty, stamped_into)
     return PublishPlan(
         (
             *(

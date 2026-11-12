@@ -30,7 +30,7 @@ from skaldr.publish.reading import (
     remote_edits,
     settle_interrupted_creates,
     shown_token,
-    with_adoptions_named,
+    stamped_with_this_document,
 )
 from skaldr.publish.state import PendingCreate, PublishState, held_state_lock, save_state
 from skaldr.publish.transport import RemoteItem
@@ -129,14 +129,14 @@ def _interrupted_create_message(prepared: Prepared, pending: PendingCreate) -> s
     )
 
 
-def _is_left_empty(pending: PendingCreate, left_empty: Mapping[ItemRef, str]) -> bool:
+def _waits_for_its_fill(pending: PendingCreate, left_empty: Mapping[ItemRef, str]) -> bool:
     ref = ItemRef(pending.target, pending.section_id)
     return pending.created_id is not None and left_empty.get(ref) == pending.created_id
 
 
 def _refuse_an_interrupted_create(prepared: Prepared, left_empty: Mapping[ItemRef, str]) -> None:
     unsettled = [
-        pending for pending in prepared.state.pending_creates if not _is_left_empty(pending, left_empty)
+        pending for pending in prepared.state.pending_creates if not _waits_for_its_fill(pending, left_empty)
     ]
     if unsettled:
         raise PublishError(_interrupted_create_message(prepared, unsettled[0]))
@@ -243,12 +243,18 @@ def _applied_with(
     rewritten = {reading.item: reading.edited for reading in edited}
     missing = [missing.item for missing in preflight.missing]
     plan = plan_publish(
-        prepared.drafts, prepared.state, prepared.registry, rewritten, missing, preflight.left_empty
+        prepared.drafts,
+        prepared.state,
+        prepared.registry,
+        rewritten,
+        missing,
+        left_empty=preflight.left_empty,
+        stamped_into=stamped_with_this_document(preflight.written_into),
     )
     written_into = read_items_written_into(prepared, plan, transports, preflight.written_into)
     remote = {**written_into, **{reading.item: reading.remote for reading in preflight.readings}}
     applier = Applier(prepared, transports, remote, on_step, prepared.state)
-    applied = applier.run(with_adoptions_named(plan, written_into))
+    applied = applier.run(plan)
     linked = apply_links(prepared, applier.state, transports, applier.remote, on_step)
     return Applied((*applied.steps, *linked))
 
@@ -271,11 +277,17 @@ def dry_run_publish(prepared: Prepared) -> DryRun:
             planned = () if preflight.edited else plan_links(settled, settled.state, transports, remote)
     except PublishError as exc:
         return DryRun(prepared.plan, (), str(exc))
+    plan = plan_publish(
+        settled.drafts,
+        settled.state,
+        settled.registry,
+        left_empty=preflight.left_empty,
+        stamped_into=stamped_with_this_document(preflight.written_into),
+    )
     if preflight.edited:
         edits = remote_edits(preflight.prepared, preflight.edited)
-        return DryRun(prepared.plan, edits, refusal_message(Refused(edits, "edited")))
-    plan = plan_publish(settled.drafts, settled.state, settled.registry, left_empty=preflight.left_empty)
-    return DryRun(with_adoptions_named(plan, preflight.written_into), (), None, link_steps(planned))
+        return DryRun(plan, edits, refusal_message(Refused(edits, "edited")))
+    return DryRun(plan, (), None, link_steps(planned))
 
 
 def _changes_of_item(

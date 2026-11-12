@@ -11,6 +11,7 @@ from skaldr.publish.content import (
     with_fields_named,
     with_parts,
 )
+from skaldr.publish.ownership import Ownership
 from skaldr.publish.plan import (
     ArchiveStep,
     CreateStep,
@@ -28,7 +29,7 @@ from skaldr.publish.plan import (
     published_item,
 )
 from skaldr.publish.prepared import Prepared, Transports, with_item
-from skaldr.publish.reading import adopted_item
+from skaldr.publish.reading import adopted_item, ownership_of
 from skaldr.publish.state import (
     InFlightWrite,
     PendingCreate,
@@ -198,7 +199,9 @@ class Applier:
                 self.state, ref, target_plan.target, item.model_copy(update={"rendered": rendered})
             )
         transport = self.transports.for_target(ref.target)
-        request = SectionRequest(write, raw_sections, self._stamp(ref), item.published_sections)
+        request = SectionRequest(
+            write, raw_sections, self._stamp(ref), item.published_sections, self._ownership(ref)
+        )
         return self._written(
             target_plan,
             ref,
@@ -209,12 +212,22 @@ class Applier:
     def _stamp(self, ref: ItemRef) -> Stamp:
         return Stamp(self.prepared.doc_id, ref.section_id)
 
+    def _ownership(self, ref: ItemRef) -> Ownership:
+        transport = self.transports.for_target(ref.target)
+        read = [self.remote[ref].comparable] if ref in self.remote else []
+        return ownership_of(self._item(ref), self.prepared.draft_of(ref), transport, self.state, read)
+
     def _write_content(self, target_plan: TargetPlan, step: WriteContentStep) -> PublishState:
         item = self._item(step.item)
         rendered = item.rendered.model_copy(update={"sections": step.content.sections})
         parts = [section_part(key) for key in (*step.written, *step.removed)]
         transport = self.transports.for_target(step.item.target)
-        request = ContentWrite(step.content.sections, self._raw_sections(step.item), self._stamp(step.item))
+        request = ContentWrite(
+            step.content.sections,
+            self._raw_sections(step.item),
+            self._stamp(step.item),
+            self._ownership(step.item),
+        )
         return self._written(
             target_plan,
             step.item,
@@ -236,6 +249,7 @@ class Applier:
             previous_icon=now.icon,
             previous_cover=now.cover,
             published=item.published_sections,
+            ownership=self._ownership(step.item),
         )
         rendered = item.rendered.model_copy(
             update={
@@ -285,7 +299,7 @@ class Applier:
                 return self._write_content(target_plan, step)
             case ArchiveStep():
                 transport = self.transports.for_target(target_plan.label)
-                archive = Archive(self._stamp(step.item), self._item(step.item).published_sections)
+                archive = Archive(self._stamp(step.item), self._ownership(step.item))
                 return self._retired(
                     target_plan, step.item, "archive", lambda: transport.archive_item(step.item_id, archive)
                 )

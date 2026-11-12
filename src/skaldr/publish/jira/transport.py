@@ -33,7 +33,12 @@ from skaldr.publish.jira.description import (
     section_text,
     split_description,
 )
-from skaldr.publish.keyed import refuse_to_archive_what_skaldr_did_not_write
+from skaldr.publish.ownership import (
+    NOTHING_HELD,
+    Ownership,
+    refuse_to_archive_an_item_skaldr_does_not_own,
+    refuse_unstamped_content_skaldr_did_not_write,
+)
 from skaldr.publish.transport import (
     AddSection,
     Archive,
@@ -99,6 +104,10 @@ class StampValue(BaseModel):
 
 def doc_label(doc_id: str) -> str:
     return f"{LABEL_PREFIX}{doc_id}"
+
+
+def _issue_named(item_id: str) -> str:
+    return f"Jira issue {item_id}"
 
 
 def not_a_jira_target(target: TargetBase) -> str:
@@ -300,7 +309,7 @@ class JiraTransport:
             ) from exc
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
-        current = self._read_unchanged(item_id, request.raw_sections)
+        current = self._read_unchanged(item_id, request.raw_sections, request.ownership)
         change = request.change
         if not isinstance(change, AddSection) and current.get(change.key) != change.raw_current:
             raise WriteRejectedError(
@@ -312,7 +321,7 @@ class JiraTransport:
         return self._write_description(item_id, placed_section(current, change.key, text, follows))
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
-        self._read_unchanged(item_id, request.raw_sections)
+        self._read_unchanged(item_id, request.raw_sections, request.ownership)
         return self._write_description(item_id, request.sections)
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
@@ -321,7 +330,13 @@ class JiraTransport:
         if stamped is not None and stamped.stamp != request.stamp:
             raise WriteRejectedError(f"Jira issue {item_id} is not stamped with {request.stamp.named}")
         self._remember_shapes(item_id, request.fields)
-        self._refuse_unseen_edits(item_id, self._history(item_id))
+        history = self._history(item_id)
+        self._refuse_unseen_edits(item_id, history)
+        if stamped is None:
+            held = self._read_with(item_id, history).remote.held
+            refuse_unstamped_content_skaldr_did_not_write(
+                _issue_named(item_id), held, request.ownership, "write to"
+            )
         changes: dict[str, JsonValue] = {SUMMARY_FIELD: request.title} if request.changes_the_title else {}
         for name, value in request.changed_fields.items():
             changes[name] = _with_doc_label(value, request.stamp.doc_id) if name == LABELS else value
@@ -336,12 +351,9 @@ class JiraTransport:
         current = self._stamp(item_id) or StampValue(doc_id=None)
         if current.archived:
             return
-        sections = (
-            {} if current.stamp is not None else self._read_with(item_id, ()).remote.comparable.sections
-        )
-        saved = self.comparable_form(ItemContent(title="", sections=dict(request.published.saved_remote)))
-        refuse_to_archive_what_skaldr_did_not_write(
-            f"Jira issue {item_id}", current.stamp, sections, saved.sections, request
+        held = NOTHING_HELD if current.stamp is not None else self._read_with(item_id, ()).remote.held
+        refuse_to_archive_an_item_skaldr_does_not_own(
+            _issue_named(item_id), current.doc_id, held, request.stamp.doc_id, request.ownership
         )
         if current.linked and current.stamp is not None:
             self._delete_links(item_id, current.stamp, self.read_links(item_id, current.stamp))
@@ -492,13 +504,20 @@ class JiraTransport:
             )
         return description
 
-    def _read_unchanged(self, item_id: str, raw_sections: RawSections) -> dict[str, str]:
+    def _read_unchanged(
+        self, item_id: str, raw_sections: RawSections, ownership: Ownership
+    ) -> dict[str, str]:
         self._last_reads.pop(item_id, None)
         history = self._history(item_id)
         self._refuse_unseen_edits(item_id, history)
-        current = dict(self._read_with(item_id, history).remote.raw_sections)
+        read = self._read_with(item_id, history).remote
+        current = dict(read.raw_sections)
         if list(current.items()) != list(raw_sections.items()):
             raise _changed_since_read(item_id)
+        if read.stamp is None:
+            refuse_unstamped_content_skaldr_did_not_write(
+                _issue_named(item_id), read.held, ownership, "write to"
+            )
         return current
 
     def _write_description(self, item_id: str, sections: Mapping[str, str]) -> RemoteItem:

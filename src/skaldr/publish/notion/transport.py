@@ -16,7 +16,6 @@ from skaldr.publish.keyed import (
     finished_after_a_change,
     finished_after_a_create,
     refuse_a_change_since_the_read,
-    refuse_to_archive_what_skaldr_did_not_write,
     refused_when_not_found,
 )
 from skaldr.publish.notion.api import Answer, NotionApi
@@ -51,8 +50,14 @@ from skaldr.publish.notion.properties import (
     title_request,
     title_text,
 )
-from skaldr.publish.notion.responses import Page
+from skaldr.publish.notion.responses import Page, StatusValue
 from skaldr.publish.notion.template import check_the_template_is_empty
+from skaldr.publish.ownership import (
+    HeldContent,
+    Ownership,
+    refuse_to_archive_an_item_skaldr_does_not_own,
+    refuse_unstamped_content_skaldr_did_not_write,
+)
 from skaldr.publish.transport import (
     AddSection,
     Archive,
@@ -129,6 +134,17 @@ def _with_nothing_sent(prepare: Callable[[], Answer]) -> Answer:
 
 def _page_named(item_id: str) -> str:
     return f"Notion page {item_id}"
+
+
+def _status_properties(page: Page) -> tuple[str, ...]:
+    return tuple(name for name, value in page.properties.items() if isinstance(value, StatusValue))
+
+
+def _held(page: Page, markdown: str, layout: Mapping[str, str]) -> HeldContent:
+    keyed = keyed_page(markdown, layout)
+    statuses = _status_properties(page)
+    set_by_people = tuple(name for name in set_property_names(page) if name not in statuses)
+    return HeldContent(title_text(page), dict(keyed.sections), keyed.child_ids, set_by_people)
 
 
 def _with_children_of_removed_sections(
@@ -276,6 +292,7 @@ class NotionTransport:
             kept = carried_into(current.get(change.key, ""), self._people.as_written(change.text))
         after = list(placed_section(current, change.key, kept, follows).items())
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
+        self._refuse_an_unstamped_page_skaldr_did_not_write(item_id, keyed, markdown, request.ownership)
         replacement = section_replacement(list(current.items()), after, markdown, keyed.stamp_line)
         if replacement is None:
             raise WriteRejectedError(
@@ -286,6 +303,7 @@ class NotionTransport:
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
+        self._refuse_an_unstamped_page_skaldr_did_not_write(item_id, keyed, markdown, request.ownership)
         current = keyed.raw_sections
         after = _with_children_of_removed_sections(
             current,
@@ -313,6 +331,10 @@ class NotionTransport:
         stamp = keyed_page(markdown, layout).stamp
         if stamp is not None and stamp != request.stamp:
             raise WriteRejectedError(f"Notion page {item_id} is not stamped with {request.stamp.named}")
+        if stamp is None:
+            refuse_unstamped_content_skaldr_did_not_write(
+                _page_named(item_id), _held(page, markdown, layout), request.ownership, "write to"
+            )
         title = title_request(request.title, title_property_name(page)) if request.changes_the_title else {}
         values: JsonFields = {**request.changed_fields, **dict.fromkeys(request.cleared_fields)}
         properties = {**title, **self._property_requests(page, values)}
@@ -328,20 +350,27 @@ class NotionTransport:
 
     def archive_item(self, item_id: str, request: Archive, /) -> None:
         try:
-            self._live_page(item_id)
+            page = self._live_page(item_id)
         except ItemNotFoundError:
             return
-        saved = request.published.saved_remote
-        keyed = keyed_page(
-            self._api.page_markdown(item_id).markdown, self._read.layouts.get(_page_key(item_id), saved)
-        )
-        refuse_to_archive_what_skaldr_did_not_write(
-            _page_named(item_id), keyed.stamp, keyed.sections, self._comparable_sections(saved), request
+        markdown = self._api.page_markdown(item_id).markdown
+        layout = self._read.layouts.get(_page_key(item_id), {})
+        stamp = keyed_page(markdown, layout).stamp
+        refuse_to_archive_an_item_skaldr_does_not_own(
+            _page_named(item_id),
+            None if stamp is None else stamp.doc_id,
+            _held(page, markdown, layout),
+            request.stamp.doc_id,
+            request.ownership,
         )
         self._api.update_page(item_id, {"in_trash": True})
 
-    def _comparable_sections(self, sections: Mapping[str, str]) -> Mapping[str, str]:
-        return self.comparable_form(ItemContent(title="", sections=dict(sections))).sections
+    def _refuse_an_unstamped_page_skaldr_did_not_write(
+        self, item_id: str, keyed: KeyedPage, markdown: str, ownership: Ownership
+    ) -> None:
+        if keyed.stamp is None:
+            held = _held(self._live_page(item_id), markdown, keyed.raw_sections)
+            refuse_unstamped_content_skaldr_did_not_write(_page_named(item_id), held, ownership, "write to")
 
     def release_item(self, item_id: str, request: Release, /) -> None:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)
@@ -436,6 +465,7 @@ class NotionTransport:
             child_ids=keyed.child_ids,
             set_properties=set_property_names(page),
             links=keyed.links,
+            properties_the_service_sets=_status_properties(page),
         )
 
     def _send(self, item_id: str, sections: Mapping[str, str], replacement: Replacement) -> str:

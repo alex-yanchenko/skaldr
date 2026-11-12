@@ -5,6 +5,7 @@ from typing import Protocol, runtime_checkable
 
 from skaldr.frozen_model import FrozenModel
 from skaldr.publish.content import ItemContent, Part, is_unset, same_value
+from skaldr.publish.ownership import NOTHING_WRITTEN, HeldContent, Ownership
 
 __all__ = [
     "NO_PUBLISHED",
@@ -114,10 +115,20 @@ class RemoteItem:
     child_ids: tuple[str, ...] = ()
     set_properties: tuple[str, ...] = ()
     links: tuple[ShownLink, ...] | None = None
+    properties_the_service_sets: tuple[str, ...] = ()
 
     @property
     def doc_id(self) -> str | None:
         return None if self.stamp is None else self.stamp.doc_id
+
+    @property
+    def held(self) -> HeldContent:
+        return HeldContent(
+            self.comparable.title,
+            self.comparable.sections,
+            self.child_ids,
+            tuple(name for name in self.set_properties if name not in self.properties_the_service_sets),
+        )
 
 
 @dataclass(frozen=True)
@@ -166,6 +177,7 @@ class SectionRequest:
     raw_sections: RawSections
     stamp: Stamp
     published: PublishedSections = NO_PUBLISHED
+    ownership: Ownership = NOTHING_WRITTEN
 
 
 @dataclass(frozen=True)
@@ -173,12 +185,13 @@ class ContentWrite:
     sections: Mapping[str, str]
     raw_sections: RawSections
     stamp: Stamp
+    ownership: Ownership = NOTHING_WRITTEN
 
 
 @dataclass(frozen=True)
 class Archive:
     stamp: Stamp
-    published: PublishedSections = NO_PUBLISHED
+    ownership: Ownership = NOTHING_WRITTEN
 
 
 @dataclass(frozen=True)
@@ -201,6 +214,7 @@ class FieldsWrite:
     previous_icon: str | None = None
     previous_cover: str | None = None
     published: PublishedSections = NO_PUBLISHED
+    ownership: Ownership = NOTHING_WRITTEN
 
     @property
     def changes_the_icon(self) -> bool:

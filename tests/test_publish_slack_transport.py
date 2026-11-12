@@ -798,12 +798,18 @@ def test_a_canvas_whose_archive_stopped_before_the_rename_still_reads_so_the_arc
     read = transport.read_item(CANVAS, CONTENT)
     transport.archive_item(CANVAS, ARCHIVE)
 
-    assert (read.stamp, dict(read.raw_sections), read.comparable.sections, slack.markdown_of(CANVAS)) == (
-        None,
+    assert (read.stamp, dict(read.raw_sections), slack.markdown_of(CANVAS)) == (
+        STAMP,
         {"intro": f"{archived_line('garden-handbook')}\n"},
-        {},
         ARCHIVED_CANVAS,
     )
+
+
+def test_a_canvas_archived_without_a_doc_id_reads_unstamped() -> None:
+    slack = InMemorySlack()
+    canvas_id = slack.add_canvas("Notes", f"{archived_line(None)}\n")
+
+    assert slack.transport().read_item(canvas_id, ItemContent(title="")).stamp is None
 
 
 def test_archiving_a_canvas_edited_after_the_read_writes_nothing() -> None:
