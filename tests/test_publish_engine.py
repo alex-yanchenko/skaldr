@@ -6,11 +6,9 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError, PublishError
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
-from skaldr.publish.drafts import draft_targets, load_authored
+from skaldr.publish.content import FIELDS, TITLE, section_part
 from skaldr.publish.engine import (
     Applied,
-    ApplyOutcome,
     ItemStatus,
     PublishDiff,
     Refused,
@@ -40,6 +38,8 @@ from tests.factories.publish_factory import (
     make_notion_publish,
     write_garden_report,
 )
+from tests.factories.publish_factory import drafted_content as _drafted
+from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID
 
 DOCUMENT = ItemRef(TARGET_LABEL, None)
@@ -58,15 +58,6 @@ LEGEND_TEXT = (
     "</details>\n"
 )
 FIRST_PUBLISH = ('create   document "Garden handbook"', 'create   section tools "Tools"')
-
-
-def _publish(path: Path, transport: FakeTransport, *, overwrite: bool = False) -> ApplyOutcome:
-    return apply_publish(prepare_publish(path, fake_registry(transport)), overwrite=overwrite)
-
-
-def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
-    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
-    return next(item.content for item in target.items if item.section_id == section_id)
 
 
 def _published_then_rewritten(tmp_path: Path, transport: FakeTransport, **rewritten: Any) -> Path:

@@ -1,4 +1,3 @@
-import re
 from collections.abc import Callable
 
 import pytest
@@ -41,6 +40,7 @@ from tests.factories.jira_factory import (
     Reply,
     summarised_request,
 )
+from tests.factories.publish_factory import exactly as _exactly
 
 DOC_ID = "garden-handbook"
 DOC_LABEL = "skaldr-garden-handbook"
@@ -68,10 +68,6 @@ def _table(local_id: str | None = None) -> JsonValue:
         "attrs": attrs,
         "content": [{"type": "tableRow", "content": [{"type": "tableHeader", "content": [_words("Tool")]}]}],
     }
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 INTRO = _words("Welcome.")

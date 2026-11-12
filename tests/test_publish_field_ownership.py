@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError
-from skaldr.publish.engine import Applied, ApplyOutcome, apply_publish, diff_publish, prepare_publish
+from skaldr.publish.engine import Applied, diff_publish, prepare_publish
 from skaldr.publish.output import diff_lines
 from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish_block.target import JsonFields
@@ -18,11 +18,8 @@ from tests.factories.publish_factory import (
     make_notion_publish,
     write_garden_report,
 )
+from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID
-
-
-def _publish(path: Path, transport: FakeTransport) -> ApplyOutcome:
-    return apply_publish(prepare_publish(path, fake_registry(transport)))
 
 
 def _with_fields(fields: JsonFields) -> dict[str, Any]:

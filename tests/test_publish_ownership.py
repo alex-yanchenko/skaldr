@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +46,7 @@ from tests.factories.publish_factory import (
     make_notion_publish,
     write_garden_report,
 )
+from tests.factories.publish_factory import exactly as _exactly
 from tests.factories.slack_factory import InMemorySlack
 
 TEAMMATE_PAGE = "fedcba9876543210fedcba9876543210"
@@ -156,10 +156,6 @@ def _pending_refusal(path: Path, parts: str) -> str:
         "created, empty it in Notion and publish again, and if it is not, delete its entry from "
         f"`pending_creates` in {state_path_for(path)}"
     )
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 @pytest.mark.parametrize("apply", [pytest.param(["--apply"], id="apply"), pytest.param([], id="dry-run")])

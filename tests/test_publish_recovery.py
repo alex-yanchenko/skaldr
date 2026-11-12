@@ -8,7 +8,6 @@ from skaldr.errors import ConnectorError, PublishError
 from skaldr.publish.content import section_part
 from skaldr.publish.engine import (
     Applied,
-    ApplyOutcome,
     ItemStatus,
     Refused,
     RemoteEdit,
@@ -19,7 +18,6 @@ from skaldr.publish.engine import (
 from skaldr.publish.plan import ItemRef
 from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish.transport import Stamp
-from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories.publish_factory import (
     DOC_ID,
     DROPPED_AFTER_WRITE,
@@ -32,17 +30,13 @@ from tests.factories.publish_factory import (
     make_notion_publish,
     write_garden_report,
 )
+from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID, make_jira_target
 
 DOCUMENT = ItemRef(TARGET_LABEL, None)
 TOOLS = ItemRef(TARGET_LABEL, "tools")
 INTO_THE_PAGE = make_notion_publish(where={"page": NOTION_PAGE_ID})
 JIRA_PUBLISH = {"doc_id": DOC_ID, "targets": [make_jira_target()]}
-
-
-def _publish(path: Path, transport: FakeTransport) -> ApplyOutcome:
-    registry = fake_registry(transport, target_types=(NotionTarget, JiraTarget))
-    return apply_publish(prepare_publish(path, registry))
 
 
 def _interrupted(path: Path, transport: FakeTransport, error: str) -> None:

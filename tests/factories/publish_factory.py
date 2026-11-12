@@ -12,7 +12,8 @@ from skaldr.models import Report, Section
 from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import NO_SECTION_DEFAULTS, SectionDefaults, WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
-from skaldr.publish.drafts import Authored, load_authored
+from skaldr.publish.drafts import Authored, draft_targets, load_authored
+from skaldr.publish.engine import ApplyOutcome, apply_publish, prepare_publish
 from skaldr.publish.ownership import (
     Ownership,
     refuse_to_archive_an_item_skaldr_does_not_own,
@@ -36,7 +37,7 @@ from skaldr.publish.transport import (
     Stamp,
     is_unset,
 )
-from skaldr.publish_block import NotionTarget, TargetBase, notion_page_id
+from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase, notion_page_id
 from skaldr.publish_block.target import JsonFields
 from tests.factories.export_factory import API_BADGES, write_report
 from tests.factories.report_factory import NOTION_PAGE_URL, make_report
@@ -623,3 +624,28 @@ def fake_registry(
             for target_type in target_types
         ]
     )
+
+
+def exactly(message: str) -> str:
+    return f"^{re.escape(message)}$"
+
+
+def notion_and_jira_registry(transport: FakeTransport) -> ConnectorRegistry:
+    return fake_registry(transport, target_types=(NotionTarget, JiraTarget))
+
+
+def publish_to_fakes(
+    path: Path,
+    transport: FakeTransport,
+    *,
+    overwrite: bool = False,
+    writes: WriteGranularity = "section",
+    target_types: tuple[type[TargetBase], ...] = (NotionTarget, JiraTarget),
+) -> ApplyOutcome:
+    registry = fake_registry(transport, target_types=target_types, writes=writes)
+    return apply_publish(prepare_publish(path, registry), overwrite=overwrite)
+
+
+def drafted_content(path: Path, section_id: str | None = None) -> ItemContent:
+    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
+    return next(item.content for item in target.items if item.section_id == section_id)

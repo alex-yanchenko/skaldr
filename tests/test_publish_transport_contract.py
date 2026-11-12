@@ -6,34 +6,22 @@ import pytest
 
 from skaldr.errors import PublishError
 from skaldr.publish.connector import WriteGranularity
-from skaldr.publish.content import ItemContent
-from skaldr.publish.drafts import draft_targets, load_authored
-from skaldr.publish.engine import Applied, ApplyOutcome, Refused, apply_publish, prepare_publish
+from skaldr.publish.engine import Applied, Refused
 from skaldr.publish.transport import FieldsWrite, Stamp
 from skaldr.publish_block.target import JsonFields
 from tests.factories.publish_factory import (
     DOC_ID,
     INTO_LABEL,
     FakeTransport,
-    fake_registry,
     make_garden_blocks,
     make_notion_publish,
     write_garden_report,
 )
+from tests.factories.publish_factory import drafted_content as _drafted
+from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID
 
 SHED: JsonFields = {"Area": "Shed", "Tags": ["soil", "seeds"]}
-
-
-def _publish(
-    path: Path, transport: FakeTransport, *, overwrite: bool = False, writes: WriteGranularity = "section"
-) -> ApplyOutcome:
-    return apply_publish(prepare_publish(path, fake_registry(transport, writes=writes)), overwrite=overwrite)
-
-
-def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
-    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
-    return next(item.content for item in target.items if item.section_id == section_id)
 
 
 def _republished(

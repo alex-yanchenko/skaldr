@@ -5,12 +5,10 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError, CreatedButUnfinishedError, PublishError, WriteRejectedError
-from skaldr.publish.connector import ConnectorRegistry, WriteGranularity
+from skaldr.publish.connector import ConnectorRegistry
 from skaldr.publish.content import ItemContent, Part, section_part
-from skaldr.publish.drafts import draft_targets, load_authored
 from skaldr.publish.engine import (
     Applied,
-    ApplyOutcome,
     ItemStatus,
     Refused,
     RemoteEdit,
@@ -41,24 +39,14 @@ from tests.factories.publish_factory import (
     make_notion_publish,
     write_garden_report,
 )
+from tests.factories.publish_factory import drafted_content as _drafted
+from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID, make_jira_target
 
 DOCUMENT = ItemRef(TARGET_LABEL, None)
 TOOLS = ItemRef(TARGET_LABEL, "tools")
 LATE_SPRING = "## Planting\nSow in late spring.\n"
 JIRA_LABEL = "jira project PLAN under no parent issue"
-
-
-def _publish(
-    path: Path, transport: FakeTransport, *, overwrite: bool = False, writes: WriteGranularity = "section"
-) -> ApplyOutcome:
-    registry = fake_registry(transport, target_types=(NotionTarget, JiraTarget), writes=writes)
-    return apply_publish(prepare_publish(path, registry), overwrite=overwrite)
-
-
-def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
-    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
-    return next(item.content for item in target.items if item.section_id == section_id)
 
 
 def _published_then_rewritten(tmp_path: Path, transport: FakeTransport, **rewritten: Any) -> Path:

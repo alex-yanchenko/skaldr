@@ -77,6 +77,7 @@ from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 from tests.factories.adf_factory import para as _para
 from tests.factories.adf_factory import text_entry as _text_entry
 from tests.factories.capability_factory import xy_chart
+from tests.factories.publish_factory import exactly as _exactly
 
 Json = Mapping[str, object]
 
@@ -103,10 +104,6 @@ def _item(*blocks: Json) -> Json:
 
 def _rendered(*nodes: Node, links: IssueLinks | None = None) -> Json:
     return json.loads(json.dumps(render_adf(nodes, links)))
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 STRONG: Json = {"type": "strong"}

@@ -9,7 +9,6 @@ from skaldr.publish.cli import main
 from skaldr.publish.content import section_part
 from skaldr.publish.engine import (
     Applied,
-    ApplyOutcome,
     DryRun,
     ItemStatus,
     MissingItem,
@@ -23,18 +22,18 @@ from skaldr.publish.engine import (
 )
 from skaldr.publish.plan import ArchiveStep, ItemRef, ReleaseStep, describe_plan
 from skaldr.publish.state import load_state, state_path_for
-from skaldr.publish_block import JiraTarget, NotionTarget
 from tests.factories.publish_factory import (
     DOC_ID,
     INTO_LABEL,
     OTHER_DOC_ID,
     TARGET_LABEL,
     FakeTransport,
-    fake_registry,
     make_garden_blocks,
     make_notion_publish,
     write_garden_report,
 )
+from tests.factories.publish_factory import notion_and_jira_registry as _registry
+from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID, make_jira_target
 
 DOCUMENT = ItemRef(TARGET_LABEL, None)
@@ -44,14 +43,6 @@ OTHER_PAGE_ID = "fedcba9876543210fedcba9876543210"
 OTHER_LABEL = f"notion page {OTHER_PAGE_ID}"
 JIRA_PUBLISH = {"doc_id": DOC_ID, "targets": [make_jira_target()]}
 INTO_THE_PAGE = make_notion_publish(split=["tools"], where={"page": NOTION_PAGE_ID})
-
-
-def _registry(transport: FakeTransport) -> Any:
-    return fake_registry(transport, target_types=(NotionTarget, JiraTarget))
-
-
-def _publish(path: Path, transport: FakeTransport, *, overwrite: bool = False) -> ApplyOutcome:
-    return apply_publish(prepare_publish(path, _registry(transport)), overwrite=overwrite)
 
 
 def _published_then_rewritten(

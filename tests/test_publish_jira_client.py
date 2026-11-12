@@ -1,5 +1,3 @@
-import re
-
 import httpx2
 import pytest
 from pydantic import JsonValue
@@ -22,6 +20,7 @@ from skaldr.publish.jira.api import (
 )
 from tests.factories.auth_factory import summarise
 from tests.factories.jira_factory import CLOSE, SITE, FakeJira, Reply, summarised_request
+from tests.factories.publish_factory import exactly as _exactly
 
 PARAGRAPH: JsonValue = {"version": 1, "type": "doc", "content": [{"type": "paragraph"}]}
 STAMP = EntityProperty(key="skaldr.stamp", value={"doc_id": "garden-handbook", "section_id": None})
@@ -30,10 +29,6 @@ CHANGELOG = f"{ISSUE}/changelog"
 COMMENTS = f"{ISSUE}/comment"
 CREATE = "/rest/api/3/issue"
 MYSELF = "/rest/api/3/myself"
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 def _seeded() -> FakeJira:

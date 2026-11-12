@@ -1,5 +1,4 @@
 import json
-import re
 from collections.abc import Mapping
 
 import pytest
@@ -43,6 +42,7 @@ from skaldr.export.tree import (
 from skaldr.richtext import Citation, Plain, Styled
 from tests.factories import check_nodes, refusal_of
 from tests.factories.adf_factory import cell, para, pie_over_its_table, text_entry
+from tests.factories.publish_factory import exactly as _exactly
 
 Json = Mapping[str, object]
 
@@ -51,10 +51,6 @@ STRONG: Json = {"type": "strong"}
 STRIKE: Json = {"type": "strike"}
 SUPERSCRIPT: Json = {"type": "subsup", "attrs": {"type": "sup"}}
 RUNBOOK = "https://example.com/runbook"
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 def _rendered(*nodes: Node) -> Json:

@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +29,9 @@ from tests.factories.publish_factory import (
     make_garden_report,
     write_garden_report,
 )
+from tests.factories.publish_factory import exactly as _exactly
 
 TARGET_LABEL = "jira project DEMO under no parent issue"
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 def _connector(jira: FakeJira) -> JiraConnector:
