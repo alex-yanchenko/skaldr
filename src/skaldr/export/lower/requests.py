@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from skaldr import compute
-from skaldr.export.inline import bold, italic, plain
+from skaldr.export.inline import bold, italic, label_text, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import ExportRich
 from skaldr.export.tree import (
@@ -44,7 +44,7 @@ def _response_block(case: RequestCase) -> CodeBlock:
 def _response_caption(core: RequestLike, case: RequestCase) -> Paragraph:
     caption = compute.response_caption(core, case.response)
     status = plain(compute.status_line(case.response)) if caption.shows_status else ()
-    return Paragraph(with_bold_label(caption.label, status))
+    return Paragraph(with_bold_label(label_text(caption.label), status))
 
 
 def _query_nodes(core: RequestLike, case: RequestCase, query: RequestQuery) -> list[Node]:

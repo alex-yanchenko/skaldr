@@ -413,9 +413,9 @@ SPAN_NESTING_REFUSALS: dict[str, RefusedCase] = {
     ).refusals("colour-inside-part-of-a-highlight-span"),
     "notion-highlight-inside-a-toned-step-title": RefusedCase(
         "notion",
-        "highlight span inside a toned walkthrough step title",
+        "highlight span inside a toned walkthrough step subtitle",
         HIGHLIGHT_IN_A_STEP_TITLE,
-        "Notion cannot show a highlight inside the coloured title of a toned walkthrough step, "
+        "Notion cannot show a highlight inside the coloured subtitle of a toned walkthrough step, "
         "so it cannot show the highlight on 'cold room'",
         WITHOUT_THE_HIGHLIGHT,
         STEP_PATH_OF_THE_TITLE,

@@ -22,8 +22,22 @@ from skaldr.export.tree import (
 )
 from skaldr.models import ToneLiteral
 from skaldr.richtext import Plain, Styled
-from tests.factories import API_BADGES, lowered, lowered_as_written_today
-from tests.factories.export_factory import API_LEGEND, cell_texts_of
+from tests.factories import API_BADGES, lowered, lowered_as_written_today, make_section
+from tests.factories.export_factory import (
+    API_LEGEND,
+    CARDS_LABELLED_WITH_A_TRAILING_COLON,
+    OPEN_ROWS_BADGE,
+    cell_texts_of,
+)
+
+
+def test_a_card_label_is_trimmed_once_in_the_lowering_whether_derived_or_authored() -> None:
+    assert lowered(CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE)[0] == Cards(
+        (
+            Card("Open rows", (Plain("1 (100.0%)"),), badge="amber"),
+            Card("Plain", (Plain("3"),)),
+        )
+    )
 
 
 def test_a_card_shows_its_share_delta_badges_and_note() -> None:
@@ -195,9 +209,35 @@ def test_a_fact_strip_and_a_key_value_block_lower_to_their_labelled_values() -> 
     ]
 
     assert lowered(blocks) == (
-        FactStrip((LabelledValue("Site:", (Plain("West wing"),)), LabelledValue(" ", (Plain("x"),)))),
+        FactStrip((LabelledValue("Site", (Plain("West wing"),)), LabelledValue("", (Plain("x"),)))),
         KeyValueList((LabelledValue("Owner", (Styled("bold", (Plain("ops"),)),)),)),
     )
+
+
+def test_a_key_value_label_loses_one_trailing_colon_in_the_lowering() -> None:
+    blocks = [
+        {
+            "type": "key_value",
+            "pairs": [{"label": "Ratio::", "value": "1"}, {"label": "Owner:", "value": "x"}],
+        }
+    ]
+
+    assert lowered(blocks) == (
+        KeyValueList((LabelledValue("Ratio:", (Plain("1"),)), LabelledValue("Owner", (Plain("x"),)))),
+    )
+
+
+def test_a_section_field_label_loses_one_trailing_colon_in_the_lowering() -> None:
+    section = make_section("s", collapsed=False, fields={"Risk::": "low", "Area:": "ops"})
+
+    fact_strips = [node for node in lowered([section]) if isinstance(node, FactStrip)]
+
+    assert fact_strips == [
+        FactStrip(
+            (LabelledValue("Risk:", (Plain("low"),)), LabelledValue("Area", (Plain("ops"),))),
+            of_section_fields=True,
+        )
+    ]
 
 
 def test_cards_lower_to_a_card_per_item_with_a_derived_card_led_by_its_badge_colour() -> None:

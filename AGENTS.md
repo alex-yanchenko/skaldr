@@ -25,7 +25,7 @@ uv run skaldr ...           # uv uses the system Python ≥ 3.11
    `skaldr report.yaml --export markdown` or `--export notion` writes the same document as
    Markdown instead, `--export adf` as the JSON a Jira issue description takes, and
    `--export slack` as the Markdown a Slack canvas takes.
-4. **Done = skaldr prints `OK` and the output file exists.** A structural mistake fails the build
+4. **Done = skaldr prints `OK` (or `up to date` under `--if-stale`) and the output file exists.** A structural mistake fails the build
    with a precise path (`blocks.3.items.2.value: ...`); read it, fix, re-run.
 
 ## Contributing

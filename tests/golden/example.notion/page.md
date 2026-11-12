@@ -295,7 +295,7 @@ A zone's drift is $`d = \frac{|c - e|}{e}`$, where $`c`$ is the counted units an
 $$
 \bar{d} = \frac{1}{n} \sum_{i=1}^{n} \frac{|c_i - e_i|}{e_i}
 $$
-`reconciliation.sql`
+**reconciliation.sql**
 ```sql
 SELECT reason, count(*) AS n
 FROM count_audit
@@ -303,7 +303,7 @@ WHERE cycle_id = 'Q3-2026'
 GROUP BY reason
 ORDER BY n DESC;
 ```
-`dedupe.ts · tiebreak fix`
+**dedupe.ts · tiebreak fix**
 ```diff
 function pickWinner(a, b) {
 -  return a.code.localeCompare(b.code);
@@ -607,7 +607,7 @@ flowchart LR
 	- Flag overflow bins (`bin > 12`): they take the manual path.
 2. <span color="purple">**Scan every bin twice, reconcile on the pallet ID**</span>
 	Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
-	`reconcile`
+	**reconcile**
 	```plain text
 	counted = dedupe(scans, key="pallet_id")
 	assert sum(counted) == expected

@@ -25,6 +25,7 @@ from skaldr.replace_file import replace_bytes, replace_file
 __all__ = [
     "EXPORT_MANIFEST",
     "EXPORT_TARGETS",
+    "SPLIT_ADVICE",
     "ExportResult",
     "ExportTarget",
     "RenderedExport",
@@ -32,12 +33,20 @@ __all__ = [
     "export_markdown",
     "export_notion",
     "export_slack",
+    "limit_refusal",
     "render_export",
 ]
 
 EXPORT_MANIFEST: Final = ".skaldr-export.json"
 MARKDOWN_PAGE_NAME: Final = "page.md"
 ADF_PAGE_NAME: Final = "page.adf.json"
+SPLIT_ADVICE: Final = "split the document further with `split`, or shorten it"
+
+
+def limit_refusal(what: str, size: int, unit: str, maximum: int, service: str, scope: str) -> str:
+    return f"{what} has {size:,} {unit}, over the {maximum:,} a {service} {scope} can take; {SPLIT_ADVICE}"
+
+
 ExportedFileName = Annotated[
     str,
     StringConstraints(
@@ -78,6 +87,7 @@ class RenderedExport:
     icon: str | None = None
     cover: str | None = None
     files: Mapping[str, bytes] = field(default_factory=dict[str, bytes])
+    refused_for_its_size: str | None = None
 
 
 @dataclass(frozen=True)
@@ -187,13 +197,19 @@ def _checked_document(report: Report, target: ExportTarget) -> LoweredDocument:
 def _adf_pages(document: LoweredDocument) -> RenderedExport:
     adf = render_adf_document(document)
     size = compact_adf_length(adf)
-    over_the_limit = (
+    over_the_limit = size > JIRA_DESCRIPTION_LIMIT
+    warnings = (
         (f"the ADF description is {size:,} characters, over Jira's limit of {JIRA_DESCRIPTION_LIMIT:,}",)
-        if size > JIRA_DESCRIPTION_LIMIT
+        if over_the_limit
         else ()
     )
+    refused = (
+        limit_refusal("the item", size, "characters of ADF", JIRA_DESCRIPTION_LIMIT, "Jira", "item")
+        if over_the_limit
+        else None
+    )
     title = title_led_by_its_icon(document.title, document.icon)
-    return RenderedExport(title, {ADF_PAGE_NAME: adf_json(adf)}, over_the_limit)
+    return RenderedExport(title, {ADF_PAGE_NAME: adf_json(adf)}, warnings, refused_for_its_size=refused)
 
 
 def render_export(report: Report, target: ExportTarget) -> RenderedExport:

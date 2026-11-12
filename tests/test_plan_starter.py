@@ -236,6 +236,34 @@ def test_new_without_exactly_a_kind_and_a_file_prints_its_usage(
     )
 
 
+@pytest.mark.parametrize("flag", ["--help", "-h"], ids=["long", "short"])
+def test_new_help_prints_its_usage_and_kinds_and_exits_zero(
+    flag: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(["new", flag])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.err, " ".join(captured.out.split())) == (
+        0,
+        "",
+        "usage: skaldr new [-h] kind FILE "
+        "Write a starter content file you fill in, then render. "
+        "positional arguments: kind what to start; the kinds are: plan "
+        "FILE where to write it; an existing file is never overwritten "
+        "options: -h, --help show this help message and exit",
+    )
+
+
+def test_the_top_level_help_lists_skaldr_new_with_its_kinds(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as raised:
+        main(["--help"])
+
+    assert raised.value.code == 0
+    assert "Start a document with `skaldr new <kind> FILE` (kinds: plan)." in " ".join(
+        capsys.readouterr().out.split()
+    )
+
+
 def test_placeholders_in_the_title_subtitle_date_and_updated_are_unfilled_blanks() -> None:
     report = parse_report(
         make_report(

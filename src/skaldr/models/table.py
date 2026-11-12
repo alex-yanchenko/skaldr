@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any, Literal, TypeGuard, assert_never, cast, get_args
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 from skaldr.frozen_model import FrozenModel
@@ -21,6 +21,7 @@ from skaldr.models.primitives import (
     Count,
     FieldPath,
     MappedRow,
+    NonBlank,
     RichTextMarker,
     SixthsCount,
     Tone,
@@ -286,7 +287,11 @@ class Table(BlockBase):
         "key → value) or a positional list in the declared column order.",
     )
     reconcile: Reconcile | None = Field(default=None, description="Opt-in trust check on a number column.")
-    totals: Totals | None = Field(default=None, description="Sum a number column into a footer row.")
+    totals: Totals | None = Field(
+        default=None,
+        description="Sum a number column into a footer row. A bare string is shorthand for "
+        "`{column: <that string>}`.",
+    )
     rollup: Rollup | None = Field(
         default=None,
         description="Opt-in summary strip below the table: counts the rows by a badge column and shows "
@@ -307,6 +312,17 @@ class Table(BlockBase):
         "count this table via `of_tables` (the table must declare a `rollup`). Unique across the page's "
         "tables.",
     )
+
+    @field_validator("totals", mode="before", json_schema_input_type=Totals | NonBlank | None)
+    @classmethod
+    def _a_bare_column_key_is_the_totals_column(cls, value: Any) -> Any:
+        if value is None or isinstance(value, Totals):
+            return value
+        if isinstance(value, str):
+            return {"column": value}
+        if isinstance(value, dict) and "column" in value:
+            return cast("dict[str, Any]", value)
+        raise ValueError("totals takes a number column key or {column: <number-column-key>}")
 
     @model_validator(mode="before")
     @classmethod

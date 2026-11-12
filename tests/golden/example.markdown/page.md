@@ -227,7 +227,7 @@ A zone's drift is $`d = \frac{|c - e|}{e}`$, where $`c`$ is the counted units an
 \bar{d} = \frac{1}{n} \sum_{i=1}^{n} \frac{|c_i - e_i|}{e_i}
 ```
 
-`reconciliation.sql`
+**reconciliation.sql**
 
 ```sql
 SELECT reason, count(*) AS n
@@ -237,7 +237,7 @@ GROUP BY reason
 ORDER BY n DESC;
 ```
 
-`dedupe.ts · tiebreak fix`
+**dedupe.ts · tiebreak fix**
 
 ```diff
 function pickWinner(a, b) {
@@ -438,7 +438,7 @@ flowchart LR
 
    Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 
-   `reconcile`
+   **reconcile**
 
    ```
    counted = dedupe(scans, key="pallet_id")

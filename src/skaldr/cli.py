@@ -28,6 +28,7 @@ from skaldr.export import (
     EXPORT_MANIFEST,
     EXPORT_TARGETS,
     ExportTarget,
+    RenderedExport,
     export_adf,
     export_markdown,
     export_notion,
@@ -172,8 +173,22 @@ def _fail(message: str) -> int:
     return 1
 
 
+def _new_help() -> str:
+    parser = argparse.ArgumentParser(
+        prog="skaldr new", description="Write a starter content file you fill in, then render."
+    )
+    parser.add_argument("kind", help=f"what to start; the kinds are: {', '.join(_NEW_KINDS)}")
+    parser.add_argument(
+        "file", metavar="FILE", help="where to write it; an existing file is never overwritten"
+    )
+    return parser.format_help()
+
+
 def _run_new(arguments: list[str]) -> int:
     kinds = ", ".join(_NEW_KINDS)
+    if arguments and arguments[0] in ("-h", "--help"):
+        print(_new_help(), end="")
+        return 0
     if len(arguments) != 2:
         return _fail(f"usage: skaldr new <kind> <file>; the kinds are {kinds}")
     kind, file_name = arguments
@@ -268,7 +283,8 @@ def main(argv: list[str] | None = None) -> int:
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
         "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`. List a large "
         "file's headings and sections with `skaldr outline FILE` and print one of them word for word with "
-        "`skaldr show FILE#ANCHOR`.",
+        "`skaldr show FILE#ANCHOR`. Start a document with `skaldr new <kind> FILE` "
+        f"(kinds: {', '.join(_NEW_KINDS)}).",
     )
     parser.add_argument(
         "--version",
@@ -352,8 +368,9 @@ def main(argv: list[str] | None = None) -> int:
         "--if-stale",
         action="store_true",
         help="render only when the output is missing, older than the content file, any file it "
-        "!includes or any part of an index, or written with other --embed/--no-source/--live options; "
-        "otherwise print 'up to date' and exit 0. Without --live it keeps the reloader of a page "
+        "!includes or any part of an index, or written with other --embed/--no-source/--live options or "
+        "by another version of skaldr (an upgrade forces one re-render); otherwise print 'up to date' "
+        "and exit 0, which is a success like OK. Without --live it keeps the reloader of a page "
         "rendered with --live, so `--live` once and `--if-stale` after every edit keeps the page live. "
         "Makes an unconditional re-render after every edit free, so no watcher process is needed.",
     )
@@ -577,7 +594,17 @@ def main(argv: list[str] | None = None) -> int:
     for path in written:
         print(f"OK  {path}")
     print(_build_summary(report))
+    _warn_of_unfilled_placeholders(data_path, report)
     return 0
+
+
+def _warn_of_unfilled_placeholders(data_path: Path, report: Report) -> None:
+    unfilled = find_placeholders(report)
+    if unfilled:
+        print(
+            f"warning: {data_path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
+            file=sys.stderr,
+        )
 
 
 def _recorded_render(out_path: Path) -> RecordedRender | None:
@@ -794,6 +821,7 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
         )
     for path in result.files:
         print(f"OK  {path}")
+    _warn_of_unfilled_placeholders(data_path, report)
     return 0
 
 
@@ -808,6 +836,15 @@ def _draft_the_publish_targets(path: Path, report: Report) -> None:
             raise
         return
     draft_targets(load_authored(path), installed_connectors())
+
+
+def _publishes_to_jira(report: Report) -> bool:
+    return report.publish is not None and any(target.service() == "jira" for target in report.publish.targets)
+
+
+def _refuse_an_export_too_big_to_publish(report: Report, rendered: RenderedExport) -> None:
+    if rendered.refused_for_its_size is not None and not _publishes_to_jira(report):
+        raise ReportError(rendered.refused_for_its_size)
 
 
 def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequence[ExportTarget] = ()) -> int:
@@ -825,7 +862,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
             unfilled = find_placeholders(report)
             _draft_the_publish_targets(path, report)
             for target in dict.fromkeys(targets):
-                render_export(report, target)
+                _refuse_an_export_too_big_to_publish(report, render_export(report, target))
         except (ReportError, PublishError, ConnectorError) as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)
@@ -848,22 +885,17 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
 
 
 def _guide_source() -> str:
-    return package_text("skill/GUIDE.md")
+    guide = package_text("skill/GUIDE.md").rstrip()
+    example = package_text("skill/example.yaml").rstrip()
+    return f"{guide}\n\n## A complete example\n\n```yaml\n{example}\n```"
 
 
 def _guide_output(topic: str | Literal[True], list_topics_only: bool) -> str:
     if list_topics_only:
         return list_topics(_guide_source())
     if topic is True:
-        return _guide_text()
+        return _guide_source()
     return lookup(topic, _guide_source())
-
-
-def _guide_text() -> str:
-    """The authoring guide (GUIDE.md) with the live, tested example appended — printed by --guide."""
-    guide = package_text("skill/GUIDE.md").rstrip()
-    example = package_text("skill/example.yaml").rstrip()
-    return f"{guide}\n\n## A complete example\n\n```yaml\n{example}\n```"
 
 
 # Bundled skills, as (package resource dir, installed skill name under ~/.claude/skills/). The primary

@@ -176,7 +176,8 @@ def test_a_block_name_wins_over_a_section_with_the_same_title() -> None:
 
 def test_the_listing_names_the_guide_sections_then_the_blocks() -> None:
     assert list_topics(SMALL_GUIDE) == (
-        "Guide sections\nBlocks\nThe `quote`\n`meta`\nRich text\nOther\n\nBlocks\n" + "\n".join(block_names())
+        "Guide sections\nBlocks\nThe `quote`\n  Quote detail\n`meta`\nRich text\nOther\n\nBlocks\n"
+        + "\n".join(block_names())
     )
 
 
@@ -186,7 +187,7 @@ def test_an_unknown_name_lists_the_blocks_and_the_sections() -> None:
 
     assert str(raised.value) == (
         f"unknown block or section 'gamma'; the blocks are {', '.join(block_names())}; "
-        "the sections are Blocks, The quote, meta, Rich text, Other"
+        "the sections are Blocks, The quote, Quote detail, meta, Rich text, Other"
     )
 
 
@@ -298,8 +299,9 @@ def test_an_unknown_name_on_the_command_line_fails_listing_blocks_and_sections(
 
     captured = capsys.readouterr()
     sections = ", ".join(
-        line.replace("`", "") for line in list_topics(GUIDE).split("\n\nBlocks\n")[0].splitlines()[1:]
+        line.replace("`", "").strip() for line in list_topics(GUIDE).split("\n\nBlocks\n")[0].splitlines()[1:]
     )
+    sections += ", A complete example"
     assert exit_code == 1
     assert captured.out == ""
     assert captured.err == (
@@ -338,3 +340,133 @@ def test_the_listing_with_another_flag_is_refused(capsys: pytest.CaptureFixture[
 
     assert raised.value.code == 2
     assert "--guide runs on its own; drop --strict" in capsys.readouterr().err
+
+
+def test_an_ambiguous_title_prefix_across_sections_is_unknown_even_beside_a_longer_title() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## Over one\n\n## Over two\n\n## Reover")
+
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("over", guide)
+
+
+@pytest.mark.parametrize("query", ["", "   "], ids=["empty", "blank"])
+def test_an_empty_or_blank_query_is_unknown(query: str) -> None:
+    with pytest.raises(UnknownGuideTopicError):
+        lookup(query, SMALL_GUIDE)
+
+
+def test_an_empty_query_is_unknown_even_in_a_guide_of_one_section() -> None:
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("", "# Guide\n\n## Only\n\nBody.\n")
+
+
+def test_an_exact_subsection_title_beats_a_longer_section_title_that_starts_with_it() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## Overview\n\n### Over\n\nSub prose.")
+
+    assert lookup("over", guide) == "### Over\n\nSub prose."
+
+
+def test_a_subsection_title_prefix_is_unique_even_when_a_section_title_has_it_as_a_word() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## All about zeta\n\n### Zeta details\n\nSub prose.")
+
+    assert lookup("zeta", guide) == "### Zeta details\n\nSub prose."
+
+
+def test_a_subsection_title_prints_that_subsection_only() -> None:
+    assert lookup("Quote detail", SMALL_GUIDE) == "### Quote detail\n\nMore quote."
+
+
+def test_a_subsection_title_resolves_by_unique_prefix_and_ignores_case() -> None:
+    assert lookup("quote DET", SMALL_GUIDE) == "### Quote detail\n\nMore quote."
+
+
+def test_a_section_title_wins_over_a_subsection_with_the_same_title() -> None:
+    guide = SMALL_GUIDE.replace("### Quote detail", "### Other\n\nSub prose.").replace(
+        "## Other", "## Other\n\nTop prose."
+    )
+
+    assert lookup("other", guide) == "## Other\n\nTop prose."
+
+
+def test_a_title_prefix_shared_by_two_subsections_is_unknown() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## Other\n\n### Zeta one\n\n### Zeta two")
+
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("zeta", guide)
+
+
+def test_an_ambiguous_section_prefix_does_not_fall_back_to_a_subsection() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## Over one\n\n## Over two\n\n### Over detail")
+
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("over", guide)
+
+
+def test_a_heading_inside_a_code_fence_is_not_a_topic() -> None:
+    with pytest.raises(UnknownGuideTopicError):
+        lookup("not a heading", SMALL_GUIDE)
+
+
+def test_a_multi_word_query_matches_from_a_word_inside_a_title() -> None:
+    guide = SMALL_GUIDE.replace("## Other", "## A complete example\n\nBody.")
+
+    assert lookup("complete example", guide) == "## A complete example\n\nBody."
+
+
+def test_the_real_guide_resolves_a_publishing_subsection(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = main(["--guide", "Publishing to Notion"])
+
+    lines = GUIDE.splitlines()
+    start = lines.index("### Publishing to Notion")
+    end = lines.index("### Publishing to Jira")
+    assert exit_code == 0
+    assert capsys.readouterr().out == "\n".join(lines[start:end]).rstrip() + "\n"
+
+
+def test_the_real_listing_indents_subsections_under_their_section(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(["--guide", "--list"])
+
+    sections = capsys.readouterr().out.split("\n\nBlocks\n")[0].splitlines()
+    publishing = sections.index("Publishing")
+    assert sections[publishing : publishing + 4] == [
+        "Publishing",
+        "  Publishing to Notion",
+        "  Publishing to Jira",
+        "  Publishing to Slack",
+    ]
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["example", "complete example", "A complete example"],
+    ids=["word-prefix", "phrase-from-a-word", "whole-title"],
+)
+def test_the_complete_example_is_a_section_the_guide_looks_up(
+    query: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(["--guide", query])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert out.startswith("## A complete example\n\n```yaml\n")
+    assert out.endswith("```\n")
+
+
+def test_the_listing_names_the_complete_example_last_among_the_sections(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(["--guide", "--list"])
+
+    sections = capsys.readouterr().out.split("\n\nBlocks\n")[0].splitlines()
+    assert sections[-1] == "A complete example"
+
+
+def test_the_bare_guide_still_ends_with_the_complete_example(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["--guide"])
+
+    out = capsys.readouterr().out
+    assert out.startswith(GUIDE.rstrip())
+    assert "\n## A complete example\n\n```yaml\n" in out
+    assert out.rstrip().endswith("```")

@@ -96,6 +96,7 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
 
 REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
@@ -495,7 +496,7 @@ def test_a_list_cell_on_a_danger_row_keeps_the_row_dot_before_its_list() -> None
 def test_a_fact_strip_is_one_paragraph_of_its_facts_joined_by_middle_dots() -> None:
     strip = FactStrip(
         (
-            LabelledValue("Site:", make_rich_text("West")),
+            LabelledValue("Site", make_rich_text("West")),
             LabelledValue(None, make_rich_text("Q3")),
             LabelledValue("Owner", make_rich_text("Ops")),
         )
@@ -769,6 +770,48 @@ def test_a_second_list_in_one_list_item_is_rejected() -> None:
 
     assert vars(refusal_of([make_bullets(entry, make_list_entry("d"))], "slack")) == _canvas_rejection(
         _list_item_why("a second nested list"), OUT_OF_THE_LIST
+    )
+
+
+def test_a_card_label_has_no_trailing_colon_before_the_colon_the_writer_adds() -> None:
+    assert slack_of(CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE) == (
+        "::: {.layout}\n::: {.column}\n🟡 **Open rows**: 1 (100.0%)\n:::\n"
+        "::: {.column}\n**Plain**: 3\n:::\n:::\n\n"
+        "|  | c |\n| --- | --- |\n| **r** | 🟡 Open rows: |\n"
+    )
+
+
+def test_a_code_label_is_bold_text_above_the_block() -> None:
+    block = {"type": "code", "label": "Undo last commit", "content": "git reset HEAD~1", "lang": "shell"}
+
+    assert slack_of([block]) == "**Undo last commit**\n\n```shell\ngit reset HEAD~1\n```\n"
+
+
+def test_a_timeline_event_separates_its_title_from_its_body_with_the_fact_separator() -> None:
+    block = {
+        "type": "timeline",
+        "items": [
+            {
+                "time": "Mon",
+                "title": "Release 2.4 shipped",
+                "body": "Rolled out to all regions.",
+                "state": "done",
+            },
+            {"time": "Tue", "title": "Review"},
+        ],
+    }
+
+    assert (
+        slack_of([block])
+        == "* ✅ **Mon**: Release 2.4 shipped · Rolled out to all regions.\n* **Tue**: Review\n"
+    )
+
+
+def test_a_timeline_inside_a_panel_separates_its_title_from_its_body_the_same_way() -> None:
+    timeline = {"type": "timeline", "items": [{"time": "Mon", "title": "Shipped", "body": "All regions."}]}
+
+    assert slack_of([{"type": "panel", "title": "Log", "blocks": [timeline]}]) == (
+        "::: {.callout}\n**Log**\n\n* **Mon**: Shipped · All regions.\n:::\n"
     )
 
 

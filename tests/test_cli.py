@@ -866,6 +866,59 @@ def test_check_notes_unfilled_placeholders_but_passes_without_strict(
     assert "1 unfilled placeholder: url" in captured.out
 
 
+def test_render_warns_on_stderr_about_unfilled_placeholders_and_still_succeeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "{{url}} and {{ticket}}."}]))
+    out_path = tmp_path / "report.html"
+
+    exit_code = main([str(data_path), "-o", str(out_path)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, out_path.exists(), captured.err) == (
+        0,
+        True,
+        f"warning: {data_path}: 2 unfilled placeholders: ticket, url\n",
+    )
+    assert captured.out.startswith(f"OK  {out_path}\n")
+
+
+def test_render_warns_with_the_singular_noun_for_one_unfilled_placeholder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(meta={"title": "{{t}}"}))
+
+    assert main([str(data_path), "-o", str(tmp_path / "report.html")]) == 0
+
+    assert capsys.readouterr().err == f"warning: {data_path}: 1 unfilled placeholder: t\n"
+
+
+@pytest.mark.parametrize(
+    "target", ["markdown", "notion", "adf", "slack"], ids=["markdown", "notion", "adf", "slack"]
+)
+def test_export_warns_on_stderr_about_unfilled_placeholders_and_still_succeeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], target: str
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "{{url}} and {{ticket}}."}]))
+
+    exit_code = main([str(data_path), "--export", target, "--export-dir", str(tmp_path / "out")])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        0,
+        f"warning: {data_path}: 2 unfilled placeholders: ticket, url\n",
+    )
+
+
+def test_render_without_unfilled_placeholders_prints_nothing_on_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    main([str(data_path), "-o", str(tmp_path / "report.html")])
+
+    assert capsys.readouterr().err == ""
+
+
 def test_check_strict_fails_on_unfilled_placeholders_with_a_plural_message(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

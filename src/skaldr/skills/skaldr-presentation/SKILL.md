@@ -16,8 +16,9 @@ Split the work by tool, because each is good at a different half:
   PowerPoint). Brand, logo, and layout ARE the credibility, and a generic or skaldr-rendered deck
   reads as off-brand in a high-stakes room. skaldr does **not** render this deck.
 - **The runbook (what the presenter says) → skaldr.** This is skaldr's job and where it's best: a
-  word-for-word teleprompter with cues that can't be misread. skaldr also emits the **build-sheet**
-  (per-slide headline + bullets + speaker notes + which clip) so filling the template is copy-paste.
+  word-for-word teleprompter with cues that can't be misread. skaldr has no build-sheet output: author the **build-sheet**
+  (per-slide headline + bullets + speaker notes + which clip) yourself as a second skaldr document, so
+  filling the template is copy-paste.
 
 Exception: for a quick internal/no-brand talk, a skaldr `slides.yaml` (one `panel` per slide) is a
 fine deck. For anything brand-critical, use the template.

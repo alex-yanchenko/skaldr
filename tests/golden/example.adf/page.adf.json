@@ -3913,7 +3913,7 @@
           "text": "reconciliation.sql",
           "marks": [
             {
-              "type": "code"
+              "type": "strong"
             }
           ]
         }
@@ -3939,7 +3939,7 @@
           "text": "dedupe.ts · tiebreak fix",
           "marks": [
             {
-              "type": "code"
+              "type": "strong"
             }
           ]
         }
@@ -6734,7 +6734,7 @@
                   "text": "reconcile",
                   "marks": [
                     {
-                      "type": "code"
+                      "type": "strong"
                     }
                   ]
                 }

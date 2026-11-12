@@ -101,6 +101,7 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
 
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
@@ -946,15 +947,32 @@ def test_marker_characters_that_form_no_mark_stay_escaped_prose_in_notion() -> N
     )
 
 
-def test_a_code_label_holding_a_backtick_is_refused_for_notion() -> None:
-    report = parse_report(make_report(blocks=[{"type": "code", "label": "a`b", "content": "x"}]))
+def test_a_card_label_has_no_trailing_colon_for_notion() -> None:
+    assert notion_of(CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE) == (
+        "<columns>\n"
+        '\t<column ratio="50">\n'
+        '\t\t<callout icon="📝" color="gray_bg">\n'
+        '\t\t\t<span color="yellow">**Open rows**</span>\n'
+        "\t\t\t1 (100.0%)\n"
+        "\t\t</callout>\n"
+        "\t</column>\n"
+        '\t<column ratio="50">\n'
+        '\t\t<callout icon="📝" color="gray_bg">\n'
+        "\t\t\t**Plain**\n"
+        "\t\t\t3\n"
+        "\t\t</callout>\n"
+        "\t</column>\n"
+        "</columns>\n"
+        '<table fit-page-width="true" header-row="true" header-column="true">\n'
+        "\t<tr>\n\t\t<td></td>\n\t\t<td>**c**</td>\n\t</tr>\n"
+        '\t<tr>\n\t\t<td>**r**</td>\n\t\t<td color="yellow_bg">Open rows:</td>\n\t</tr>\n'
+        "</table>\n"
+    )
 
-    with pytest.raises(ExportRejectedError) as raised:
-        render_export(report, "notion")
 
-    assert str(raised.value) == (
-        "Notion cannot show inline code holding a backtick, as in 'a`b', at blocks.0.code; "
-        "write the code in a code block, or without the backtick"
+def test_a_code_label_holding_a_backtick_is_bold_text_for_notion() -> None:
+    assert (
+        notion_of([{"type": "code", "label": "a`b", "content": "x"}]) == "**a\\`b**\n```plain text\nx\n```\n"
     )
 
 

@@ -157,9 +157,9 @@ Lead with the reconciliation gate: it is the one number leadership tracks.
 
 # Rollout
 
-* ✅ **2026-06-30**: Initial full count 12,400 units scanned; 88% matched clean.
-* ✅ **2026-07-02**: Root-caused the double-count bug Lexical tiebreak in `dedupe.ts`.
-* 🔵 **2026-07-09**: Fix drafted, awaiting re-count Placeholder-aware ordering; recovers 1,140 units.
+* ✅ **2026-06-30**: Initial full count · 12,400 units scanned; 88% matched clean.
+* ✅ **2026-07-02**: Root-caused the double-count bug · Lexical tiebreak in `dedupe.ts`.
+* 🔵 **2026-07-09**: Fix drafted, awaiting re-count · Placeholder-aware ordering; recovers 1,140 units.
 * ⚪ **next count**: Re-verify reconciliation
 
 # Method
@@ -172,7 +172,7 @@ A zone's drift is `d = \frac{|c - e|}{e}`, where `c` is the counted units and `e
 \bar{d} = \frac{1}{n} \sum_{i=1}^{n} \frac{|c_i - e_i|}{e_i}
 ```
 
-`reconciliation.sql`
+**reconciliation.sql**
 
 ```sql
 SELECT reason, count(*) AS n
@@ -182,7 +182,7 @@ GROUP BY reason
 ORDER BY n DESC;
 ```
 
-`dedupe.ts · tiebreak fix`
+**dedupe.ts · tiebreak fix**
 
 ```diff
 function pickWinner(a, b) {
@@ -334,7 +334,7 @@ Widen the bin-code field to nine digits, then rescan the 500 truncated bins from
 2. 🟣 **Scan every bin twice, reconcile on the pallet ID** Two independent passes; de-duplicate on `pallet_id` so a same-window re-scan can't double-count.
 3. 🟡 **Escalate anything that still won't balance** A residual gap is a vendor short-ship, not a miscount. Open a ticket; don't force the numbers.
 
-`reconcile`
+**reconcile**
 
 ```
 counted = dedupe(scans, key="pallet_id")

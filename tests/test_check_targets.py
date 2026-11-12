@@ -5,8 +5,9 @@ from typing import NoReturn
 import pytest
 
 from skaldr.cli import main
+from skaldr.export import SPLIT_ADVICE
 from skaldr.export import lower as lower_module
-from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT
+from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length, render_adf_document
 from skaldr.export.lower import Lowering, lower_report
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.models import Report, parse_report
@@ -175,6 +176,81 @@ def test_check_for_slack_refuses_a_canvas_the_export_refuses_for_its_size_and_wr
         "\n\n1 file failed\n",
         False,
     )
+
+
+def test_check_for_adf_fails_a_description_over_jiras_limit_in_the_words_of_the_publish_plan(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocks = [{"type": "text", "body": "x" * JIRA_DESCRIPTION_LIMIT}]
+    report = make_report(blocks=blocks)
+    data_path = write_report(tmp_path, report)
+    export_dir = tmp_path / "exported"
+    size = _adf_size_of(report)
+
+    exit_code = main(
+        ["--check", str(data_path), "--for", "adf", "--export", "adf", "--export-dir", str(export_dir)]
+    )
+
+    assert (exit_code, capsys.readouterr().err, export_dir.exists()) == (
+        1,
+        f"FAIL  {data_path}: the item has {size:,} characters of ADF, over the 32,767 a Jira item can take; "
+        f"{SPLIT_ADVICE}\n\n1 file failed\n",
+        False,
+    )
+
+
+def _adf_size_of(report: dict[str, object]) -> int:
+    return compact_adf_length(render_adf_document(lower_report(parse_report(report))))
+
+
+def _text_report_of_adf_size(size: int) -> dict[str, object]:
+    base = _adf_size_of(make_report(blocks=[{"type": "text", "body": "x"}])) - 1
+    return make_report(blocks=[{"type": "text", "body": "x" * (size - base)}])
+
+
+@pytest.mark.parametrize(
+    ("size", "exit_code"),
+    [(JIRA_DESCRIPTION_LIMIT, 0), (JIRA_DESCRIPTION_LIMIT + 1, 1)],
+    ids=["exactly-the-limit-passes", "one-over-the-limit-fails"],
+)
+def test_check_for_adf_draws_its_line_at_jiras_limit(tmp_path: Path, size: int, exit_code: int) -> None:
+    report = _text_report_of_adf_size(size)
+    assert _adf_size_of(report) == size
+    data_path = write_report(tmp_path, report)
+
+    assert main(["--check", str(data_path), "--for", "adf"]) == exit_code
+
+
+def _split_jira_report(first_length: int, second_length: int) -> dict[str, object]:
+    sections = [
+        make_section("a", blocks=[{"type": "text", "body": "x" * first_length}]),
+        make_section("b", blocks=[{"type": "text", "body": "x" * second_length}]),
+    ]
+    return published_report(sections, make_jira_target(split=["a", "b"]))
+
+
+def test_check_for_adf_passes_a_split_document_whose_parts_each_fit_though_together_they_do_not(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    report = _split_jira_report(20_000, 20_000)
+    data_path = write_report(tmp_path, report)
+    assert _adf_size_of(report) > JIRA_DESCRIPTION_LIMIT
+
+    exit_code = main(["--check", str(data_path), "--for", "adf"])
+
+    assert (exit_code, capsys.readouterr().out) == (0, f"OK    {data_path}\n")
+
+
+def test_check_for_adf_fails_a_split_document_with_one_part_over_the_limit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = write_report(tmp_path, _split_jira_report(20_000, JIRA_DESCRIPTION_LIMIT))
+
+    exit_code = main(["--check", str(data_path), "--for", "adf"])
+
+    err = capsys.readouterr().err
+    assert exit_code == 1
+    assert err.startswith(f"FAIL  {data_path}: {JIRA_TARGET_LABEL}, section b: the item has ")
 
 
 def test_check_of_a_jira_target_over_the_description_limit_fails_with_the_publish_refusal(

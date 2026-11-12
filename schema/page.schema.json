@@ -2823,7 +2823,7 @@
             }
           ],
           "default": null,
-          "description": "A one-off fill colour (palette or semantic name) for a cell with no vocabulary badge, e.g. a RACI letter or a \u2713. Use this OR `badge`, not both.",
+          "description": "A one-off fill colour for a cell with no vocabulary badge, e.g. a RACI letter or a \u2713: a palette name (slate, blue, green, amber, red, violet, teal, sky) or a semantic name (neutral, info, success, warning, danger, accent). Use this OR `badge`, not both.",
           "title": "Tone"
         },
         "label": {
@@ -5500,11 +5500,18 @@
           "type": "string"
         },
         "n": {
-          "description": "The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written.",
-          "minLength": 1,
-          "pattern": "\\S",
-          "title": "N",
-          "type": "string"
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "description": "The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never derives or renumbers it, so it reads exactly as written. An integer such as 1 is read as '1'; quote a number with leading zeros or underscores (\"007\"), since YAML reads 007 as the number 7.",
+          "title": "N"
         },
         "label": {
           "description": "Step label, shown beside the number.",
@@ -5885,11 +5892,16 @@
               "$ref": "#/$defs/Totals"
             },
             {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Sum a number column into a footer row."
+          "description": "Sum a number column into a footer row. A bare string is shorthand for `{column: <that string>}`."
         },
         "rollup": {
           "anyOf": [
