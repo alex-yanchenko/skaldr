@@ -346,7 +346,7 @@ def _tint_features(run: Tinted, place: _RunPlace) -> Iterator[TextMarkFeature]:
     if place.span is None or place.span == kind:
         return
     if place.span_is_generated:
-        yield "highlight span inside a toned walkthrough step title"
+        yield "highlight span inside a toned walkthrough step subtitle"
     else:
         yield "colour and highlight span"
 

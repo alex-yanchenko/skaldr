@@ -606,7 +606,7 @@ too thin for the explanation each step carries.
 `detail` holds the same blocks you'd put anywhere else (it can be long; that's the point). The
 step numbers are derived (1..n). Every step always shows its left rail (it is the list's structure);
 `tone` only changes the rail's **colour**, so use it to mark the **key** step, not every step
-(toning all of them just removes the contrast). Distinct from `flow` (a directional pipeline) and
+(toning all of them just removes the contrast). A step's `label` is plain text: a `*`, a backtick, a link or a `{bg=…}` span in it is written as the characters you typed, and only the `sub` takes the rich-text marks. Distinct from `flow` (a directional pipeline) and
 `grid` (no row-by-row step alignment).
 
 ## The `range`
@@ -1593,8 +1593,8 @@ case, where the page is shared as a URL an agent later has to read back.
 | `[text]{bg=…}` | a `<mark>` tag, which GitHub paints yellow whatever the tone | a background colour span |
 | `[text]{tone=… bg=…}` | refused, like a colour span, since GitHub cannot colour text | refused, since a Notion text run takes a colour or a highlight, not both; keep one of them |
 | a colour span inside a colour span, or a highlight inside a highlight, such as `[a [b]{tone=info} c]{tone=danger}` | a colour span is refused, since GitHub cannot colour text; a highlight inside a highlight is a `<mark>` tag inside a `<mark>` tag | spans side by side, each part of the text in its innermost span, since Notion holds no span inside a span; an author's colour in a toned walkthrough step's title is written the same way |
-| a highlight inside a colour or a colour inside a highlight, nested either way, or a highlight in a toned walkthrough step's title | refused, since the colour is one GitHub cannot show; a highlight in a toned step's title is a `<mark>` tag | refused, since Notion holds no span inside a span; keep either the colour or the highlight |
-| a `{{name}}` blank | inline code | a yellow highlight span; inside a colour, a highlight, an underline or a toned walkthrough step's title it is written beside the text around it, keeping the underline, since a blank shows its own colours on the page |
+| a highlight inside a colour or a colour inside a highlight, nested either way, or a highlight in a toned walkthrough step's subtitle | refused, since the colour is one GitHub cannot show; a highlight in a toned step's subtitle is a `<mark>` tag | refused, since Notion holds no span inside a span; keep either the colour or the highlight |
+| a `{{name}}` blank | inline code | a yellow highlight span; inside a colour, a highlight, an underline or a toned walkthrough step's subtitle it is written beside the text around it, keeping the underline, since a blank shows its own colours on the page |
 | `[1 Oct](date:2026-10-01)` | the label in a `<time datetime="2026-10-01">` tag; a range is the label in a `<span data-range="2026-10-05/2026-10-09">` tag, a form GitHub may sanitise to the label alone, so a range's dates may not show on GitHub. A label of only spaces writes an empty tag, and the HTML page shows an empty chip | the label, then a date mention, `1 Oct <mention-date start="2026-10-01"/>`, with `end` for a range; a label of only spaces is left out |
 | `[Ada](user:ada)` | the label as text | a user mention, `<mention-user url="user://…">Ada</mention-user>`, when the person has a `notion` id, which must be a real Notion user id because Notion drops a mention of an id it does not know and shows a bare link in its place; otherwise the label as text |
 | `[ABC-123](jira:ABC-123)` | a link to the issue on `meta.jira_site`, or the label as text without one | the same |
@@ -1618,7 +1618,7 @@ The Notion export refuses:
 
 - **numbered list starting past 1**: Notion numbers every list from 1; number the list from 1, or export it elsewhere.
 - **colour and highlight span**: a Notion text run takes a colour or a highlight, not both; keep either the colour or the highlight on the text.
-- **highlight span inside a toned walkthrough step title**: Notion cannot show a highlight inside the coloured title of a toned walkthrough step; write the text without the highlight or export the document elsewhere.
+- **highlight span inside a toned walkthrough step subtitle**: Notion cannot show a highlight inside the coloured subtitle of a toned walkthrough step; write the text without the highlight or export the document elsewhere.
 - **link to a heading of the same document**: Notion cannot link to its own headings; write the heading's name without the link, or export the document elsewhere.
 - **link to another skaldr document**: Notion cannot link to it, since skaldr has no address for that document there; link to the document's https address, or export it elsewhere.
 - **inline code holding a backtick**: Notion cannot show inline code holding a backtick; write the code in a code block, or without the backtick.

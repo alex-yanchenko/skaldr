@@ -302,6 +302,19 @@ def test_a_page_cover_is_an_image_under_the_icon_led_title() -> None:
     )
 
 
+def test_a_walkthrough_step_label_is_plain_text_and_its_sub_is_rich_text() -> None:
+    step = {
+        "label": "Scan [x]{bg=sky} *y*",
+        "sub": "a `code` sub",
+        "tone": "danger",
+        "detail": [{"type": "text", "body": "Both aisles."}],
+    }
+
+    assert markdown_of([{"type": "walkthrough", "steps": [step]}]) == (
+        "1. 🔴 **Scan \\[x\\]{bg=sky} \\*y\\*** *a `code` sub*\n\n   Both aisles.\n"
+    )
+
+
 def test_a_code_label_is_bold_text_above_the_block() -> None:
     block = {"type": "code", "label": "Undo last commit", "content": "git reset HEAD~1", "lang": "shell"}
 

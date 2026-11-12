@@ -33,7 +33,7 @@ GITHUB_NESTED_SPANS_ROW = (
 )
 COLOUR_OR_HIGHLIGHT_NESTED_ROW = (
     "a highlight inside a colour or a colour inside a highlight, nested either way, "
-    "or a highlight in a toned walkthrough step's title"
+    "or a highlight in a toned walkthrough step's subtitle"
 )
 NOTION_INLINE_CODE_ROW = "an inline `` `code` `` span holding a closing tag (`</`) or a backtick"
 NOTION_CODE_LINE_ROW = (

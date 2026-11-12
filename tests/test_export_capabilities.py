@@ -183,7 +183,7 @@ TEXT_AND_LIST_VERDICTS: dict[Feature, dict[ExportTarget, Verdict]] = {
     "code line reading as a tag of the container around it": {"notion": "reject"},
     "inline code holding a closing tag in a table cell": {"notion": "reject"},
     "inline code holding a closing tag in a coloured, highlighted or underlined span": {"notion": "reject"},
-    "highlight span inside a toned walkthrough step title": {"notion": "reject"},
+    "highlight span inside a toned walkthrough step subtitle": {"notion": "reject"},
     "list numbered with letters or roman numerals": {"adf": "reject", "slack": "reject"},
     "table, callout, heading, quote, toggle or divider inside a list item or walkthrough step": {
         "adf": "reject"
