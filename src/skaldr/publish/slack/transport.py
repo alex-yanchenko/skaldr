@@ -14,7 +14,12 @@ from skaldr.publish.keyed import (
     refuse_a_change_since_the_read,
     refused_when_not_found,
 )
-from skaldr.publish.ownership import HeldContent, refuse_to_archive_an_item_skaldr_does_not_own
+from skaldr.publish.ownership import (
+    HeldContent,
+    Ownership,
+    refuse_to_archive_an_item_skaldr_does_not_own,
+    refuse_unstamped_content_skaldr_did_not_write,
+)
 from skaldr.publish.slack.api import SlackApi, markdown_content
 from skaldr.publish.slack.canvas_markdown import (
     ARCHIVED_TITLE_MARKER,
@@ -77,6 +82,28 @@ def _as_skaldr_wrote_it(
     )
 
 
+def _refuse_an_unstamped_canvas_skaldr_did_not_write(
+    item_id: str, keyed: KeyedCanvas, ownership: Ownership
+) -> None:
+    if keyed.stamp is None:
+        held = HeldContent(keyed.title, keyed.sections)
+        refuse_unstamped_content_skaldr_did_not_write(_canvas_named(item_id), held, ownership, "write to")
+
+
+def _refuse_to_finish_an_archive_skaldr_did_not_start(
+    item_id: str, keyed: KeyedCanvas, request: Archive
+) -> None:
+    doc_id = request.stamp.doc_id
+    started_by_this_document = keyed.archived_for == doc_id
+    refuse_to_archive_an_item_skaldr_does_not_own(
+        _canvas_named(item_id),
+        None if started_by_this_document else keyed.archived_for,
+        HeldContent(keyed.title, {} if started_by_this_document else keyed.sections),
+        doc_id,
+        request.ownership,
+    )
+
+
 def warn_on_stderr(message: str) -> None:
     print(f"warning: {message}", file=sys.stderr, flush=True)
 
@@ -118,7 +145,9 @@ class SlackTransport:
 
     def write_section(self, item_id: str, request: SectionRequest, /) -> RemoteItem:
         change = request.change
-        keyed = self._unchanged_since_read(item_id, request.raw_sections, request.published)
+        keyed = self._unchanged_since_read(
+            item_id, request.raw_sections, request.published, request.ownership
+        )
         current = dict(request.raw_sections)
         if not isinstance(change, AddSection) and current.get(change.key) != change.raw_current:
             raise WriteRejectedError(
@@ -137,7 +166,7 @@ class SlackTransport:
         return self._written_with(item_id, after)
 
     def write_content(self, item_id: str, request: ContentWrite, /) -> RemoteItem:
-        keyed = self._unchanged_since_read(item_id, request.raw_sections, NO_PUBLISHED)
+        keyed = self._unchanged_since_read(item_id, request.raw_sections, NO_PUBLISHED, request.ownership)
         old = range(keyed.content_start, keyed.content_end)
         markdown = canvas_markdown_of(list(request.sections.values()))
         body = body_with_content_swapped(keyed, old, keyed.content_start, markdown)
@@ -146,9 +175,13 @@ class SlackTransport:
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem:
         layout = self._read.layouts.get(item_id, {})
-        keyed = _as_skaldr_wrote_it(self._markdown(item_id), layout, request.published)
+        markdown = self._markdown(item_id)
+        keyed = _as_skaldr_wrote_it(markdown, layout, request.published)
         if keyed.stamp is not None and keyed.stamp != request.stamp:
             raise WriteRejectedError(f"Slack canvas {item_id} is not stamped with {request.stamp.named}")
+        _refuse_an_unstamped_canvas_skaldr_did_not_write(
+            item_id, keyed_canvas(markdown, layout), request.ownership
+        )
         named = _named_fields(request)
         if named:
             raise WriteRejectedError(
@@ -181,12 +214,12 @@ class SlackTransport:
                 request.stamp.doc_id,
                 request.ownership,
             )
-            doc_id = None if keyed.stamp is None else keyed.stamp.doc_id
-            self._replace_body(item_id, [archived_line(doc_id), *keyed.below_the_stamp])
+            self._replace_body(item_id, [archived_line(request.stamp.doc_id), *keyed.below_the_stamp])
         elif keyed.stamp_at is not None:
             raws = [block.raw for block in keyed.content]
             self._replace_body(item_id, [*raws, *keyed.below_the_stamp])
         else:
+            _refuse_to_finish_an_archive_skaldr_did_not_start(item_id, keyed, request)
             replaced = False
         try:
             self._api.edit_canvas(item_id, _rename(f"{keyed.title}{ARCHIVED_TITLE_MARKER}"))
@@ -298,9 +331,10 @@ class SlackTransport:
             item_id,
             ItemContent(title=keyed.title, sections=keyed.sections),
             keyed.raw_sections,
-            keyed.stamp_or_archived_line,
+            keyed.stamp,
             marker=_digest(markdown),
             links=keyed.links,
+            archived_for=keyed.archived_for,
         )
 
     def _written_with(self, item_id: str, layout: Mapping[str, str]) -> RemoteItem:
@@ -308,11 +342,17 @@ class SlackTransport:
         return self._remote(item_id, self._markdown(item_id), layout)
 
     def _unchanged_since_read(
-        self, item_id: str, raw_sections: RawSections, published: PublishedSections
+        self,
+        item_id: str,
+        raw_sections: RawSections,
+        published: PublishedSections,
+        ownership: Ownership | None = None,
     ) -> KeyedCanvas:
         markdown = self._markdown(item_id)
         keyed = keyed_canvas(markdown, raw_sections)
         refuse_a_change_since_the_read(_canvas_named(item_id), raw_sections, keyed.raw_sections)
+        if ownership is not None:
+            _refuse_an_unstamped_canvas_skaldr_did_not_write(item_id, keyed, ownership)
         return _as_skaldr_wrote_it(markdown, raw_sections, published)
 
     def _create_into(self, item_id: str, request: NewItem, markdown: str) -> RemoteItem:

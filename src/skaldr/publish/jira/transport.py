@@ -127,6 +127,11 @@ def _labels(value: JsonValue) -> list[str]:
     return [value] if isinstance(value, str) and value else []
 
 
+def _labelled_for(issue: Issue) -> frozenset[str]:
+    labels = _labels(issue.fields.get(LABELS))
+    return frozenset(label.removeprefix(LABEL_PREFIX) for label in labels if label.startswith(LABEL_PREFIX))
+
+
 def _with_doc_label(value: JsonValue, doc_id: str) -> list[JsonValue]:
     return list(dict.fromkeys([*_labels(value), doc_label(doc_id)]))
 
@@ -579,7 +584,10 @@ class JiraTransport:
 
     def _read_with(self, item_id: str, history: tuple[Changelog, ...]) -> _Read:
         stamp, layout = self._stamp(item_id), self._layout(item_id)
-        names = list(dict.fromkeys([SUMMARY_FIELD, DESCRIPTION_FIELD, *self._field_shapes.get(item_id, {})]))
+        labels = [LABELS] if stamp is None or stamp.stamp is None else []
+        names = list(
+            dict.fromkeys([SUMMARY_FIELD, DESCRIPTION_FIELD, *self._field_shapes.get(item_id, {}), *labels])
+        )
         issue = self._client.get_issue(item_id, names)
         return self._assembled(item_id, issue, layout, stamp, history)
 
@@ -624,6 +632,7 @@ class JiraTransport:
             edited_by=None if latest is None or latest.author is None else latest.author.display_name,
             edited_at=None if latest is None else latest.created,
             set_properties=tuple(name for name, value in fields.items() if not is_unset(value)),
+            labelled_for=None if stamp is not None and stamp.stamp is not None else _labelled_for(issue),
         )
 
     def _read_field(self, issue: Issue, name: str, shape: JsonValue, stamp: StampValue | None) -> JsonValue:

@@ -20,6 +20,7 @@ from skaldr.publish.content import (
 )
 from skaldr.publish.drafts import ItemDraft, TargetDraft, item_label, section_label
 from skaldr.publish.state import PublishedItem, PublishedTarget, PublishState
+from skaldr.publish.transport import RawSections
 from skaldr.publish_block import TargetBase
 from skaldr.services import SERVICE_NAMES, SERVICES, Service
 
@@ -47,6 +48,13 @@ class FillStep:
     item: ItemRef
     draft: ItemDraft
     item_id: str
+    read_sections: RawSections
+
+
+@dataclass(frozen=True)
+class LeftEmpty:
+    item_id: str
+    read_sections: RawSections
 
 
 @dataclass(frozen=True)
@@ -177,7 +185,7 @@ def _retired(ref: ItemRef, item: PublishedItem) -> Step:
 class _RemoteFacts:
     rewritten: Mapping[ItemRef, Collection[Part]]
     missing: Collection[ItemRef]
-    left_empty: Mapping[ItemRef, str]
+    left_empty: Mapping[ItemRef, LeftEmpty]
     stamped_into: Mapping[ItemRef, str]
 
 
@@ -189,8 +197,9 @@ def _target_plan(
     for item in draft.items:
         ref = ItemRef(draft.label, item.section_id)
         existing = published_item(published, item.section_id)
-        if existing is None and ref in facts.left_empty:
-            creates.append(FillStep(ref, item, facts.left_empty[ref]))
+        left_empty = facts.left_empty.get(ref)
+        if existing is None and left_empty is not None:
+            creates.append(FillStep(ref, item, left_empty.item_id, left_empty.read_sections))
             continue
         if existing is None or ref in facts.missing:
             into_id = connector.existing_item_id(draft.target) if item.section_id is None else None
@@ -265,7 +274,7 @@ def plan_publish(
     registry: ConnectorRegistry,
     rewritten: Mapping[ItemRef, Collection[Part]] = MappingProxyType({}),
     missing: Collection[ItemRef] = (),
-    left_empty: Mapping[ItemRef, str] = MappingProxyType({}),
+    left_empty: Mapping[ItemRef, LeftEmpty] = MappingProxyType({}),
     stamped_into: Mapping[ItemRef, str] = MappingProxyType({}),
 ) -> PublishPlan:
     _refuse_shared_items(state)

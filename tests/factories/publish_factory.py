@@ -268,9 +268,9 @@ class FakeTransport:
     def stamp_by_hand(self, item_id: str, stamp: Stamp | None) -> None:
         self.items[item_id].stamp = stamp
 
-    def empty_item_by_hand(self, item_id: str) -> None:
+    def empty_item_by_hand(self, item_id: str, blank_line: str | None = None) -> None:
         item = self.items[item_id]
-        item.raw_sections = {}
+        item.raw_sections = {} if blank_line is None else {"blank": blank_line}
         item.stamp = None
         item.revision = self._bump()
 

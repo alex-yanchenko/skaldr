@@ -11,15 +11,14 @@ from skaldr.publish.content import (
     comparable,
     differing_parts,
     same_fields,
-    same_value,
     set_fields,
     with_fields_named,
     with_look_owned_by,
     with_parts,
 )
 from skaldr.publish.drafts import ItemDraft, item_label
-from skaldr.publish.ownership import Ownership, holds_content, holds_no_body, unwritten_parts
-from skaldr.publish.plan import CreateStep, ItemRef, PublishPlan
+from skaldr.publish.ownership import HeldContent, Ownership, holds_content, holds_no_body, unwritten_parts
+from skaldr.publish.plan import CreateStep, ItemRef, LeftEmpty, PublishPlan
 from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
 from skaldr.publish.transport import (
@@ -108,11 +107,20 @@ def ownership_of(
     in_flight = [] if item.writing is None else [transport.comparable_draft(item.writing.rendered)]
     drafted = [] if draft is None else [transport.comparable_draft(draft.content)]
     copies = (transport.comparable_form(item.remote), *in_flight, *also_read, *drafted)
-    return Ownership(copies, frozenset(_owned_field_names(_owners(item, draft))), frozenset(state.item_ids))
+    return Ownership(copies, frozenset(state.item_ids), state.doc_id)
 
 
 def _unwritten_parts(remote: RemoteItem, ownership: Ownership) -> tuple[str, ...]:
     return () if remote.doc_id is not None else unwritten_parts(remote.held, ownership)
+
+
+def _unwritten_parts_of_a_published_item(
+    remote: RemoteItem, item: PublishedItem, ownership: Ownership
+) -> tuple[str, ...]:
+    finishing_its_own_archive = item.retiring is not None and remote.archived_for == ownership.doc_id
+    if remote.doc_id is None and finishing_its_own_archive:
+        return unwritten_parts(HeldContent(remote.held.title, {}), ownership)
+    return _unwritten_parts(remote, ownership)
 
 
 @dataclass(frozen=True)
@@ -150,9 +158,7 @@ def _refuse_to_adopt_what_skaldr_did_not_create(
     draft = prepared.draft_of(ref)
     drafted = [] if draft is None else [transport.comparable_draft(draft.content)]
     ownership = Ownership(
-        (ItemContent(title=pending.title), *drafted),
-        frozenset([] if draft is None else draft.content.fields),
-        frozenset(prepared.state.item_ids),
+        (ItemContent(title=pending.title), *drafted), frozenset(prepared.state.item_ids), prepared.doc_id
     )
     parts = _unwritten_parts(remote, ownership)
     if parts:
@@ -281,12 +287,12 @@ def _pending_target(prepared: Prepared, pending: PendingCreate) -> TargetBase:
 @dataclass(frozen=True)
 class SettledCreates:
     state: PublishState
-    left_empty: Mapping[ItemRef, str]
+    left_empty: Mapping[ItemRef, LeftEmpty]
 
 
 def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> SettledCreates:
     state = prepared.state
-    left_empty: dict[ItemRef, str] = {}
+    left_empty: dict[ItemRef, LeftEmpty] = {}
     for pending in prepared.state.pending_creates:
         item_id = pending.into_id or pending.created_id
         if item_id is None:
@@ -309,7 +315,7 @@ def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> Se
             and _left_empty_by_the_create(remote)
             and isinstance(transport, FillsAPageLeftEmpty)
         ):
-            left_empty[ref] = item_id
+            left_empty[ref] = LeftEmpty(item_id, remote.raw_sections)
             continue
         remaining = [held for held in state.pending_creates if held != pending]
         state = state.model_copy(update={"pending_creates": remaining})
@@ -362,7 +368,9 @@ def read_published(prepared: Prepared, transports: Transports) -> PublishedReadi
                 missing.append(MissingItem(ref, item.item_id))
                 continue
             refuse_another_documents_item(ref, read, prepared.doc_id)
-            parts = _unwritten_parts(read, ownership_of(item, draft, transport, prepared.state))
+            parts = _unwritten_parts_of_a_published_item(
+                read, item, ownership_of(item, draft, transport, prepared.state)
+            )
             if parts:
                 unowned.append(UnownedItem(ref, item.item_id, _refused_write(item, draft), parts))
             _refuse_fields_the_item_cannot_hold(ref, transport, item.item_id, draft)
@@ -402,13 +410,7 @@ def _read_written_into(
             "name an existing empty page, or publish under one with `parent_page` instead"
         ) from exc
     refuse_another_documents_item(step.item, remote, prepared.doc_id)
-    drafted = transport.comparable_draft(step.draft.content)
-    held_as_drafted = frozenset(
-        name
-        for name, value in drafted.fields.items()
-        if same_value(remote.comparable.fields.get(name), value)
-    )
-    ownership = Ownership((drafted,), held_as_drafted, judges_the_title=False)
+    ownership = Ownership((transport.comparable_draft(step.draft.content),), judges_the_title_and_look=False)
     if _unwritten_parts(remote, ownership):
         raise PublishError(
             f"{step.item.label}: {into_id} already holds content and carries no skaldr stamp, so skaldr will "

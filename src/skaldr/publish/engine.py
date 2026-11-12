@@ -16,7 +16,14 @@ from skaldr.publish.content import (
 )
 from skaldr.publish.drafts import ItemDraft, item_label
 from skaldr.publish.links import LinkStep, apply_links, link_steps, plan_links, refuse_overlong_link_ids
-from skaldr.publish.plan import ItemRef, PublishPlan, plan_publish, published_item, refuse_moved_targets
+from skaldr.publish.plan import (
+    ItemRef,
+    LeftEmpty,
+    PublishPlan,
+    plan_publish,
+    published_item,
+    refuse_moved_targets,
+)
 from skaldr.publish.prepared import Prepared, Transports, prepare_publish, with_item
 from skaldr.publish.reading import (
     MissingItem,
@@ -129,12 +136,12 @@ def _interrupted_create_message(prepared: Prepared, pending: PendingCreate) -> s
     )
 
 
-def _waits_for_its_fill(pending: PendingCreate, left_empty: Mapping[ItemRef, str]) -> bool:
-    ref = ItemRef(pending.target, pending.section_id)
-    return pending.created_id is not None and left_empty.get(ref) == pending.created_id
+def _waits_for_its_fill(pending: PendingCreate, left_empty: Mapping[ItemRef, LeftEmpty]) -> bool:
+    waiting = left_empty.get(ItemRef(pending.target, pending.section_id))
+    return waiting is not None and pending.created_id == waiting.item_id
 
 
-def _refuse_an_interrupted_create(prepared: Prepared, left_empty: Mapping[ItemRef, str]) -> None:
+def _refuse_an_interrupted_create(prepared: Prepared, left_empty: Mapping[ItemRef, LeftEmpty]) -> None:
     unsettled = [
         pending for pending in prepared.state.pending_creates if not _waits_for_its_fill(pending, left_empty)
     ]
@@ -177,7 +184,7 @@ class _Preflight:
     readings: list[Reading]
     missing: list[MissingItem]
     written_into: dict[ItemRef, RemoteItem]
-    left_empty: Mapping[ItemRef, str]
+    left_empty: Mapping[ItemRef, LeftEmpty]
 
     @property
     def edited(self) -> list[Reading]:

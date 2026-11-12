@@ -140,11 +140,32 @@ def _status_properties(page: Page) -> tuple[str, ...]:
     return tuple(name for name, value in page.properties.items() if isinstance(value, StatusValue))
 
 
-def _held(page: Page, markdown: str, layout: Mapping[str, str]) -> HeldContent:
+def _remote_item(item_id: str, page: Page, markdown: str, layout: Mapping[str, str]) -> RemoteItem:
     keyed = keyed_page(markdown, layout)
-    statuses = _status_properties(page)
-    set_by_people = tuple(name for name in set_property_names(page) if name not in statuses)
-    return HeldContent(title_text(page), dict(keyed.sections), keyed.child_ids, set_by_people)
+    edited_at = page.last_edited_time.isoformat()
+    return RemoteItem(
+        item_id,
+        ItemContent(
+            title=title_text(page),
+            sections=dict(keyed.sections),
+            fields=property_fields(page),
+            icon=icon_text(page),
+            cover=cover_text(page),
+        ),
+        keyed.raw_sections,
+        keyed.stamp,
+        marker=edited_at,
+        edited_by=page.last_edited_by.id,
+        edited_at=edited_at,
+        child_ids=keyed.child_ids,
+        set_properties=set_property_names(page),
+        links=keyed.links,
+        properties_the_service_sets=_status_properties(page),
+    )
+
+
+def _held(page: Page, markdown: str, layout: Mapping[str, str]) -> HeldContent:
+    return _remote_item(_page_key(page.id), page, markdown, layout).held
 
 
 def _with_children_of_removed_sections(
@@ -444,29 +465,10 @@ class NotionTransport:
         return page
 
     def _remote(self, item_id: str, page: Page, markdown: str, layout: Mapping[str, str]) -> RemoteItem:
-        keyed = keyed_page(markdown, layout)
-        self._read.layouts[_page_key(item_id)] = keyed.sections
+        remote = _remote_item(item_id, page, markdown, layout)
+        self._read.layouts[_page_key(item_id)] = remote.comparable.sections
         self._property_names_read[_page_key(item_id)] = tuple(page.properties)
-        edited_at = page.last_edited_time.isoformat()
-        return RemoteItem(
-            item_id,
-            ItemContent(
-                title=title_text(page),
-                sections=dict(keyed.sections),
-                fields=property_fields(page),
-                icon=icon_text(page),
-                cover=cover_text(page),
-            ),
-            keyed.raw_sections,
-            keyed.stamp,
-            marker=edited_at,
-            edited_by=page.last_edited_by.id,
-            edited_at=edited_at,
-            child_ids=keyed.child_ids,
-            set_properties=set_property_names(page),
-            links=keyed.links,
-            properties_the_service_sets=_status_properties(page),
-        )
+        return remote
 
     def _send(self, item_id: str, sections: Mapping[str, str], replacement: Replacement) -> str:
         _refuse_unknown_blocks(item_id, sections, replacement)

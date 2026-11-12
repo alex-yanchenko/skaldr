@@ -459,6 +459,27 @@ def test_an_archive_whose_rename_failed_finishes_and_keeps_what_a_person_wrote_b
     )
 
 
+def test_an_archive_of_a_canvas_that_lost_its_stamp_names_the_document_and_finishes_after_a_failed_rename(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    slack = InMemorySlack()
+    path = _published(tmp_path, slack)
+    slack.delete_block_by_hand(TOOLS_CANVAS, TOOLS_STAMP)
+    write_garden_report(tmp_path, publish=_slack_publish())
+    slack.fail_next("canvases.edit", "internal_error", operation="rename")
+    stopped = main(["publish", str(path), "--apply"], registry=_registry(slack))
+    capsys.readouterr()
+
+    finished = main(["publish", str(path), "--apply"], registry=_registry(slack))
+
+    assert (stopped, finished, capsys.readouterr().err, slack.markdown_of(TOOLS_CANVAS)) == (
+        1,
+        0,
+        "",
+        f"# Tools (archived by skaldr)\n\n{archived_line('garden-handbook')}\n",
+    )
+
+
 def test_publishing_into_a_named_canvas_writes_into_it_and_posts_no_link(tmp_path: Path) -> None:
     slack = InMemorySlack()
     canvas_id = slack.add_canvas("Blank canvas")

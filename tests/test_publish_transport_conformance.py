@@ -465,10 +465,6 @@ def _write_content(transport: Transport, item_id: str, read: RemoteItem, spade: 
     return transport.write_content(item_id, ContentWrite({"tools": spade}, read.raw_sections, STAMP))
 
 
-WRITERS_THAT_CHECK_OWNERSHIP = [param for param in TRANSPORTS if param.id != "slack"]
-
-
-@pytest.mark.parametrize("under_test", WRITERS_THAT_CHECK_OWNERSHIP)
 @pytest.mark.parametrize(
     "write",
     [

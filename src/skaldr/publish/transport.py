@@ -116,6 +116,8 @@ class RemoteItem:
     set_properties: tuple[str, ...] = ()
     links: tuple[ShownLink, ...] | None = None
     properties_the_service_sets: tuple[str, ...] = ()
+    labelled_for: frozenset[str] | None = None
+    archived_for: str | None = None
 
     @property
     def doc_id(self) -> str | None:
@@ -123,11 +125,15 @@ class RemoteItem:
 
     @property
     def held(self) -> HeldContent:
+        judged = [name for name in self.set_properties if name not in self.properties_the_service_sets]
         return HeldContent(
             self.comparable.title,
             self.comparable.sections,
             self.child_ids,
-            tuple(name for name in self.set_properties if name not in self.properties_the_service_sets),
+            {name: self.comparable.fields.get(name) for name in judged},
+            self.comparable.icon,
+            self.comparable.cover,
+            self.labelled_for,
         )
 
 

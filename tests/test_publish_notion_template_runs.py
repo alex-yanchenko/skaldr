@@ -360,6 +360,34 @@ def test_an_apply_after_a_failed_fill_prints_the_fill_as_its_first_step(
     )
 
 
+def test_a_page_left_with_only_an_empty_block_after_a_failed_fill_is_filled_by_the_next_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    path = write_garden_report(tmp_path, publish=make_notion_publish())
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.click_below_the_last_block(DOCUMENT_PAGE)
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    plain = _notion()
+    main(
+        ["publish", str(write_garden_report(tmp_path / "plain", publish=make_notion_publish())), "--apply"],
+        registry=_registry(plain),
+    )
+    assert (exit_code, capsys.readouterr().err, notion.markdown_of(DOCUMENT_PAGE)) == (
+        0,
+        "",
+        plain.markdown_of(DOCUMENT_PAGE),
+    )
+
+
 def test_a_page_a_person_wrote_in_after_a_failed_fill_is_not_filled_over_by_the_next_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

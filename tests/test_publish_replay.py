@@ -209,13 +209,16 @@ def test_a_dry_run_stopped_by_a_remote_edit_still_shows_the_fill_an_interrupted_
     )
 
 
+@pytest.mark.parametrize(
+    "blank_line", [pytest.param(None, id="nothing-left"), pytest.param("\n", id="a-blank-line-left")]
+)
 def test_an_apply_after_a_create_left_its_item_empty_fills_it_as_a_step_and_records_it_as_created(
-    tmp_path: Path,
+    tmp_path: Path, blank_line: str | None
 ) -> None:
     path = write_garden_report(tmp_path)
     transport = FakeTransport()
     _create_of_tools_left_unfinished(path, transport)
-    transport.empty_item_by_hand("page-2")
+    transport.empty_item_by_hand("page-2", blank_line)
 
     outcome = _publish(path, transport)
     state = load_state(state_path_for(path), DOC_ID)

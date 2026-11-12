@@ -1065,6 +1065,59 @@ def test_an_archive_comment_jira_saved_with_attributes_of_its_own_still_counts_a
     assert (issue.comments, issue.fields["status"]) == ([saved], DONE)
 
 
+OWNED_NOTES = Ownership((ItemContent(title="Notes"),), doc_id=DOC_ID)
+UNLABELLED = (
+    "Jira issue DEMO-3 carries no skaldr stamp and holds content skaldr did not write (the labels), so "
+    "skaldr will not {verb} it"
+)
+
+
+def _write_the_notes_fields(transport: JiraTransport) -> object:
+    return transport.write_fields(
+        "DEMO-3", FieldsWrite("Notes", {}, "Notes", {}, STAMP, ownership=OWNED_NOTES)
+    )
+
+
+def _write_the_notes_content(transport: JiraTransport) -> object:
+    return transport.write_content(
+        "DEMO-3", ContentWrite({"intro": section_text([INTRO])}, {}, STAMP, OWNED_NOTES)
+    )
+
+
+def _archive_the_notes(transport: JiraTransport) -> object:
+    transport.archive_item("DEMO-3", Archive(STAMP, OWNED_NOTES))
+    return None
+
+
+@pytest.mark.parametrize(
+    ("write", "verb"),
+    [
+        pytest.param(_write_the_notes_fields, "write to", id="fields"),
+        pytest.param(_write_the_notes_content, "write to", id="content"),
+        pytest.param(_archive_the_notes, "archive", id="archive"),
+    ],
+)
+def test_an_unstamped_issue_without_the_documents_label_is_not_written_or_archived(
+    write: Callable[[JiraTransport], object], verb: str
+) -> None:
+    jira = FakeJira()
+    jira.seed("DEMO-3", summary="Notes", labels=["platform"], priority={"name": "High"})
+    transport = _transport(jira)
+
+    with pytest.raises(WriteRejectedError, match=_exactly(UNLABELLED.format(verb=verb))):
+        write(transport)
+    assert [call for call in jira.calls() if call[0] != "GET"] == []
+
+
+def test_an_unstamped_issue_with_the_documents_label_is_archived() -> None:
+    jira = FakeJira()
+    issue = jira.seed("DEMO-3", summary="Notes", labels=[f"skaldr-{DOC_ID}"])
+
+    _transport(jira).archive_item("DEMO-3", Archive(STAMP, OWNED_NOTES))
+
+    assert issue.fields["status"] == DONE
+
+
 def test_archiving_an_issue_without_a_stamp_comments_without_a_doc_id_and_stamps_it_archived() -> None:
     jira = FakeJira()
     jira.seed("DEMO-3", summary="Notes")

@@ -1,10 +1,10 @@
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from pydantic import JsonValue
 
 from skaldr.errors import WriteRejectedError
-from skaldr.publish.content import ItemContent
-
-ANY_FIELD = None
+from skaldr.publish.content import ItemContent, same_value
 
 
 @dataclass(frozen=True)
@@ -12,51 +12,82 @@ class HeldContent:
     title: str
     sections: Mapping[str, str]
     child_ids: tuple[str, ...] = ()
-    set_properties: tuple[str, ...] = ()
+    fields: Mapping[str, JsonValue] = field(default_factory=dict[str, JsonValue])
+    icon: str | None = None
+    cover: str | None = None
+    labelled_for: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
 class Ownership:
     copies: tuple[ItemContent, ...] = ()
-    owned_fields: frozenset[str] | None = frozenset()
     own_child_ids: frozenset[str] = frozenset()
-    judges_the_title: bool = True
+    doc_id: str | None = None
+    judges_the_title_and_look: bool = True
+    judges_properties: bool = True
 
 
 NOTHING_WRITTEN = Ownership()
 NOTHING_HELD = HeldContent(title="", sections={})
-EMPTY_BODY = Ownership(owned_fields=ANY_FIELD, judges_the_title=False)
-NO_CONTENT = Ownership(judges_the_title=False)
+EMPTY_BODY = Ownership(judges_the_title_and_look=False, judges_properties=False)
+NO_CONTENT = Ownership(judges_the_title_and_look=False)
 
 
 def _title_is_unwritten(held: HeldContent, ownership: Ownership) -> bool:
     return (
-        ownership.judges_the_title
+        ownership.judges_the_title_and_look
         and bool(held.title.strip())
         and all(copy.title != held.title for copy in ownership.copies)
     )
+
+
+def _look_is_unwritten(held: str | None, written: list[str | None], ownership: Ownership) -> bool:
+    return ownership.judges_the_title_and_look and held is not None and all(look is None for look in written)
 
 
 def _section_is_unwritten(key: str, text: str, ownership: Ownership) -> bool:
     return bool(text.strip()) and all(copy.sections.get(key) != text for copy in ownership.copies)
 
 
-def _property_is_unwritten(name: str, ownership: Ownership) -> bool:
-    return ownership.owned_fields is not None and name not in ownership.owned_fields
+def _property_is_unwritten(name: str, value: JsonValue, ownership: Ownership) -> bool:
+    return ownership.judges_properties and not any(
+        name in copy.fields and same_value(copy.fields[name], value) for copy in ownership.copies
+    )
+
+
+def _labels_are_unwritten(held: HeldContent, ownership: Ownership) -> bool:
+    return (
+        held.labelled_for is not None
+        and ownership.doc_id is not None
+        and ownership.doc_id not in held.labelled_for
+    )
 
 
 def unwritten_parts(held: HeldContent, ownership: Ownership) -> tuple[str, ...]:
     title = ("the title",) if _title_is_unwritten(held, ownership) else ()
+    icon = (
+        ("the icon",)
+        if _look_is_unwritten(held.icon, [copy.icon for copy in ownership.copies], ownership)
+        else ()
+    )
+    cover = (
+        ("the cover",)
+        if _look_is_unwritten(held.cover, [copy.cover for copy in ownership.copies], ownership)
+        else ()
+    )
+    labels = ("the labels",) if _labels_are_unwritten(held, ownership) else ()
     sections = tuple(
         f"section {key}" for key, text in held.sections.items() if _section_is_unwritten(key, text, ownership)
     )
     properties = tuple(
-        f"property {name}" for name in held.set_properties if _property_is_unwritten(name, ownership)
+        f"property {name}"
+        for name, value in held.fields.items()
+        if _property_is_unwritten(name, value, ownership)
     )
     children = tuple(
         f"child page {child}" for child in held.child_ids if child not in ownership.own_child_ids
     )
-    return (*title, *sections, *properties, *children)
+    return (*title, *icon, *cover, *labels, *sections, *properties, *children)
 
 
 def refuse_unstamped_content_skaldr_did_not_write(

@@ -161,10 +161,15 @@ class Applier:
 
     def _raw_after_write(self, ref: ItemRef, remote: RemoteItem, parts: Sequence[Part]) -> RawSections:
         before = self.remote.get(ref)
-        put_the_stamp_back = before is not None and before.stamp is None and remote.stamp is not None
-        if put_the_stamp_back:
-            return remote.raw_sections
-        return _raw_with_written_parts(self._raw_sections(ref), remote.raw_sections, parts)
+        kept = _raw_with_written_parts(self._raw_sections(ref), remote.raw_sections, parts)
+        if before is None or before.stamp is not None or remote.stamp is None:
+            return kept
+        unchanged = {
+            key
+            for key in remote.raw_sections
+            if remote.comparable.sections.get(key) == before.comparable.sections.get(key)
+        }
+        return {key: remote.raw_sections[key] if key in unchanged else text for key, text in kept.items()}
 
     def _raw_sections(self, ref: ItemRef) -> RawSections:
         return self.remote[ref].raw_sections if ref in self.remote else NO_SECTIONS
@@ -328,7 +333,12 @@ class Applier:
     def _filled(self, target_plan: TargetPlan, step: FillStep) -> PublishState:
         transport = self.transports.for_target(target_plan.label)
         assert isinstance(transport, FillsAPageLeftEmpty)
-        request = NewItem(target_plan.target, self._stamp(step.item), step.draft.content)
+        request = NewItem(
+            target_plan.target,
+            self._stamp(step.item),
+            step.draft.content,
+            into_raw_sections=step.read_sections,
+        )
         remote = transport.fill_a_page_left_empty(step.item_id, request)
         self.remote[step.item] = remote
         filled = adopted_item(remote, step.draft, transport).model_copy(update={"origin": "created"})

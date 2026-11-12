@@ -11,8 +11,9 @@ from skaldr.publish.cli import main
 from skaldr.publish.content import ItemContent
 from skaldr.publish.engine import Applied, apply_publish, prepare_publish
 from skaldr.publish.jira import JiraConnector
-from skaldr.publish.jira.description import section_text
+from skaldr.publish.jira.description import description_doc, layout_of, section_blocks, section_text
 from skaldr.publish.notion.page_markdown import stamp_line
+from skaldr.publish.slack.canvas_markdown import archived_line
 from skaldr.publish.slack.connector import SlackConnector
 from skaldr.publish.state import (
     ItemOrigin,
@@ -33,7 +34,7 @@ from tests.factories.auth_factory import (
     make_slack_credentials,
     seed_notion,
 )
-from tests.factories.jira_factory import FakeJira
+from tests.factories.jira_factory import DONE, FakeJira
 from tests.factories.notion_factory import InMemoryNotion, notion_registry, numbered_id
 from tests.factories.publish_factory import (
     DOC_ID,
@@ -54,6 +55,7 @@ TEAMMATE_TEXT = "Quarterly plan the platform team keeps here."
 DOCUMENT_PAGE = numbered_id(1).replace("-", "")
 TOOLS_PAGE = numbered_id(2).replace("-", "")
 SAVED_TITLE = "Gone"
+COVER = "https://example.com/teammates-cover.png"
 SAVED_SECTION = "## Gone\nWhat skaldr wrote here.\n"
 JIRA_LABEL = "jira project DEMO under no parent issue"
 SAVED_JIRA_SECTION = section_text(
@@ -275,6 +277,48 @@ def test_an_empty_unstamped_item_with_a_title_skaldr_did_not_write_is_not_archiv
 
 
 @pytest.mark.parametrize(
+    ("look", "parts"),
+    [
+        pytest.param({"icon": "🌱"}, "the icon", id="icon"),
+        pytest.param({"cover": COVER}, "the cover", id="cover"),
+    ],
+)
+def test_an_unstamped_item_with_an_icon_or_cover_skaldr_never_set_is_not_archived(
+    tmp_path: Path, look: dict[str, str], parts: str
+) -> None:
+    transport = FakeTransport()
+    transport.seed(TEAMMATE_PAGE, SAVED_TITLE, None)
+    transport.items[TEAMMATE_PAGE].icon = look.get("icon")
+    transport.items[TEAMMATE_PAGE].cover = look.get("cover")
+    path = write_garden_report(tmp_path)
+    _plant_a_section(path, fake_registry(transport), _planted_item())
+
+    with pytest.raises(PublishError, match=_exactly(_refusal(path, "archive", parts))):
+        apply_publish(prepare_publish(path, fake_registry(transport)))
+    assert transport.writes() == []
+
+
+def test_an_item_whose_owned_property_a_person_changed_after_its_stamp_went_is_not_written_to(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    publish = make_notion_publish(
+        split=["tools"], where={"parent_page": NOTION_PAGE_ID, "fields": {"Owner": "Ash"}}
+    )
+    path = write_garden_report(tmp_path, publish=publish)
+    apply_publish(prepare_publish(path, fake_registry(transport)))
+    transport.stamp_by_hand("page-2", None)
+    transport.edit_fields_by_hand("page-2", {"Owner": "Rowan"})
+    write_garden_report(tmp_path, publish=publish, blocks=make_garden_blocks(tools="Rake."))
+    transport.forget_calls()
+    refusal = _refusal(path, "write to", "property Owner", item=f"{TARGET_LABEL}, section tools (page-2)")
+
+    with pytest.raises(PublishError, match=_exactly(refusal)):
+        apply_publish(prepare_publish(path, fake_registry(transport)), overwrite=True)
+    assert transport.writes() == []
+
+
+@pytest.mark.parametrize(
     "sections",
     [pytest.param({}, id="empty"), pytest.param({"gone": SAVED_SECTION}, id="holding-the-saved-copy")],
 )
@@ -304,11 +348,7 @@ def test_an_unstamped_item_holding_nothing_but_what_skaldr_last_wrote_is_archive
     )
 
 
-def test_a_planted_entry_does_not_close_an_unstamped_jira_issue_with_a_summary_and_an_empty_description(
-    tmp_path: Path,
-) -> None:
-    jira = FakeJira()
-    jira.seed("DEMO-9", summary="Platform roadmap", labels=["platform"], priority={"name": "High"})
+def _planted_jira_issue(tmp_path: Path, jira: FakeJira) -> tuple[Path, ConnectorRegistry]:
     publish = {
         "doc_id": DOC_ID,
         "targets": [{"to": "jira", "where": {"project": "DEMO", "issue_type": "Task"}}],
@@ -316,13 +356,50 @@ def test_a_planted_entry_does_not_close_an_unstamped_jira_issue_with_a_summary_a
     path = write_garden_report(tmp_path, publish=publish)
     registry = _jira_registry(jira)
     _plant_a_section(path, registry, _planted_item("DEMO-9", saved=SAVED_JIRA_SECTION), JIRA_LABEL, "jira")
-    refusal = _refusal(
-        path, "archive", "the title", item=f"{JIRA_LABEL}, section gone (DEMO-9)", service="Jira"
-    )
+    return path, registry
+
+
+@pytest.mark.parametrize(
+    ("summary", "parts"),
+    [
+        pytest.param(TEAMMATE_TITLE, "the title, the labels", id="another-summary"),
+        pytest.param(SAVED_TITLE, "the labels", id="skaldrs-summary-without-the-document-label"),
+    ],
+)
+def test_a_planted_entry_does_not_close_an_unstamped_jira_issue_without_the_documents_label(
+    tmp_path: Path, summary: str, parts: str
+) -> None:
+    jira = FakeJira()
+    jira.seed("DEMO-9", summary=summary, labels=["platform"], priority={"name": "High"})
+    path, registry = _planted_jira_issue(tmp_path, jira)
+    refusal = _refusal(path, "archive", parts, item=f"{JIRA_LABEL}, section gone (DEMO-9)", service="Jira")
 
     with pytest.raises(PublishError, match=_exactly(refusal)):
         apply_publish(prepare_publish(path, registry))
     assert [call for call in jira.calls() if call[0] != "GET"] == []
+
+
+def test_an_unstamped_jira_issue_with_the_documents_label_and_skaldrs_content_is_closed(
+    tmp_path: Path,
+) -> None:
+    jira = FakeJira()
+    issue = jira.seed(
+        "DEMO-9",
+        summary=SAVED_TITLE,
+        labels=["platform", f"skaldr-{DOC_ID}"],
+        description=description_doc(section_blocks(SAVED_JIRA_SECTION)),
+    )
+    issue.properties["skaldr.layout"] = layout_of({"gone": section_blocks(SAVED_JIRA_SECTION)}).model_dump(
+        mode="json"
+    )
+    path, registry = _planted_jira_issue(tmp_path, jira)
+
+    outcome = apply_publish(prepare_publish(path, registry))
+
+    assert (outcome.steps[-1] if isinstance(outcome, Applied) else outcome, issue.fields["status"]) == (
+        "archive  section gone (DEMO-9)",
+        DONE,
+    )
 
 
 def test_a_planted_entry_does_not_trash_a_notion_database_row_whose_content_is_in_its_properties(
@@ -344,24 +421,52 @@ def test_a_planted_entry_does_not_trash_a_notion_database_row_whose_content_is_i
     )
 
 
+@pytest.mark.parametrize(
+    ("body", "retiring", "verb", "parts"),
+    [
+        pytest.param(
+            f"{TEAMMATE_TEXT}\n", "archive", "archive", "the title, section gone", id="other-content"
+        ),
+        pytest.param(
+            f"{archived_line(DOC_ID)}\n\n{TEAMMATE_TEXT}\n",
+            "archive",
+            "archive",
+            "the title",
+            id="a-forged-archived-line-on-a-canvas-with-its-own-title",
+        ),
+        pytest.param(
+            f"{archived_line(DOC_ID)}\n\n{TEAMMATE_TEXT}\n",
+            None,
+            "archive",
+            "the title, section gone",
+            id="a-forged-archived-line-on-an-item-that-is-not-retiring",
+        ),
+    ],
+)
 def test_a_planted_entry_does_not_archive_an_unstamped_slack_canvas_that_holds_other_content(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    body: str,
+    retiring: Retirement | None,
+    verb: str,
+    parts: str,
 ) -> None:
     slack = InMemorySlack()
-    canvas = slack.add_canvas(TEAMMATE_TITLE, f"{TEAMMATE_TEXT}\n")
+    canvas = slack.add_canvas(TEAMMATE_TITLE, body)
     path = write_garden_report(tmp_path, publish={"doc_id": DOC_ID, "targets": [make_slack_target()]})
     registry = _slack_registry(slack)
-    _plant_a_section(path, registry, _planted_item(canvas), SLACK_LABEL, "slack")
+    _plant_a_section(path, registry, _planted_item(canvas, retiring=retiring), SLACK_LABEL, "slack")
     capsys.readouterr()
 
     exit_code = main(["publish", str(path), "--apply"], registry=registry)
 
     item = f"{SLACK_LABEL}, section gone ({canvas})"
-    refusal = _refusal(path, "archive", "the title, section gone", item=item, service="Slack")
-    assert (exit_code, capsys.readouterr().err, slack.canvases[canvas].title) == (
+    refusal = _refusal(path, verb, parts, item=item, service="Slack")
+    assert (exit_code, capsys.readouterr().err, slack.canvases[canvas].title, slack.writes()) == (
         1,
         f"error: {refusal}\n",
         TEAMMATE_TITLE,
+        [],
     )
 
 
@@ -380,6 +485,27 @@ def test_overwrite_does_not_write_over_an_unstamped_item_whose_content_skaldr_di
     with pytest.raises(PublishError, match=_exactly(refusal)):
         apply_publish(prepare_publish(path, fake_registry(transport)), overwrite=True)
     assert transport.writes() == []
+
+
+def test_an_edit_made_while_a_write_put_the_stamp_back_stops_the_next_write_on_that_item(
+    tmp_path: Path,
+) -> None:
+    transport = FakeTransport()
+    whole = make_notion_publish()
+    path = write_garden_report(tmp_path, publish=whole)
+    apply_publish(prepare_publish(path, fake_registry(transport)))
+    transport.stamp_by_hand("page-1", None)
+    write_garden_report(
+        tmp_path, publish=whole, blocks=make_garden_blocks(intro="Welcome back to the garden.")
+    )
+    transport.edit_by_hand_during_the_next_write("page-1", "planting", "## Planting\nSow in late spring.\n")
+    transport.forget_calls()
+
+    with pytest.raises(
+        WriteRejectedError, match=_exactly("the layout skaldr sent for page-1 is not the one on the service")
+    ):
+        apply_publish(prepare_publish(path, fake_registry(transport)))
+    assert transport.items["page-1"].raw_sections["planting"] == "## Planting\nSow in late spring.\n"
 
 
 def test_a_fake_item_that_lost_its_stamp_but_holds_what_skaldr_wrote_gets_the_write_and_its_stamp_back(

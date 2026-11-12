@@ -7,6 +7,7 @@ import pytest
 
 from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
 from skaldr.publish.content import TITLE, ItemContent, differing_parts, section_part
+from skaldr.publish.ownership import Ownership
 from skaldr.publish.slack.canvas_markdown import UNKEYED_SECTION, archived_line
 from skaldr.publish.slack.transport import SlackTransport
 from skaldr.publish.transport import (
@@ -33,7 +34,8 @@ from tests.factories.slack_factory import InMemorySlack
 
 TITLE_TEXT = "Garden handbook"
 STAMP = Stamp("garden-handbook", None)
-ARCHIVE = Archive(STAMP)
+ARCHIVE = Archive(STAMP, Ownership((ItemContent(title=TITLE_TEXT),)))
+OWNED_WELCOME = Ownership((ItemContent(title=TITLE_TEXT, sections={"intro": "Welcome to the garden.\n"}),))
 STAMP_LINE = "Published with skaldr from document garden-handbook"
 CONTENT = ItemContent(
     title=TITLE_TEXT,
@@ -512,7 +514,10 @@ def test_a_section_write_puts_a_missing_stamp_back_at_the_end() -> None:
     slack.forget_requests()
 
     written = transport.write_section(
-        canvas_id, SectionRequest(AddSection("tools", "Spade.\n", "intro"), read.raw_sections, STAMP)
+        canvas_id,
+        SectionRequest(
+            AddSection("tools", "Spade.\n", "intro"), read.raw_sections, STAMP, ownership=OWNED_WELCOME
+        ),
     )
 
     assert (written.stamp, slack.requests, slack.markdown_of(canvas_id)) == (
@@ -615,7 +620,9 @@ def test_a_new_title_renames_the_canvas() -> None:
     transport = slack.transport()
     transport.read_item(CANVAS, CONTENT)
 
-    written = transport.write_fields(CANVAS, FieldsWrite("Garden guide", {}, TITLE_TEXT, {}, STAMP))
+    written = transport.write_fields(
+        CANVAS, FieldsWrite("Garden guide", {}, TITLE_TEXT, {}, STAMP, ownership=OWNED_WELCOME)
+    )
 
     assert (_edits(slack), written.comparable.title) == (
         [{"operation": "rename", "title_content": {"type": "markdown", "markdown": "Garden guide"}}],
@@ -637,7 +644,9 @@ def test_a_fields_write_puts_a_missing_stamp_back_with_one_replace() -> None:
     slack = InMemorySlack()
     canvas_id, transport = _an_unstamped_canvas(slack)
 
-    written = transport.write_fields(canvas_id, FieldsWrite(TITLE_TEXT, {}, TITLE_TEXT, {}, STAMP))
+    written = transport.write_fields(
+        canvas_id, FieldsWrite(TITLE_TEXT, {}, TITLE_TEXT, {}, STAMP, ownership=OWNED_WELCOME)
+    )
 
     assert (written.stamp, slack.requests) == (
         STAMP,
@@ -653,7 +662,9 @@ def test_a_new_title_on_an_unstamped_canvas_adds_the_stamp_and_then_renames_it()
     slack = InMemorySlack()
     canvas_id, transport = _an_unstamped_canvas(slack)
 
-    transport.write_fields(canvas_id, FieldsWrite("Garden guide", {}, TITLE_TEXT, {}, STAMP))
+    transport.write_fields(
+        canvas_id, FieldsWrite("Garden guide", {}, TITLE_TEXT, {}, STAMP, ownership=OWNED_WELCOME)
+    )
 
     assert slack.requests == [
         _read_call(canvas_id),
@@ -669,7 +680,9 @@ def test_a_stamp_slack_refuses_leaves_the_canvas_and_its_title_as_they_were() ->
     slack.fail_next("canvases.edit", "canvas_editing_locked", times=5, operation="replace")
 
     with pytest.raises(WriteRejectedError) as raised:
-        transport.write_fields(canvas_id, FieldsWrite("Garden guide", {}, TITLE_TEXT, {}, STAMP))
+        transport.write_fields(
+            canvas_id, FieldsWrite("Garden guide", {}, TITLE_TEXT, {}, STAMP, ownership=OWNED_WELCOME)
+        )
 
     assert (str(raised.value), slack.markdown_of(canvas_id)) == (
         f"Slack could not change canvas {canvas_id}: someone is editing it (canvas_editing_locked) after 5 "
@@ -798,18 +811,50 @@ def test_a_canvas_whose_archive_stopped_before_the_rename_still_reads_so_the_arc
     read = transport.read_item(CANVAS, CONTENT)
     transport.archive_item(CANVAS, ARCHIVE)
 
-    assert (read.stamp, dict(read.raw_sections), slack.markdown_of(CANVAS)) == (
-        STAMP,
+    assert (read.stamp, read.archived_for, dict(read.raw_sections), slack.markdown_of(CANVAS)) == (
+        None,
+        "garden-handbook",
         {"intro": f"{archived_line('garden-handbook')}\n"},
         ARCHIVED_CANVAS,
     )
 
 
-def test_a_canvas_archived_without_a_doc_id_reads_unstamped() -> None:
+def test_a_canvas_whose_archived_line_names_no_document_reads_as_archived_for_none() -> None:
     slack = InMemorySlack()
     canvas_id = slack.add_canvas("Notes", f"{archived_line(None)}\n")
 
-    assert slack.transport().read_item(canvas_id, ItemContent(title="")).stamp is None
+    read = slack.transport().read_item(canvas_id, ItemContent(title=""))
+
+    assert (read.stamp, read.archived_for) == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("archived_for", "title", "message"),
+    [
+        pytest.param(
+            "kitchen-rota",
+            TITLE_TEXT,
+            "is not stamped with doc_id 'garden-handbook', so skaldr will not archive it",
+            id="another-documents-archived-line",
+        ),
+        pytest.param(
+            "garden-handbook",
+            "Team notes",
+            "carries no skaldr stamp and holds content skaldr did not write (the title), so skaldr will not "
+            "archive it",
+            id="this-documents-line-on-a-canvas-with-another-title",
+        ),
+    ],
+)
+def test_a_canvas_opening_with_an_archived_line_skaldr_did_not_write_is_not_renamed(
+    archived_for: str, title: str, message: str
+) -> None:
+    slack = InMemorySlack()
+    canvas_id = slack.add_canvas(title, f"{archived_line(archived_for)}\n")
+
+    with pytest.raises(WriteRejectedError, match=f"^Slack canvas {canvas_id} {re.escape(message)}$"):
+        slack.transport().archive_item(canvas_id, ARCHIVE)
+    assert (slack.canvases[canvas_id].title, slack.writes()) == (title, [])
 
 
 def test_archiving_a_canvas_edited_after_the_read_writes_nothing() -> None:
@@ -1228,7 +1273,7 @@ def test_a_fields_write_on_an_unstamped_canvas_keeps_the_sections_as_skaldr_wrot
     slack = InMemorySlack()
     canvas_id = slack.add_canvas(TITLE_TEXT, f"{LITERAL}\n")
     transport = slack.transport()
-    transport.read_item(
+    read = transport.read_item(
         canvas_id, ItemContent(title=TITLE_TEXT, sections={"intro": f"{LITERAL_AS_SLACK_STORES}\n"})
     )
     slack.forget_requests()
@@ -1242,6 +1287,7 @@ def test_a_fields_write_on_an_unstamped_canvas_keeps_the_sections_as_skaldr_wrot
             {},
             STAMP,
             published=PublishedSections({"intro": f"{LITERAL}\n"}, {"intro": f"{LITERAL_AS_SLACK_STORES}\n"}),
+            ownership=Ownership((read.comparable,)),
         ),
     )
 

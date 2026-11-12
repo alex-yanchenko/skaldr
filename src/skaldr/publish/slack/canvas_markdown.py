@@ -228,12 +228,11 @@ class KeyedCanvas:
         return self.title.endswith(ARCHIVED_TITLE_MARKER)
 
     @property
-    def stamp_or_archived_line(self) -> Stamp | None:
-        if self.stamp is not None or not self.content:
-            return self.stamp
+    def archived_for(self) -> str | None:
+        if not self.content:
+            return None
         archived = ARCHIVED_PATTERN.fullmatch(self.content[0].raw.strip())
-        doc_id = None if archived is None else archived.group("doc_id")
-        return None if doc_id is None else Stamp(doc_id, None)
+        return None if archived is None else archived.group("doc_id")
 
     def _owned_spans(
         self, rendered: Mapping[str, str], saved_remote: Mapping[str, str]
