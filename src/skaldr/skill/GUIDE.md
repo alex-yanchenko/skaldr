@@ -1546,9 +1546,11 @@ block, placed *before* the stylesheet. So an agent handed a skaldr page (a local
 shared artifact URL) recovers the source **without** wading through the rendered HTML/CSS:
 
 - `skaldr --extract-source report.html` (or an `http(s)://` URL) prints just the YAML. It refuses a
-  source that holds a terminal control character (anything from U+0000 to U+001F or U+0080 to U+009F
-  except tab, newline and carriage return), naming the first one and its position, because a page
-  fetched from elsewhere could otherwise drive your terminal.
+  source that holds a terminal control character, naming the first one and its position, because a
+  page fetched from elsewhere could otherwise drive your terminal. The characters refused are U+0000
+  to U+001F except tab and newline, U+007F to U+009F, the bidirectional overrides U+202A to U+202E
+  and U+2066 to U+2069, and a carriage return that is not followed by a newline. A carriage return
+  before a newline is printed as it is.
 - Reading the top of the file (or a fetch) reaches the source block before the CSS.
 
 Slicing the text between the scissor markers yourself gives the YAML verbatim, with one exception the

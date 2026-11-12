@@ -26,6 +26,9 @@ _UNKNOWN_TONE_MESSAGE = (
 )
 
 
+_MARKER = "MARKER"
+
+
 def _note_table(**rows_or_groups: object) -> dict[str, object]:
     return {
         "type": "table",
@@ -139,17 +142,14 @@ def test_extract_source_reports_when_no_source_is_embedded(
     assert "no embedded skaldr source" in capsys.readouterr().err
 
 
-_MARKER = "MARKER"
-
-
 def _source_with_a_marker() -> str:
     return f"version: 1\nmeta: {{title: x}}\n# a note {_MARKER} SYNTHETIC-TITLE\n"
 
 
 def _page_carrying(source: str) -> str:
-    shown = _source_with_a_marker()
-    html = render_html(parse_report(make_report()), source=shown)
-    return html.replace(shown, source)
+    template = _source_with_a_marker()
+    html = render_html(parse_report(make_report()), source=template)
+    return html.replace(template, source)
 
 
 @pytest.mark.parametrize(
@@ -158,7 +158,13 @@ def _page_carrying(source: str) -> str:
         pytest.param("\x1b", "U+001B", id="escape"),
         pytest.param("\x07", "U+0007", id="bell"),
         pytest.param("\x00", "U+0000", id="nul"),
+        pytest.param("\x0e", "U+000E", id="shift-out"),
+        pytest.param("\x1f", "U+001F", id="unit-separator"),
+        pytest.param("\x7f", "U+007F", id="delete"),
         pytest.param("\x9b", "U+009B", id="c1-control-sequence-introducer"),
+        pytest.param("‮", "U+202E", id="right-to-left-override"),
+        pytest.param("⁧", "U+2067", id="right-to-left-isolate"),
+        pytest.param("\r", "U+000D", id="lone-carriage-return"),
     ],
 )
 def test_extract_source_refuses_a_source_with_a_control_character_naming_it_and_its_position(
@@ -166,7 +172,7 @@ def test_extract_source_refuses_a_source_with_a_control_character_naming_it_and_
 ) -> None:
     source = _source_with_a_marker().replace(_MARKER, control)
     page = tmp_path / "page.html"
-    page.write_text(_page_carrying(source), encoding="utf-8")
+    page.write_bytes(_page_carrying(source).encode("utf-8"))
 
     exit_code = main(["--extract-source", str(page)])
 
@@ -179,12 +185,24 @@ def test_extract_source_refuses_a_source_with_a_control_character_naming_it_and_
     )
 
 
-def test_extract_source_prints_a_source_with_tabs_and_newlines(
+def test_extract_source_prints_a_source_with_a_tab(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     source = _source_with_a_marker().replace(_MARKER, "\t")
     page = tmp_path / "page.html"
-    page.write_text(_page_carrying(source), encoding="utf-8")
+    page.write_bytes(_page_carrying(source).encode("utf-8"))
+
+    exit_code = main(["--extract-source", str(page)])
+
+    assert (exit_code, capsys.readouterr().out) == (0, source)
+
+
+def test_extract_source_prints_a_source_whose_carriage_returns_come_before_newlines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = _source_with_a_marker().replace(_MARKER, "\r\n#")
+    page = tmp_path / "page.html"
+    page.write_bytes(_page_carrying(source).encode("utf-8"))
 
     exit_code = main(["--extract-source", str(page)])
 

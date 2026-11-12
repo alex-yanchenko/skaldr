@@ -59,6 +59,7 @@ from skaldr.version import skaldr_version
 _FETCH_TIMEOUT_SECONDS = 30
 _FETCH_LIMIT_BYTES = 16 * 1024 * 1024
 _FETCH_CHUNK_BYTES = 64 * 1024
+_TERMINAL_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‪-‮⁦-⁩]|\r(?!\n)")
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
 
@@ -700,9 +701,6 @@ def _fetch_page(url: str) -> bytes:
     return bytes(received)
 
 
-_TERMINAL_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x80-\x9f]")
-
-
 def _extract_source(target: str) -> int:
     """Print the YAML source embedded in a rendered skaldr page — `target` is a local file or an
     http(s) URL. Reads the page (never into the caller's context) and prints only the source, so an
@@ -711,7 +709,7 @@ def _extract_source(target: str) -> int:
         if target.startswith(("http://", "https://")):
             html = _fetch_page(target).decode("utf-8")
         else:
-            html = Path(target).read_text(encoding="utf-8")
+            html = Path(target).read_bytes().decode("utf-8")
     except (OSError, ValueError) as err:
         print(f"error: could not read {target}: {err}", file=sys.stderr)
         return 1
