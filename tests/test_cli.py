@@ -139,6 +139,58 @@ def test_extract_source_reports_when_no_source_is_embedded(
     assert "no embedded skaldr source" in capsys.readouterr().err
 
 
+_MARKER = "MARKER"
+
+
+def _source_with_a_marker() -> str:
+    return f"version: 1\nmeta: {{title: x}}\n# a note {_MARKER} SYNTHETIC-TITLE\n"
+
+
+def _page_carrying(source: str) -> str:
+    shown = _source_with_a_marker()
+    html = render_html(parse_report(make_report()), source=shown)
+    return html.replace(shown, source)
+
+
+@pytest.mark.parametrize(
+    ("control", "code_point"),
+    [
+        pytest.param("\x1b", "U+001B", id="escape"),
+        pytest.param("\x07", "U+0007", id="bell"),
+        pytest.param("\x00", "U+0000", id="nul"),
+        pytest.param("\x9b", "U+009B", id="c1-control-sequence-introducer"),
+    ],
+)
+def test_extract_source_refuses_a_source_with_a_control_character_naming_it_and_its_position(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], control: str, code_point: str
+) -> None:
+    source = _source_with_a_marker().replace(_MARKER, control)
+    page = tmp_path / "page.html"
+    page.write_text(_page_carrying(source), encoding="utf-8")
+
+    exit_code = main(["--extract-source", str(page)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err) == (
+        1,
+        "",
+        f"error: the embedded source in {page} holds the control character {code_point} at position "
+        f"{source.index(control)}, which a terminal would act on; skaldr will not print it\n",
+    )
+
+
+def test_extract_source_prints_a_source_with_tabs_and_newlines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = _source_with_a_marker().replace(_MARKER, "\t")
+    page = tmp_path / "page.html"
+    page.write_text(_page_carrying(source), encoding="utf-8")
+
+    exit_code = main(["--extract-source", str(page)])
+
+    assert (exit_code, capsys.readouterr().out) == (0, source)
+
+
 def test_extract_source_reports_an_unreadable_target(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

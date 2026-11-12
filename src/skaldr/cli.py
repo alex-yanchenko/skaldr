@@ -699,6 +699,9 @@ def _fetch_page(url: str) -> bytes:
     return bytes(received)
 
 
+_TERMINAL_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x80-\x9f]")
+
+
 def _extract_source(target: str) -> int:
     """Print the YAML source embedded in a rendered skaldr page — `target` is a local file or an
     http(s) URL. Reads the page (never into the caller's context) and prints only the source, so an
@@ -714,6 +717,15 @@ def _extract_source(target: str) -> int:
     source = extract_source(html)
     if source is None:
         print(f"error: no embedded skaldr source found in {target}", file=sys.stderr)
+        return 1
+    control = _TERMINAL_CONTROL.search(source)
+    if control is not None:
+        print(
+            f"error: the embedded source in {target} holds the control character "
+            f"U+{ord(control.group()):04X} at position {control.start()}, "
+            "which a terminal would act on; skaldr will not print it",
+            file=sys.stderr,
+        )
         return 1
     print(source, end="")
     return 0
