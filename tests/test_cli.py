@@ -1953,7 +1953,7 @@ def test_an_export_of_a_lone_surrogate_fails_and_writes_nothing(
     )
 
 
-def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a_link(
+def test_a_symlinked_default_output_path_is_refused_and_its_target_is_left_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -1967,12 +1967,50 @@ def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a
 
     exit_code = main([str(data_path)])
 
-    expected_page = render_html(parse_report(make_report()), source=data_path.read_text(encoding="utf-8"))
     assert (exit_code, capsys.readouterr().err, link.is_symlink(), target.read_text(encoding="utf-8")) == (
-        0,
-        "",
+        1,
+        f"error: {link} is a symlink to {target.resolve()}, so skaldr will not write through it; "
+        "remove it or pass -o to write elsewhere\n",
         True,
-        expected_page,
+        "earlier page",
+    )
+
+
+def test_a_dangling_symlink_at_the_default_output_path_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+    link = tmp_path / "out" / "report.html"
+    link.parent.mkdir()
+    link.symlink_to(tmp_path / "nowhere" / "report.html")
+
+    exit_code = main([str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err, (tmp_path / "nowhere").exists()) == (
+        1,
+        f"error: {link} is a symlink to {tmp_path.resolve() / 'nowhere' / 'report.html'}, "
+        "so skaldr will not write through it; remove it or pass -o to write elsewhere\n",
+        False,
+    )
+
+
+def test_an_explicit_output_path_that_is_a_symlink_into_the_default_folder_still_gets_the_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+    target = tmp_path / "published" / "report.html"
+    target.parent.mkdir()
+    link = tmp_path / "out" / "report.html"
+    link.parent.mkdir()
+    link.symlink_to(target)
+
+    assert main([str(data_path), "-o", str(link), "--no-source"]) == 0
+
+    assert (link.is_symlink(), target.read_text(encoding="utf-8")) == (
+        True,
+        render_html(parse_report(make_report())),
     )
 
 

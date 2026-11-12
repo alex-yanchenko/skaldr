@@ -77,5 +77,9 @@ class TargetAlreadyExistsError(FileExistsError):
     pass
 
 
+class DefaultPathIsASymlinkError(OSError):
+    pass
+
+
 class PageFetchError(OSError):
     pass

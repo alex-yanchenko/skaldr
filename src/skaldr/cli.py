@@ -48,7 +48,12 @@ from skaldr.render import (
     render_html,
     render_report,
 )
-from skaldr.replace_file import create_file, replace_file, resolved_path
+from skaldr.replace_file import (
+    create_file,
+    refuse_a_symlink_at_a_default_path,
+    replace_file,
+    resolved_path,
+)
 from skaldr.version import skaldr_version
 
 _FETCH_TIMEOUT_SECONDS = 30
@@ -82,7 +87,9 @@ _PLAN_RULE_BLOCK = re.compile(
 
 def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
     """The HTML output path: the explicit `-o` value, or a default `out/<data-stem>.html` under the cwd."""
-    return resolved_path(Path(out_arg)) if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
+    if out_arg:
+        return resolved_path(Path(out_arg))
+    return refuse_a_symlink_at_a_default_path(Path.cwd() / "out" / f"{data_path.stem}.html", "-o")
 
 
 _PUBLISH_COMMANDS = frozenset({"publish", "diff", "status"})
@@ -736,10 +743,14 @@ def _reject_flags_that_do_not_fit_an_export(
 
 
 def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
-    out_dir = (
-        Path(export_dir) if export_dir is not None else Path("out") / f"{data_path.stem}.{target}"
-    ).resolve()
     try:
+        out_dir = (
+            Path(export_dir)
+            if export_dir is not None
+            else refuse_a_symlink_at_a_default_path(
+                Path.cwd() / "out" / f"{data_path.stem}.{target}", "--export-dir"
+            )
+        ).resolve()
         report = load_report(data_path)
         match target:
             case "notion":

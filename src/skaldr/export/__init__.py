@@ -124,6 +124,9 @@ def _refuse_to_overwrite_what_skaldr_did_not_write(
     folders = [path for path in targets if _is_folder(path)]
     if folders:
         raise _refusal(folders, "a folder, not a page file")
+    links = [path for path in targets if path.is_symlink() and path.name in earlier.pages]
+    if links:
+        raise _refusal(links, "a symlink, and an export does not write through one")
     foreign = [path for path in targets if _is_taken_by_something_skaldr_did_not_write(path, earlier)]
     if not foreign:
         return

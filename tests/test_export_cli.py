@@ -133,8 +133,19 @@ def test_an_export_keeps_the_mode_of_the_page_and_the_manifest_it_replaces(
     ) == (0o600, 0o640, sorted([EXPORT_MANIFEST, "page.md"]))
 
 
-def test_a_symlinked_page_gets_the_export_in_its_target_and_stays_a_link(
-    tmp_path: Path, export_dir: Path
+@pytest.mark.parametrize(
+    ("manifest", "why"),
+    [
+        pytest.param(
+            '{"title": "T", "files": ["page.md"]}',
+            "a symlink, and an export does not write through one",
+            id="listed-in-the-manifest",
+        ),
+        pytest.param(None, f"not on the {EXPORT_MANIFEST} list of files skaldr wrote", id="not-listed"),
+    ],
+)
+def test_a_symlinked_page_in_an_export_folder_is_refused_and_its_target_is_left_alone(
+    tmp_path: Path, export_dir: Path, capsys: pytest.CaptureFixture[str], manifest: str | None, why: str
 ) -> None:
     data_path = write_report(tmp_path, make_report())
     target = tmp_path / "wiki" / "page.md"
@@ -142,14 +153,51 @@ def test_a_symlinked_page_gets_the_export_in_its_target_and_stays_a_link(
     target.write_text("earlier page", encoding="utf-8")
     export_dir.mkdir()
     (export_dir / "page.md").symlink_to(target)
-    (export_dir / EXPORT_MANIFEST).write_text('{"title": "T", "files": ["page.md"]}', encoding="utf-8")
+    if manifest is not None:
+        (export_dir / EXPORT_MANIFEST).write_text(manifest, encoding="utf-8")
+
+    exit_code = main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)])
+
+    assert (exit_code, capsys.readouterr().err, target.read_text(encoding="utf-8")) == (
+        1,
+        f"error: refusing to overwrite {export_dir / 'page.md'}, which is "
+        f"{why}; move it away or choose another --export-dir\n",
+        "earlier page",
+    )
+
+
+def test_a_symlinked_default_export_folder_is_refused_and_its_target_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = write_report(tmp_path, make_report())
+    target = tmp_path / "wiki"
+    target.mkdir()
+    link = tmp_path / "out" / "doc.markdown"
+    link.parent.mkdir()
+    link.symlink_to(target, target_is_directory=True)
+
+    exit_code = main([str(data_path), "--export", "markdown"])
+
+    assert (exit_code, capsys.readouterr().err, sorted(target.iterdir())) == (
+        1,
+        f"error: {link} is a symlink to {target.resolve()}, so skaldr will not write through it; "
+        "remove it or pass --export-dir to write elsewhere\n",
+        [],
+    )
+
+
+def test_an_explicit_export_folder_that_is_a_symlink_still_gets_the_export(
+    tmp_path: Path, export_dir: Path
+) -> None:
+    data_path = write_report(tmp_path, make_report())
+    target = tmp_path / "wiki"
+    target.mkdir()
+    export_dir.symlink_to(target, target_is_directory=True)
 
     assert main([str(data_path), "--export", "markdown", "--export-dir", str(export_dir)]) == 0
 
-    assert ((export_dir / "page.md").is_symlink(), target.read_text(encoding="utf-8")) == (
-        True,
-        "# Test Report\n\nHello.\n",
-    )
+    assert (target / "page.md").read_text(encoding="utf-8") == "# Test Report\n\nHello.\n"
 
 
 @pytest.mark.parametrize(
