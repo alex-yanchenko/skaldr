@@ -28,9 +28,9 @@ from tests.factories.publish_factory import (
     fake_registry,
     make_garden_blocks,
     make_notion_publish,
+    publish_to_fakes,
     write_garden_report,
 )
-from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID, make_jira_target
 
 DOCUMENT = ItemRef(TARGET_LABEL, None)
@@ -41,7 +41,7 @@ JIRA_PUBLISH = {"doc_id": DOC_ID, "targets": [make_jira_target()]}
 
 def _interrupted(path: Path, transport: FakeTransport, error: str) -> None:
     with pytest.raises(ConnectorError, match=f"^{error}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     transport.stop_failing()
     transport.forget_calls()
 
@@ -49,7 +49,7 @@ def _interrupted(path: Path, transport: FakeTransport, error: str) -> None:
 def _adopted_page(tmp_path: Path, transport: FakeTransport) -> Path:
     transport.seed(NOTION_PAGE_ID, "Blank page", None)
     path = write_garden_report(tmp_path, publish=INTO_THE_PAGE)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     transport.forget_calls()
     return path
 
@@ -62,7 +62,7 @@ def test_an_interrupted_adoption_whose_target_left_the_yaml_is_settled_and_relea
     _interrupted(path, transport, DROPPED_AFTER_WRITE)
     write_garden_report(tmp_path, publish=JIRA_PUBLISH)
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes()[1:], transport.items[NOTION_PAGE_ID].stamp) == (
         Applied(('create   document "Garden handbook"', f"release  document ({NOTION_PAGE_ID})")),
@@ -76,13 +76,13 @@ def test_a_section_back_in_the_yaml_after_an_archive_that_never_landed_is_tracke
 ) -> None:
     transport = FakeTransport()
     path = write_garden_report(tmp_path)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
     write_garden_report(tmp_path, publish=make_notion_publish(), blocks=without_tools)
     transport.lose_the_next_write()
     _interrupted(path, transport, LOST_WRITE)
     write_garden_report(tmp_path)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     retiring = load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].sections["tools"].retiring
     transport.delete_item_by_hand("page-2")
 
@@ -101,7 +101,7 @@ def test_a_release_that_partly_landed_is_sent_again(tmp_path: Path) -> None:
     transport.land_part_of_the_next_release(after_writes=1)
     _interrupted(path, transport, DROPPED_AFTER_WRITE)
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), transport.items[NOTION_PAGE_ID].stamp) == (
         Applied((f"release  document ({NOTION_PAGE_ID})",)),
@@ -118,7 +118,7 @@ def test_a_landed_release_on_a_page_with_a_property_skaldr_did_not_set_is_forgot
     transport.drop_the_connection_after_write(2)
     _interrupted(path, transport, DROPPED_AFTER_WRITE)
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), list(load_state(state_path_for(path), DOC_ID).targets)) == (
         Applied(()),
@@ -146,7 +146,7 @@ def test_the_landed_parts_of_an_interrupted_write_are_kept_and_only_the_rest_is_
 ) -> None:
     transport = FakeTransport()
     path = write_garden_report(tmp_path, publish=make_notion_publish())
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(
         tmp_path, publish=make_notion_publish(), blocks=make_garden_blocks(planting="Sow in May.")
     )
@@ -154,7 +154,7 @@ def test_the_landed_parts_of_an_interrupted_write_are_kept_and_only_the_rest_is_
     _interrupted(path, transport, DROPPED_AFTER_WRITE)
     transport.edit_section_by_hand("page-1", INTRO_KEY, "Welcome, gardeners.\n")
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
     document = load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].document
 
     assert (outcome, document and document.rendered.sections["planting"]) == (
@@ -185,7 +185,7 @@ def test_an_interrupted_adoption_on_a_service_that_normalises_text_publishes_not
     transport.drop_the_connection_after_write(1)
     _interrupted(path, transport, DROPPED_AFTER_WRITE)
 
-    assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
+    assert (publish_to_fakes(path, transport), transport.writes()) == (Applied(()), [])
 
 
 def test_an_adoption_that_wrote_the_content_but_not_the_stamp_is_written_again(tmp_path: Path) -> None:
@@ -195,7 +195,7 @@ def test_an_adoption_that_wrote_the_content_but_not_the_stamp_is_written_again(t
     transport.land_the_next_create_into_without_its_stamp()
     _interrupted(path, transport, DROPPED_AFTER_WRITE)
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), transport.items[NOTION_PAGE_ID].stamp) == (
         Applied((f'create   document "Garden handbook" into {NOTION_PAGE_ID}',)),
@@ -206,7 +206,7 @@ def test_an_adoption_that_wrote_the_content_but_not_the_stamp_is_written_again(t
 
 def _write_of_planting_interrupted(tmp_path: Path, transport: FakeTransport) -> Path:
     path = write_garden_report(tmp_path, publish=make_notion_publish())
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(
         tmp_path, publish=make_notion_publish(), blocks=make_garden_blocks(planting="Sow in May.")
     )
@@ -235,13 +235,13 @@ def test_a_section_edited_after_an_interrupted_write_to_a_service_that_writes_a_
 ) -> None:
     transport = FakeTransport()
     path = write_garden_report(tmp_path, publish=publish)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, publish=publish, blocks=make_garden_blocks(planting="Sow in May."))
     transport.drop_the_connection_after_write(1)
     _interrupted(path, transport, DROPPED_AFTER_WRITE)
     transport.edit_section_by_hand("page-1", "planting", by_hand)
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes()) == (
         Refused(
@@ -267,7 +267,7 @@ def test_a_line_nobody_published_in_a_section_an_interrupted_write_left_is_an_ed
     path = _write_of_planting_interrupted(tmp_path, transport)
     transport.edit_section_by_hand("page-1", "planting", "## Planting\nSow in May.\nWater daily.\n")
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert outcome == Refused(
         (

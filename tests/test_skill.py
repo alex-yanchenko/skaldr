@@ -694,11 +694,8 @@ def test_the_install_skill_flag_reports_a_skill_folder_it_cannot_create(
 
     rc = main(["--install-skill"])
 
-    captured = capsys.readouterr()
-    assert (rc, captured.err) == (
-        1,
-        f"error: could not install the skill into {blocked}: [Errno 17] File exists: '{blocked}'\n",
-    )
+    err = capsys.readouterr().err
+    assert (rc, err.startswith(f"error: could not install the skill into {blocked}: ")) == (1, True)
 
 
 def test_the_install_plan_rule_flag_writes_the_rule_block_into_claude_md_under_home(

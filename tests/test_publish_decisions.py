@@ -30,10 +30,10 @@ from tests.factories.publish_factory import (
     FakeTransport,
     make_garden_blocks,
     make_notion_publish,
+    notion_and_jira_registry,
+    publish_to_fakes,
     write_garden_report,
 )
-from tests.factories.publish_factory import notion_and_jira_registry as _registry
-from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID, make_jira_target
 
 DOCUMENT = ItemRef(TARGET_LABEL, None)
@@ -49,7 +49,7 @@ def _published_then_rewritten(
     tmp_path: Path, transport: FakeTransport, first: dict[str, Any], **rewritten: Any
 ) -> Path:
     path = write_garden_report(tmp_path, **first)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, **rewritten)
     transport.forget_calls()
     return path
@@ -60,7 +60,7 @@ def test_an_empty_page_the_target_names_is_adopted_and_its_split_sections_are_cr
     transport.seed(NOTION_PAGE_ID, "Blank page", None)
     path = write_garden_report(tmp_path, publish=INTO_THE_PAGE)
 
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     published = load_state(state_path_for(path), DOC_ID).targets[INTO_LABEL]
 
     assert (published.document and published.document.origin, published.sections["tools"].origin) == (
@@ -79,7 +79,7 @@ def test_a_page_with_content_and_no_stamp_is_refused_naming_it(tmp_path: Path) -
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     assert (transport.writes(), transport.items[NOTION_PAGE_ID].raw_sections) == (
         [],
         {"notes": "Bring gloves.\n"},
@@ -103,7 +103,7 @@ def test_a_page_with_child_pages_or_properties_is_not_empty(tmp_path: Path, exis
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     assert transport.writes() == []
 
 
@@ -113,7 +113,7 @@ def test_removing_the_target_of_an_adopted_page_releases_it_and_archives_what_sk
     transport = FakeTransport()
     transport.seed(NOTION_PAGE_ID, "Blank page", None)
     path = _published_then_rewritten(tmp_path, transport, {"publish": INTO_THE_PAGE}, publish=JIRA_PUBLISH)
-    prepared = prepare_publish(path, _registry(transport))
+    prepared = prepare_publish(path, notion_and_jira_registry(transport))
 
     outcome = apply_publish(prepared)
 
@@ -171,7 +171,7 @@ def test_apply_refuses_a_target_whose_place_changed_and_writes_nothing(
     path = _published_then_rewritten(tmp_path, transport, {}, publish=make_notion_publish(where=moved))
 
     with pytest.raises(PublishError, match=f"^{re.escape(_moved('Notion', TARGET_LABEL, new_label))}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     assert transport.writes() == []
 
 
@@ -181,8 +181,8 @@ def test_a_moved_target_shows_in_status_and_the_dry_run_names_the_refusal(tmp_pa
         tmp_path, transport, {}, publish=make_notion_publish(where={"parent_page": OTHER_PAGE_ID})
     )
 
-    status = publish_status(prepare_publish(path, _registry(transport)))
-    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+    status = publish_status(prepare_publish(path, notion_and_jira_registry(transport)))
+    dry_run = dry_run_publish(prepare_publish(path, notion_and_jira_registry(transport)))
 
     assert (status, dry_run.refusal) == (
         (
@@ -205,7 +205,7 @@ def test_a_page_written_into_moving_to_a_parent_page_is_a_move_too(tmp_path: Pat
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(_moved('Notion', INTO_LABEL, TARGET_LABEL))}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     assert transport.writes() == []
 
 
@@ -220,7 +220,7 @@ def test_a_jira_target_whose_parent_changed_is_refused(tmp_path: Path) -> None:
     old, new = "jira project PLAN under no parent issue", "jira project PLAN under PLAN-7"
 
     with pytest.raises(PublishError, match=f"^{re.escape(_moved('Jira', old, new))}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
 
 
 def test_an_item_deleted_in_the_service_shows_as_missing_in_status_and_diff(tmp_path: Path) -> None:
@@ -228,8 +228,8 @@ def test_an_item_deleted_in_the_service_shows_as_missing_in_status_and_diff(tmp_
     path = _published_then_rewritten(tmp_path, transport, {})
     transport.delete_item_by_hand("page-2")
 
-    status = publish_status(prepare_publish(path, _registry(transport)))
-    diff = diff_publish(prepare_publish(path, _registry(transport)))
+    status = publish_status(prepare_publish(path, notion_and_jira_registry(transport)))
+    diff = diff_publish(prepare_publish(path, notion_and_jira_registry(transport)))
 
     assert (status, diff, transport.writes()) == (
         (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("missing remotely",))),
@@ -248,9 +248,9 @@ def test_apply_refuses_an_item_deleted_in_the_service_and_overwrite_creates_it_a
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     refused_writes = transport.writes()
-    outcome = _publish(path, transport, overwrite=True)
+    outcome = publish_to_fakes(path, transport, overwrite=True)
 
     assert (
         refused_writes,
@@ -273,7 +273,7 @@ def test_overwrite_forgets_an_item_deleted_in_the_service_that_the_yaml_removed(
     )
     transport.delete_item_by_hand("page-2")
 
-    outcome = _publish(path, transport, overwrite=True)
+    outcome = publish_to_fakes(path, transport, overwrite=True)
 
     assert (
         outcome,
@@ -292,7 +292,7 @@ def test_the_dry_run_reads_the_services_and_shows_what_apply_would_refuse(tmp_pa
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
     before = state_path_for(path).read_bytes()
 
-    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+    dry_run = dry_run_publish(prepare_publish(path, notion_and_jira_registry(transport)))
 
     assert (
         dry_run.edits,
@@ -323,7 +323,7 @@ def test_the_dry_run_names_a_stamp_conflict_apply_would_refuse(tmp_path: Path) -
     transport.seed(NOTION_PAGE_ID, "Kitchen rota", OTHER_DOC_ID)
     path = write_garden_report(tmp_path, publish=INTO_THE_PAGE)
 
-    dry_run = dry_run_publish(prepare_publish(path, _registry(transport)))
+    dry_run = dry_run_publish(prepare_publish(path, notion_and_jira_registry(transport)))
 
     assert (dry_run.refusal, transport.writes()) == (
         f"{INTO_LABEL}, document ({NOTION_PAGE_ID}) is stamped with doc_id '{OTHER_DOC_ID}', so it belongs "
@@ -336,7 +336,7 @@ def test_the_dry_run_names_a_stamp_conflict_apply_would_refuse(tmp_path: Path) -
 def test_a_clean_dry_run_has_the_plan_apply_carries_out(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport, {}, blocks=make_garden_blocks(tools="Rake."))
-    prepared = prepare_publish(path, _registry(transport))
+    prepared = prepare_publish(path, notion_and_jira_registry(transport))
 
     dry_run = dry_run_publish(prepared)
 
@@ -351,7 +351,7 @@ def test_the_dry_run_command_prints_the_edit_and_fails_saying_apply_would_stop(
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
     capsys.readouterr()
 
-    exit_code = main(["publish", str(path)], registry=_registry(transport))
+    exit_code = main(["publish", str(path)], registry=notion_and_jira_registry(transport))
 
     assert (exit_code, capsys.readouterr()) == (
         1,
@@ -379,7 +379,10 @@ def test_the_diff_and_status_commands_name_an_item_missing_remotely(
     transport.delete_item_by_hand("page-2")
     capsys.readouterr()
 
-    codes = [main([command, str(path)], registry=_registry(transport)) for command in ("diff", "status")]
+    codes = [
+        main([command, str(path)], registry=notion_and_jira_registry(transport))
+        for command in ("diff", "status")
+    ]
 
     assert (codes, capsys.readouterr().out) == (
         [0, 0],
@@ -400,7 +403,7 @@ def test_the_diff_json_lists_an_item_missing_remotely(
     transport.delete_item_by_hand("page-2")
     capsys.readouterr()
 
-    main(["diff", str(path), "--json"], registry=_registry(transport))
+    main(["diff", str(path), "--json"], registry=notion_and_jira_registry(transport))
 
     assert capsys.readouterr().out == (
         '{\n  "remote_edits": [],\n  "yaml_changes": [],\n  "missing_remotely": [\n    {\n'
@@ -417,7 +420,7 @@ def test_the_dry_run_command_names_a_refusal_apply_would_make(
     transport.delete_item_by_hand("page-2")
     capsys.readouterr()
 
-    exit_code = main(["publish", str(path)], registry=_registry(transport))
+    exit_code = main(["publish", str(path)], registry=notion_and_jira_registry(transport))
 
     assert (exit_code, capsys.readouterr().err) == (
         1,

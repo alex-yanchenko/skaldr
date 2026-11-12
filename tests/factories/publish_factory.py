@@ -1,5 +1,6 @@
 import re
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -105,9 +106,9 @@ def make_garden_report(
     )
 
 
-def authored_from(data: dict[str, Any]) -> Authored:
+def authored_from(data: Mapping[str, object]) -> Authored:
     with tempfile.TemporaryDirectory() as directory:
-        return load_authored(write_report(Path(directory), data))
+        return load_authored(write_report(Path(directory), dict(data)))
 
 
 def authored_garden(**overrides: Any) -> Authored:
@@ -624,10 +625,6 @@ def fake_registry(
             for target_type in target_types
         ]
     )
-
-
-def exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 def notion_and_jira_registry(transport: FakeTransport) -> ConnectorRegistry:

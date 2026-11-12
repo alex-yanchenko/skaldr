@@ -4,7 +4,7 @@ import os
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 import pytest
 from pydantic import JsonValue
@@ -13,6 +13,7 @@ from skaldr.export_targets import ExportTarget
 from tests.factories.example_factory import GOLDEN_REWRITE_VARIABLE_FOR, golden_of
 from tests.factories.export_factory import folder_texts
 
+TextKind = Literal["html", "markdown"]
 MOST_DIFFERENCES_SHOWN: Final = 10
 MOST_LINES_SHOWN_PER_SIDE: Final = 4
 LONGEST_VALUE_SHOWN: Final = 80
@@ -46,7 +47,7 @@ def _json_differences(path: str, expected: JsonValue, written: JsonValue) -> Ite
         yield f"{path}: expected {_shown(expected)}, got {_shown(written)}"
 
 
-def _with_a_count(name: str, places: list[str]) -> str:
+def _counted_report(name: str, places: list[str]) -> str:
     noun = "place" if len(places) == 1 else "places"
     shown = places[:MOST_DIFFERENCES_SHOWN]
     hidden = len(places) - len(shown)
@@ -56,15 +57,15 @@ def _with_a_count(name: str, places: list[str]) -> str:
 
 def _json_mismatch(name: str, expected: str, written: str) -> str | None:
     differences = list(_json_differences("$", json.loads(expected), json.loads(written)))
-    return _with_a_count(name, [f"  {difference}" for difference in differences]) if differences else None
+    return _counted_report(name, [f"  {difference}" for difference in differences]) if differences else None
 
 
-def _where(golden_lines: list[str], at: int, html: bool) -> str:
-    pattern = HTML_COMPONENT if html else MARKDOWN_HEADING
+def _where(golden_lines: list[str], at: int, kind: TextKind) -> str:
+    pattern = HTML_COMPONENT if kind == "html" else MARKDOWN_HEADING
     anchor = next((line for line in reversed(golden_lines[: at + 1]) if pattern.match(line)), None)
     if anchor is None:
-        return "before the first component" if html else "before the first heading"
-    return f"in {anchor}" if html else f"under '{anchor}'"
+        return "before the first component" if kind == "html" else "before the first heading"
+    return f"in {anchor}" if kind == "html" else f"under '{anchor}'"
 
 
 def _side(marker: str, lines: list[str]) -> list[str]:
@@ -74,13 +75,14 @@ def _side(marker: str, lines: list[str]) -> list[str]:
 
 
 def _line_mismatch(name: str, expected: str, written: str) -> str | None:
+    kind: TextKind = "html" if name.endswith(".html") else "markdown"
     golden_lines = expected.splitlines()
     written_lines = written.splitlines()
     matcher = difflib.SequenceMatcher(a=golden_lines, b=written_lines, autojunk=False)
     places = [
         "\n".join(
             [
-                f"  {_where(golden_lines, start, name.endswith('.html'))} (golden line {start + 1}):",
+                f"  {_where(golden_lines, start, kind)} (golden line {start + 1}):",
                 *_side("-", golden_lines[start:end]),
                 *_side("+", written_lines[written_start:written_end]),
             ]
@@ -88,7 +90,7 @@ def _line_mismatch(name: str, expected: str, written: str) -> str | None:
         for tag, start, end, written_start, written_end in matcher.get_opcodes()
         if tag != "equal"
     ]
-    return _with_a_count(name, places) if places else None
+    return _counted_report(name, places) if places else None
 
 
 def golden_mismatch(name: str, expected: str, written: str) -> str | None:

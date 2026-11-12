@@ -1,22 +1,34 @@
+from collections.abc import Mapping
+
 import pytest
 
 from tests import node_page
 
+SKIP_REASON = "the page scripts run under node"
+
 
 @pytest.mark.parametrize(
-    ("node", "ci", "skipped"),
+    ("node", "environ", "skipped"),
     [
-        pytest.param(None, None, True, id="missing-and-local"),
-        pytest.param(None, "", True, id="missing-and-ci-empty"),
-        pytest.param(None, "true", False, id="missing-in-ci-so-the-tests-run-and-fail"),
-        pytest.param("/usr/bin/node", None, False, id="installed-and-local"),
-        pytest.param("/usr/bin/node", "true", False, id="installed-in-ci"),
+        pytest.param(None, {}, True, id="missing-and-local"),
+        pytest.param(None, {"CI": ""}, True, id="missing-and-ci-empty"),
+        pytest.param(None, {"CI": "true"}, False, id="missing-in-ci-so-the-tests-run-and-fail"),
+        pytest.param("/usr/bin/node", {}, False, id="installed-and-local"),
+        pytest.param("/usr/bin/node", {"CI": "true"}, False, id="installed-in-ci"),
     ],
 )
 def test_the_page_script_tests_are_skipped_only_when_node_is_missing_outside_ci(
-    node: str | None, ci: str | None, skipped: bool
+    node: str | None, environ: Mapping[str, str], skipped: bool
 ) -> None:
-    assert node_page.skipped_without_node(node, ci) is skipped
+    mark = node_page.node_requirement(node, environ).mark
+
+    assert (mark.name, mark.args, mark.kwargs) == ("skipif", (skipped,), {"reason": SKIP_REASON})
+
+
+def test_the_requires_node_mark_is_built_from_this_machine_and_its_environment() -> None:
+    expected = node_page.node_requirement(node_page.NODE, node_page.os.environ).mark
+
+    assert node_page.requires_node.mark == expected
 
 
 def test_a_missing_node_fails_a_page_script_test_with_the_reason(monkeypatch: pytest.MonkeyPatch) -> None:

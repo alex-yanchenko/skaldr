@@ -19,14 +19,14 @@ from tests.factories.publish_factory import (
     DOC_ID,
     TARGET_LABEL,
     FakeTransport,
+    drafted_content,
     fake_registry,
     make_garden_blocks,
     make_garden_meta,
     make_notion_publish,
+    publish_to_fakes,
     write_garden_report,
 )
-from tests.factories.publish_factory import drafted_content as _drafted
-from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID
 
 DOCUMENT = ItemRef(TARGET_LABEL, None)
@@ -54,7 +54,7 @@ def _published_then_rewritten(
     tmp_path: Path, transport: FakeTransport, published: dict[str, Any], rewritten: dict[str, Any]
 ) -> Path:
     path = write_garden_report(tmp_path, **published)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, **rewritten)
     transport.forget_calls()
     return path
@@ -68,12 +68,12 @@ def test_a_first_publish_sets_the_icon_on_every_item_and_the_cover_on_the_docume
     path = write_garden_report(tmp_path, **_look(icon=SEEDLING, cover=COVER_URL))
     transport = FakeTransport()
 
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
 
     assert (_looks(transport), transport.items["page-1"].content, transport.items["page-2"].content) == (
         [(SEEDLING, COVER_URL), (SEEDLING, None)],
-        _drafted(path),
-        _drafted(path, "tools"),
+        drafted_content(path),
+        drafted_content(path, "tools"),
     )
 
 
@@ -101,7 +101,7 @@ def test_a_changed_icon_and_a_removed_cover_are_written_to_each_item_that_shows_
         tmp_path, transport, _look(icon=SEEDLING, cover=COVER_URL), _look(icon=SUNFLOWER)
     )
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), _looks(transport)) == (
         Applied(("update   document: icon, cover", "update   section tools: icon")),
@@ -117,7 +117,7 @@ def test_an_icon_removed_from_the_yaml_is_cleared(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport, _look(icon=SEEDLING), _look())
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), _looks(transport)) == (
         Applied(("update   document: icon", "update   section tools: icon")),
@@ -133,9 +133,9 @@ def test_an_icon_a_person_changes_stops_the_publish_and_overwrite_puts_the_yaml_
     path = _published_then_rewritten(tmp_path, transport, _look(icon=SEEDLING), _look(icon=SEEDLING))
     transport.set_icon_by_hand("page-1", FIRE)
 
-    refused = _publish(path, transport)
+    refused = publish_to_fakes(path, transport)
     refused_writes = transport.writes()
-    overwritten = _publish(path, transport, overwrite=True)
+    overwritten = publish_to_fakes(path, transport, overwrite=True)
 
     assert (refused, refused_writes, overwritten, transport.writes(), _looks(transport)) == (
         Refused(
@@ -166,7 +166,7 @@ def test_an_icon_and_cover_a_person_sets_where_the_yaml_sets_none_are_left_alone
     transport.set_cover_by_hand("page-1", COVER_URL)
 
     statuses = publish_status(prepare_publish(path, fake_registry(transport)))
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (statuses, outcome, transport.writes(), _looks(transport)) == (
         (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("in sync",))),
@@ -181,7 +181,7 @@ def test_an_icon_the_yaml_adds_replaces_one_a_person_set_without_a_remote_edit(t
     path = _published_then_rewritten(tmp_path, transport, {}, _look(icon=SEEDLING))
     transport.set_icon_by_hand("page-1", FIRE)
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), _looks(transport)) == (
         Applied(("update   document: icon", "update   section tools: icon")),
@@ -201,10 +201,10 @@ def test_writing_into_a_page_sets_the_yaml_icon_and_keeps_a_cover_the_yaml_does_
         tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}), **_look(icon=SEEDLING)
     )
 
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     transport.forget_calls()
 
-    assert (_looks(transport), _publish(path, transport), transport.writes()) == (
+    assert (_looks(transport), publish_to_fakes(path, transport), transport.writes()) == (
         [(SEEDLING, COVER_URL)],
         Applied(()),
         [],
@@ -218,11 +218,11 @@ def test_a_release_clears_the_icon_skaldr_set_and_keeps_a_cover_a_person_set(tmp
     path = write_garden_report(
         tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}), **_look(icon=SEEDLING)
     )
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, publish={"doc_id": DOC_ID, "targets": []}, **_look(icon=SEEDLING))
     transport.forget_calls()
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), _looks(transport)) == (
         Applied((f"release  document ({NOTION_PAGE_ID})",)),

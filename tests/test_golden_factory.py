@@ -115,7 +115,54 @@ def test_a_folder_that_matches_its_golden_passes(tmp_path: Path, monkeypatch: py
     monkeypatch.delenv("SKALDR_WRITE_SLACK_GOLDEN", raising=False)
     golden, written = _folders(tmp_path, {"page.md": MARKDOWN}, {"page.md": MARKDOWN})
 
-    assert assert_matches_golden("slack", written, golden) is None
+    assert_matches_golden("slack", written, golden)
+
+
+def test_a_side_with_more_than_four_lines_shows_four_and_counts_the_rest() -> None:
+    expected = "\n".join(f"a{number}" for number in range(1, 7)) + "\n"
+
+    assert golden_mismatch("page.md", expected, "b\n") == (
+        "page.md differs from the golden in 1 place:\n"
+        "  before the first heading (golden line 1):\n"
+        "    - a1\n"
+        "    - a2\n"
+        "    - a3\n"
+        "    - a4\n"
+        "    - ... 2 more lines\n"
+        "    + b"
+    )
+
+
+def test_a_json_value_longer_than_eighty_characters_is_cut_with_an_ellipsis() -> None:
+    cut = "'" + "x" * 76 + "..."
+    other = "'" + "y" * 76 + "..."
+
+    assert golden_mismatch("page.adf.json", _json({"v": "x" * 100}), _json({"v": "y" * 100})) == (
+        f"page.adf.json differs from the golden in 1 place:\n  $.v: expected {cut}, got {other}"
+    )
+
+
+def test_an_html_difference_before_any_component_says_so() -> None:
+    written = HTML.replace("<!doctype html>", "<!DOCTYPE html>")
+
+    assert golden_mismatch("example.html", HTML, written) == (
+        "example.html differs from the golden in 1 place:\n"
+        "  before the first component (golden line 1):\n"
+        "    - <!doctype html>\n"
+        "    + <!DOCTYPE html>"
+    )
+
+
+def test_a_line_longer_than_one_hundred_and_twenty_characters_is_cut() -> None:
+    expected = "x" * 150 + "\n"
+    written = "y" * 150 + "\n"
+
+    assert golden_mismatch("page.md", expected, written) == (
+        "page.md differs from the golden in 1 place:\n"
+        "  before the first heading (golden line 1):\n"
+        f"    - {'x' * 120}\n"
+        f"    + {'y' * 120}"
+    )
 
 
 def test_a_folder_that_differs_from_its_golden_fails_with_the_per_block_difference(

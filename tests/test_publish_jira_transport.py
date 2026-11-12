@@ -40,7 +40,7 @@ from tests.factories.jira_factory import (
     Reply,
     summarised_request,
 )
-from tests.factories.publish_factory import exactly as _exactly
+from tests.factories.match_factory import exactly
 
 DOC_ID = "garden-handbook"
 DOC_LABEL = "skaldr-garden-handbook"
@@ -153,7 +153,7 @@ def test_a_description_edit_made_after_the_read_stops_a_fields_write_before_it_i
     transport, created = _created(jira)
     jira.edit_by_hand(created.item_id, description=_description(INTRO, _table(), SOW_IN_MAY))
 
-    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+    with pytest.raises(WriteRejectedError, match=exactly(CHANGED_SINCE_READ)):
         transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
     assert jira.calls() == [
         ("GET", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp"),
@@ -192,7 +192,7 @@ def test_a_description_edit_landing_during_a_fields_write_is_not_taken_as_publis
 
     with pytest.raises(ConnectorError) as raised:
         transport.write_fields(created.item_id, _fields_write(FIELDS_WRITTEN, "Garden guide"))
-    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+    with pytest.raises(WriteRejectedError, match=exactly(CHANGED_SINCE_READ)):
         transport.write_content(
             created.item_id, ContentWrite(dict(CONTENT.sections), created.raw_sections, STAMP)
         )
@@ -540,7 +540,7 @@ def test_a_description_over_jiras_limit_is_refused_before_anything_is_sent() -> 
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             f'the description of the new issue "Garden handbook" is {size:,} characters of ADF, over the '
             "32,767 Jira takes; split the document further with `split`, or shorten it"
         ),
@@ -554,7 +554,7 @@ def test_creating_into_an_existing_issue_is_a_rejected_write_and_sends_nothing()
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             "Jira publishes only into issues skaldr creates, so it cannot write into DEMO-5; publish under "
             "it with `parent` instead"
         ),
@@ -568,7 +568,7 @@ def test_creating_for_a_notion_target_is_a_rejected_write_and_sends_nothing() ->
     target = NotionTarget.model_validate(make_notion_target())
 
     with pytest.raises(
-        WriteRejectedError, match=_exactly("the Jira connector cannot publish to a notion target")
+        WriteRejectedError, match=exactly("the Jira connector cannot publish to a notion target")
     ):
         _transport(jira).create_item(NewItem(target, STAMP, CONTENT))
     assert jira.requests == []
@@ -580,7 +580,7 @@ def test_a_section_that_is_not_a_list_of_adf_blocks_is_a_rejected_write_and_send
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             'a Jira section holds a JSON list of ADF blocks, and this one does not: \'{"type": "paragraph"}\''
         ),
     ):
@@ -594,9 +594,7 @@ def test_a_content_write_of_a_section_that_is_not_adf_blocks_is_a_rejected_write
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
-            "a Jira section holds a JSON list of ADF blocks, and this one does not: 'Sow in May.'"
-        ),
+        match=exactly("a Jira section holds a JSON list of ADF blocks, and this one does not: 'Sow in May.'"),
     ):
         transport.write_content(
             created.item_id, ContentWrite({"planting": "Sow in May."}, created.raw_sections, STAMP)
@@ -678,7 +676,7 @@ def test_a_rejected_issue_type_is_a_rejected_write() -> None:
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             "Jira refused POST /rest/api/3/issue (HTTP 400): issuetype: Specify a valid issue type"
         ),
     ):
@@ -739,7 +737,7 @@ def test_a_missing_issue_reads_as_not_found_once_the_sign_in_is_confirmed() -> N
 
     with pytest.raises(
         ItemNotFoundError,
-        match=_exactly(
+        match=exactly(
             "Jira has no issue DEMO-9 that this account can see (HTTP 404 to GET "
             "/rest/api/3/issue/DEMO-9/changelog)"
         ),
@@ -827,7 +825,7 @@ def test_a_content_write_against_a_description_edited_since_the_read_is_refused_
     transport, created = _created(jira)
     jira.edit_by_hand(created.item_id, description={"version": 1, "type": "doc", "content": [PLANTING]})
 
-    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+    with pytest.raises(WriteRejectedError, match=exactly(CHANGED_SINCE_READ)):
         transport.write_content(
             created.item_id, ContentWrite({"planting": "[]"}, created.raw_sections, STAMP)
         )
@@ -841,7 +839,7 @@ def test_a_block_rewritten_by_hand_inside_a_section_is_refused_unsent() -> None:
         created.item_id, description=_description(_words("Welcome, gardeners."), _table(), PLANTING)
     )
 
-    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+    with pytest.raises(WriteRejectedError, match=exactly(CHANGED_SINCE_READ)):
         transport.write_content(
             created.item_id, ContentWrite(dict(created.raw_sections), created.raw_sections, STAMP)
         )
@@ -856,7 +854,7 @@ def test_a_write_quoting_section_text_jira_does_not_hold_under_the_same_keys_is_
     transport, created = _created(jira)
     stale = {**created.raw_sections, "intro": section_text([_words("Welcome, gardeners.")])}
 
-    with pytest.raises(WriteRejectedError, match=_exactly(CHANGED_SINCE_READ)):
+    with pytest.raises(WriteRejectedError, match=exactly(CHANGED_SINCE_READ)):
         transport.write_content(created.item_id, ContentWrite(dict(created.raw_sections), stale, STAMP))
     assert jira.calls() == _read_calls("DEMO-1")
 
@@ -895,7 +893,7 @@ def test_a_section_write_quoting_text_jira_no_longer_holds_is_refused_unsent() -
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             "section planting of DEMO-1 no longer holds the text skaldr read, so skaldr did not write it"
         ),
     ):
@@ -967,7 +965,7 @@ def test_a_field_jira_does_not_know_is_a_rejected_write() -> None:
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             "Jira refused PUT /rest/api/3/issue/DEMO-1 (HTTP 400): story_points: Field 'story_points' cannot "
             "be set. It is not on the appropriate screen, or unknown."
         ),
@@ -1018,7 +1016,7 @@ def test_an_archive_retried_after_its_stamp_was_not_saved_finds_its_comment_and_
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             "Jira refused PUT /rest/api/3/issue/DEMO-1/properties/skaldr.stamp (HTTP 400): Bad value"
         ),
     ):
@@ -1100,7 +1098,7 @@ def test_an_unstamped_issue_without_the_documents_label_is_not_written_or_archiv
     jira.seed("DEMO-3", summary="Notes", labels=["platform"], priority={"name": "High"})
     transport = _transport(jira)
 
-    with pytest.raises(WriteRejectedError, match=_exactly(UNLABELLED.format(verb=verb))):
+    with pytest.raises(WriteRejectedError, match=exactly(UNLABELLED.format(verb=verb))):
         write(transport)
     assert [call for call in jira.calls() if call[0] != "GET"] == []
 
@@ -1150,9 +1148,9 @@ def test_an_unreadable_stamp_stops_a_read_and_an_archive(stamp: JsonValue) -> No
     jira.seed("DEMO-3", summary="Notes").properties["skaldr.stamp"] = stamp
     transport = _transport(jira)
 
-    with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
+    with pytest.raises(ConnectorError, match=exactly(UNREADABLE_STAMP)):
         transport.read_item("DEMO-3", ItemContent(title=""))
-    with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
+    with pytest.raises(ConnectorError, match=exactly(UNREADABLE_STAMP)):
         transport.archive_item("DEMO-3", ARCHIVE_OF_NOTES)
     assert jira.issues["DEMO-3"].comments == []
 
@@ -1179,7 +1177,7 @@ def test_an_archived_issue_reads_as_not_found_and_archiving_it_again_sends_nothi
     transport.archive_item(created.item_id, ARCHIVE)
     archived_again = jira.calls()
     with pytest.raises(
-        ItemNotFoundError, match=_exactly("skaldr archived DEMO-1, so it no longer publishes there")
+        ItemNotFoundError, match=exactly("skaldr archived DEMO-1, so it no longer publishes there")
     ):
         transport.read_item(created.item_id, CONTENT)
 
@@ -1209,7 +1207,7 @@ def test_an_issue_with_no_way_to_a_done_status_is_not_archived() -> None:
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly(
+        match=exactly(
             "DEMO-1 has no transition from 'Blocked' to a done status, so skaldr cannot archive it; close it "
             "in Jira, then publish again"
         ),
@@ -1272,7 +1270,7 @@ def test_jira_has_nothing_to_release() -> None:
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly(
+        match=exactly(
             "Jira has nothing to release: skaldr writes only into issues it created, and archives those"
         ),
     ):
@@ -1456,7 +1454,7 @@ def test_an_issue_whose_status_jira_does_not_name_cannot_be_archived(status: Jso
     else:
         issue.fields["status"] = status
 
-    with pytest.raises(ConnectorError, match=_exactly("Jira did not say which status DEMO-3 is in")):
+    with pytest.raises(ConnectorError, match=exactly("Jira did not say which status DEMO-3 is in")):
         _transport(jira).archive_item("DEMO-3", ARCHIVE_OF_NOTES)
     assert (issue.comments, issue.properties) == ([], {})
 
@@ -1510,7 +1508,7 @@ def test_a_write_to_an_issue_deleted_after_the_read_is_item_not_found(
     transport.read_item(created.item_id, CONTENT)
     jira.delete_by_hand(created.item_id)
 
-    with pytest.raises(ItemNotFoundError, match=_exactly(message)):
+    with pytest.raises(ItemNotFoundError, match=exactly(message)):
         write(transport, created)
     assert [call for call in jira.calls() if call[0] != "GET"] == []
 
@@ -1552,7 +1550,7 @@ def test_a_close_whose_screen_requires_a_resolution_stops_the_archive_and_never_
     )
 
     for _ in range(2):
-        with pytest.raises(WriteRejectedError, match=_exactly(refusal)):
+        with pytest.raises(WriteRejectedError, match=exactly(refusal)):
             transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
@@ -1817,7 +1815,7 @@ def test_a_global_id_longer_than_jira_takes_is_refused_before_anything_is_sent()
         "Jira takes; shorten the document's doc_id or the section's id"
     )
 
-    with pytest.raises(WriteRejectedError, match=_exactly(expected)):
+    with pytest.raises(WriteRejectedError, match=exactly(expected)):
         transport.write_links(created.item_id, LinksWrite(stamp, (HANDBOOK_PAGE,)))
     assert [call for call in jira.calls() if call[0] != "GET"] == []
 
@@ -1827,7 +1825,7 @@ def test_a_links_write_to_an_issue_of_another_document_is_refused_naming_the_sta
     transport, created = _created(jira)
 
     with pytest.raises(
-        WriteRejectedError, match=_exactly("Jira issue DEMO-1 is not stamped with doc_id 'kitchen-rota'")
+        WriteRejectedError, match=exactly("Jira issue DEMO-1 is not stamped with doc_id 'kitchen-rota'")
     ):
         transport.write_links(created.item_id, LinksWrite(Stamp("kitchen-rota", None), (HANDBOOK_PAGE,)))
     assert jira.issues["DEMO-1"].remote_links == []

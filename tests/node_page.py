@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TypedDict
 
@@ -11,8 +12,8 @@ import pytest
 NODE = shutil.which("node")
 
 
-def skipped_without_node(node: str | None, ci: str | None) -> bool:
-    return node is None and not ci
+def should_skip_node_tests(node: str | None, environ: Mapping[str, str]) -> bool:
+    return node is None and not environ.get("CI")
 
 
 def node_binary() -> str:
@@ -21,9 +22,11 @@ def node_binary() -> str:
     return NODE
 
 
-requires_node = pytest.mark.skipif(
-    skipped_without_node(NODE, os.environ.get("CI")), reason="the page scripts run under node"
-)
+def node_requirement(node: str | None, environ: Mapping[str, str]) -> pytest.MarkDecorator:
+    return pytest.mark.skipif(should_skip_node_tests(node, environ), reason="the page scripts run under node")
+
+
+requires_node = node_requirement(NODE, os.environ)
 
 _PAGE_DRIVER = """
 const vm = require("vm");

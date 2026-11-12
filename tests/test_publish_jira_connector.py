@@ -22,6 +22,7 @@ from tests.factories.auth_factory import (
     refuse_outside_the_tests_setup,
 )
 from tests.factories.jira_factory import DONE, SITE, FakeJira, Reply
+from tests.factories.match_factory import exactly
 from tests.factories.publish_factory import (
     DOC_ID,
     make_garden_blocks,
@@ -29,7 +30,6 @@ from tests.factories.publish_factory import (
     make_garden_report,
     write_garden_report,
 )
-from tests.factories.publish_factory import exactly as _exactly
 
 TARGET_LABEL = "jira project DEMO under no parent issue"
 
@@ -92,7 +92,7 @@ def test_each_region_renders_as_its_adf_blocks() -> None:
 def test_opening_a_transport_without_a_jira_sign_in_says_how_to_sign_in() -> None:
     target = JiraTarget.model_validate(make_jira_target())
 
-    with pytest.raises(ConnectorError, match=_exactly("Not signed in to Jira; run `skaldr auth jira`")):
+    with pytest.raises(ConnectorError, match=exactly("Not signed in to Jira; run `skaldr auth jira`")):
         JiraConnector().open_transport(target)
 
 
@@ -103,9 +103,7 @@ def test_opening_a_transport_for_a_notion_target_is_refused_before_any_sign_in()
         signed_in_for.append(site)
         return make_jira_credentials()
 
-    with pytest.raises(
-        ConnectorError, match=_exactly("the Jira connector cannot publish to a notion target")
-    ):
+    with pytest.raises(ConnectorError, match=exactly("the Jira connector cannot publish to a notion target")):
         JiraConnector(sign_in=sign_in).open_transport(NotionTarget.model_validate(make_notion_target()))
     assert signed_in_for == []
 
@@ -119,7 +117,7 @@ def test_a_target_naming_a_site_with_no_jira_sign_in_at_all_says_how_to_sign_in(
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly("Not signed in to Jira at https://third.atlassian.net; run `skaldr auth jira`"),
+        match=exactly("Not signed in to Jira at https://third.atlassian.net; run `skaldr auth jira`"),
     ):
         JiraConnector().open_transport(target)
 
@@ -176,7 +174,7 @@ def test_several_jira_sign_ins_and_no_site_on_the_target_name_the_key_to_set() -
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly(
+        match=exactly(
             f"Signed in to several Jira sites ({SITE}, {OTHER_SITE}); "
             "name one with `site` in the target's `where`"
         ),
@@ -202,7 +200,7 @@ def test_a_site_with_no_jira_sign_in_lists_the_sites_that_are_signed_in() -> Non
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly(
+        match=exactly(
             "Not signed in to Jira at https://third.atlassian.net; "
             f"signed in to {SITE}, {OTHER_SITE}; run `skaldr auth jira` to add it"
         ),
@@ -475,7 +473,7 @@ def test_changing_the_site_of_a_target_is_a_move_that_writes_nothing(tmp_path: P
 
     with pytest.raises(
         PublishError,
-        match=_exactly(
+        match=exactly(
             f"the Jira target moved from {TARGET_LABEL} to {TARGET_LABEL} on {OTHER_SITE}; skaldr does not "
             "move pages or issues, so nothing was written. Publish once with the old target removed from the "
             "`publish` block, which archives the items skaldr created there and releases any page it wrote "
@@ -499,7 +497,7 @@ def test_a_document_over_the_description_limit_stops_before_anything_is_sent(tmp
 
     with pytest.raises(
         PublishError,
-        match=_exactly(
+        match=exactly(
             f"{TARGET_LABEL}, document: the item has {size:,} characters of ADF, over the 32,767 a Jira item "
             "can take; split the document further with `split`, or shorten it"
         ),

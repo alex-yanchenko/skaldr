@@ -13,12 +13,12 @@ from tests.factories.publish_factory import (
     DOC_ID,
     INTO_LABEL,
     FakeTransport,
+    drafted_content,
     make_garden_blocks,
     make_notion_publish,
+    publish_to_fakes,
     write_garden_report,
 )
-from tests.factories.publish_factory import drafted_content as _drafted
-from tests.factories.publish_factory import publish_to_fakes as _publish
 from tests.factories.report_factory import NOTION_PAGE_ID
 
 SHED: JsonFields = {"Area": "Shed", "Tags": ["soil", "seeds"]}
@@ -32,7 +32,7 @@ def _republished(
     writes: WriteGranularity = "section",
 ) -> Path:
     path = write_garden_report(tmp_path, **first)
-    _publish(path, transport, writes=writes)
+    publish_to_fakes(path, transport, writes=writes)
     write_garden_report(tmp_path, **then)
     transport.forget_calls()
     return path
@@ -47,12 +47,12 @@ def test_comment_markers_are_not_an_edit_and_the_write_quotes_the_marked_text(tm
     path = _republished(tmp_path, transport, {}, {"blocks": make_garden_blocks(planting="Sow in May.")})
     transport.comment_on("page-1", "planting")
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), transport.items["page-1"].content) == (
         Applied(("update   document: planting (blocks[2])",)),
         [("write_section", "page-1", "planting")],
-        _drafted(path),
+        drafted_content(path),
     )
 
 
@@ -66,14 +66,14 @@ def test_a_whole_content_connector_gets_one_content_write_per_item(tmp_path: Pat
         writes="content",
     )
 
-    outcome = _publish(path, transport, writes="content")
+    outcome = publish_to_fakes(path, transport, writes="content")
 
     assert (outcome, transport.writes(), transport.items["page-1"].content) == (
         Applied(
             ("update   document: block e976d1ce (blocks[0]), planting (blocks[2]), remove block 2c7116fc",)
         ),
         [("write_content", "page-1")],
-        _drafted(path),
+        drafted_content(path),
     )
 
 
@@ -87,12 +87,12 @@ def test_a_moved_section_is_written_at_its_new_place(tmp_path: Path) -> None:
         {"publish": make_notion_publish(), "blocks": [make_garden_blocks()[0], planting, tools]},
     )
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), list(transport.items["page-1"].raw_sections)) == (
         Applied(("update   document: planting (blocks[1])",)),
         [("write_section", "page-1", "planting")],
-        list(_drafted(path).sections),
+        list(drafted_content(path).sections),
     )
 
 
@@ -131,7 +131,7 @@ def test_a_fields_write_names_only_what_changed_and_clears_what_was_removed(
     transport = FakeTransport()
     path = _republished(tmp_path, transport, _with_fields(SHED), then)
 
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
 
     assert (transport.writes(), transport.items["page-1"].fields) == ([write], fields)
 
@@ -141,8 +141,8 @@ def test_overwriting_a_field_edit_writes_that_field_back(tmp_path: Path) -> None
     path = _republished(tmp_path, transport, _with_fields(SHED), _with_fields(SHED))
     transport.edit_fields_by_hand("page-1", {**SHED, "Area": "Barn"})
 
-    refused = _publish(path, transport)
-    overwritten = _publish(path, transport, overwrite=True)
+    refused = publish_to_fakes(path, transport)
+    overwritten = publish_to_fakes(path, transport, overwrite=True)
 
     assert (
         type(refused),
@@ -162,7 +162,7 @@ def test_a_field_skaldr_does_not_own_changing_in_the_service_is_not_an_edit(tmp_
     path = _republished(tmp_path, transport, _with_fields(SHED), _with_fields(SHED))
     transport.edit_fields_by_hand("page-1", {**SHED, "Board": "Sprint 5"})
 
-    assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
+    assert (publish_to_fakes(path, transport), transport.writes()) == (Applied(()), [])
 
 
 def test_overwriting_a_field_edit_never_clears_a_field_skaldr_does_not_own(tmp_path: Path) -> None:
@@ -170,8 +170,8 @@ def test_overwriting_a_field_edit_never_clears_a_field_skaldr_does_not_own(tmp_p
     path = _republished(tmp_path, transport, _with_fields(SHED), _with_fields(SHED))
     transport.edit_fields_by_hand("page-1", {**SHED, "Area": "Barn", "Board": "Sprint 5"})
 
-    refused = _publish(path, transport)
-    overwritten = _publish(path, transport, overwrite=True)
+    refused = publish_to_fakes(path, transport)
+    overwritten = publish_to_fakes(path, transport, overwrite=True)
 
     assert (type(refused), overwritten, transport.writes(), transport.items["page-1"].fields) == (
         Refused,
@@ -193,7 +193,7 @@ def test_overwrite_cannot_bring_back_a_page_written_into_that_is_gone(tmp_path: 
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        _publish(path, transport, overwrite=True)
+        publish_to_fakes(path, transport, overwrite=True)
     assert transport.writes() == []
 
 
@@ -211,7 +211,7 @@ def test_the_doc_id_stamp_survives_an_override_of_the_labels(tmp_path: Path) -> 
     )
     created = (transport.items["page-2"].stamp, transport.items["page-2"].fields)
 
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
 
     assert (
         created,
