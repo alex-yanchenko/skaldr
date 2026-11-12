@@ -64,7 +64,7 @@ def fold_case(named: Node, *today: GenericNode) -> FoldCase:
 
 FOLD_CASES: Mapping[str, FoldCase] = {
     "fact strip": fold_case(
-        FactStrip((LabelledValue("Site:", plain("West")), LabelledValue(" ", UNDERLINED_OPS))),
+        FactStrip((LabelledValue("Site", plain("West")), LabelledValue(" ", UNDERLINED_OPS))),
         ListNode(
             "bullet",
             (ListEntry((*bold("Site"), Plain(": "), Plain("West"))), ListEntry(UNDERLINED_OPS)),

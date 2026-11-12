@@ -496,7 +496,7 @@ def test_a_list_cell_on_a_danger_row_keeps_the_row_dot_before_its_list() -> None
 def test_a_fact_strip_is_one_paragraph_of_its_facts_joined_by_middle_dots() -> None:
     strip = FactStrip(
         (
-            LabelledValue("Site:", make_rich_text("West")),
+            LabelledValue("Site", make_rich_text("West")),
             LabelledValue(None, make_rich_text("Q3")),
             LabelledValue("Owner", make_rich_text("Ops")),
         )

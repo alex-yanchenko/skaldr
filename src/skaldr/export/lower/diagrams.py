@@ -4,7 +4,7 @@ from typing import Final, assert_never
 
 from skaldr import compute
 from skaldr.charts import chart_legend, donut_total
-from skaldr.export.inline import bold, one_line
+from skaldr.export.inline import bold, label_text, one_line
 from skaldr.export.lower.context import Lowering, bullets, plain_cells, spaced, with_bold_label
 from skaldr.export.tree import (
     Diagram,
@@ -35,7 +35,9 @@ def _graph_node(key: str, step: FlowStep, lowering: Lowering, prefix: str = "") 
 
 
 def _step_entry(step: FlowStep, lowering: Lowering) -> ListEntry:
-    text = with_bold_label(step.label, lowering.rich(step.note)) if step.note else bold(step.label)
+    text = (
+        with_bold_label(label_text(step.label), lowering.rich(step.note)) if step.note else bold(step.label)
+    )
     if step.badges:
         text = spaced([text, lowering.chips(step.badges)])
     children: tuple[Node, ...] = ()

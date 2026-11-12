@@ -2,7 +2,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from skaldr import compute
-from skaldr.export.inline import bold, label_text, plain, rich_line
+from skaldr.export.inline import bold, plain, rich_line
 from skaldr.export.runs import Break, Chip, ExportRich, ExportRun, TonedLabel
 from skaldr.export.tree import ListEntry, ListNode, Node, Paragraph, TableCell, ToneName
 from skaldr.models import (
@@ -117,7 +117,7 @@ def toned(tone: ToneLiteral | None, runs: Rich) -> ExportRich:
 
 
 def with_bold_label(label: str | None, text: ExportRich, tone: ToneLiteral | None = None) -> ExportRich:
-    name = toned(tone, bold(label_text(label)))
+    name = toned(tone, bold(label or ""))
     return (*name, Plain(": "), *text) if name and text else name + text
 
 

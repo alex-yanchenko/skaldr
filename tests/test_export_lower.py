@@ -256,10 +256,9 @@ def test_the_badge_legend_comes_right_after_the_table_of_contents_when_the_page_
         pytest.param(
             "Site:",
             plain("West"),
-            (*bold("Site"), Plain(": "), Plain("West")),
-            id="its-own-colon-is-not-doubled",
+            (*bold("Site:"), Plain(": "), Plain("West")),
+            id="a-colon-is-the-callers-to-trim-with-label-text",
         ),
-        pytest.param(":", plain("West"), (Plain("West"),), id="a-lone-colon-is-no-label"),
         pytest.param(None, plain("West"), (Plain("West"),), id="no-label"),
         pytest.param("Gap", (), bold("Gap"), id="no-text-leaves-no-dangling-colon"),
     ],

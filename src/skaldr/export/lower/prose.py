@@ -4,7 +4,7 @@ from typing import assert_never
 
 from skaldr import compute, models
 from skaldr.code_language import block_code_language
-from skaldr.export.inline import bold, label_text, one_line, plain
+from skaldr.export.inline import bold, label_text, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, SectionLink, StatusMark
 from skaldr.export.tree import (
@@ -168,11 +168,11 @@ def lower_badge_row(block: models.BadgeRow, lowering: Lowering) -> list[Node]:
     if block.groups:
         return [
             bullets(
-                ListEntry(with_bold_label(group.label, lowering.badge_items(group.items)))
+                ListEntry(with_bold_label(label_text(group.label), lowering.badge_items(group.items)))
                 for group in block.groups
             )
         ]
-    return [Paragraph(with_bold_label(block.label, lowering.badge_items(block.items)))]
+    return [Paragraph(with_bold_label(label_text(block.label), lowering.badge_items(block.items)))]
 
 
 def _titled_callout(
@@ -199,7 +199,7 @@ def lower_status_list(block: models.StatusList, lowering: Lowering) -> list[Node
 def _meter_entry(item: models.MeterItem) -> ListEntry:
     gauge: ExportRich = (Gauge(item.value, item.max), Plain(" "))
     share = plain(compute.pct(item.value, item.max))
-    return ListEntry(with_bold_label(item.label, gauge + share, item.tone))
+    return ListEntry(with_bold_label(label_text(item.label), gauge + share, item.tone))
 
 
 def lower_meter(block: models.Meter) -> list[Node]:
@@ -207,7 +207,8 @@ def lower_meter(block: models.Meter) -> list[Node]:
 
 
 def lower_code(block: models.Code) -> list[Node]:
-    label: list[Node] = [Paragraph(bold(one_line(block.label)))] if block.label else []
+    caption = label_text(block.label)
+    label: list[Node] = [Paragraph(bold(caption))] if caption else []
     language = "diff" if block.mode == "diff" else block_code_language(block)
     return [*label, CodeBlock(block.content.rstrip("\n"), language)]
 
@@ -238,7 +239,7 @@ def lower_link(block: models.Link) -> list[Node]:
 def _timeline_event(item: models.TimelineItem, lowering: Lowering) -> TimelineEvent:
     return TimelineEvent(
         item.title,
-        item.time,
+        label_text(item.time) or None,
         item.state,
         lowering.chips(item.badges),
         lowering.rich(item.body) if item.body else None,
