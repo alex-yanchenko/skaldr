@@ -3,7 +3,7 @@ from dataclasses import replace
 from typing import Final, assert_never
 
 from skaldr import compute, models
-from skaldr.export.inline import bold, italic, plain
+from skaldr.export.inline import bold, italic, label_text, plain
 from skaldr.export.lower.context import Lowering, joined_by_breaks, plain_cells, spaced, with_bold_label
 from skaldr.export.runs import CheckMark, ExportRich, IndicatorMark, SwimlaneMark
 from skaldr.export.tree import (
@@ -149,7 +149,7 @@ def _rollup(block: models.Table, lowering: Lowering) -> list[Node]:
         return []
     counts = [spaced([(lowering.chip(bucket["key"]),), plain(str(bucket["count"]))]) for bucket in buckets]
     label = block.rollup.label if block.rollup else None
-    return [Paragraph(with_bold_label(label, spaced(counts, " · ")))]
+    return [Paragraph(with_bold_label(label_text(label), spaced(counts, " · ")))]
 
 
 def _table_columns(block: models.Table) -> tuple[TableColumn, ...]:

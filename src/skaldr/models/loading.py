@@ -1,7 +1,8 @@
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, NamedTuple, cast
+from typing import Any, Final, Literal, NamedTuple, cast
 
 import yaml
 from pydantic import TypeAdapter, ValidationError
@@ -17,9 +18,96 @@ from skaldr.models.report import Index, Report
 # load failure is a ReportError, so cap the depth to keep that contract. Real docs never nest this far.
 _MAX_INCLUDE_DEPTH = 50
 
+_MAX_ALIASES = 10_000
+
+_MAX_FILES = 1_000
+
+_GITDIR_LINE_START: Final = b"gitdir:"
+
+
+class _TooManyAliasesError(Exception):
+    pass
+
+
+class _TooManyFilesError(Exception):
+    pass
+
+
+class _IncludeRoot(NamedTuple):
+    folder: Path
+    kind: Literal["git work tree", "folder"]
+
+
+@dataclass
+class _LoadScope:
+    root: _IncludeRoot
+    files_read: int = 0
+    aliases_seen: int = 0
+
+    def read_a_file(self) -> None:
+        self.files_read += 1
+        if self.files_read > _MAX_FILES:
+            raise _TooManyFilesError
+
+    def see_an_alias(self) -> None:
+        self.aliases_seen += 1
+        if self.aliases_seen > _MAX_ALIASES:
+            raise _TooManyAliasesError
+
+
+class _AliasBoundedLoader(yaml.SafeLoader):
+    scope: _LoadScope
+
+    def compose_node(self, parent: yaml.Node | None, index: int) -> yaml.Node | None:
+        if self.check_event(yaml.AliasEvent):  # pyright: ignore[reportUnknownMemberType]
+            self.scope.see_an_alias()
+        return super().compose_node(parent, index)
+
+
+def _is_git_marker(folder: Path) -> bool:
+    marker = folder / ".git"
+    if marker.is_dir():
+        return True
+    if not marker.is_file():
+        return False
+    try:
+        with marker.open("rb") as opened:
+            return opened.read(len(_GITDIR_LINE_START)) == _GITDIR_LINE_START
+    except OSError:
+        return False
+
+
+def _load_scope(document: Path) -> _LoadScope:
+    try:
+        own_folder = document.parent.resolve()
+    except (OSError, RuntimeError) as err:
+        raise ReportError(f"could not resolve {document}: {err}") from err
+    for folder in (own_folder, *own_folder.parents):
+        if _is_git_marker(folder):
+            return _LoadScope(_IncludeRoot(folder, "git work tree"))
+    return _LoadScope(_IncludeRoot(own_folder, "folder"))
+
+
+def _refuse_an_include_outside(root: _IncludeRoot, includer: Path, target: str) -> Path:
+    included = includer.parent / target
+    try:
+        resolved = included.resolve()
+    except (OSError, RuntimeError) as err:
+        raise ReportError(f"could not resolve {included}: {err}") from err
+    if not resolved.is_relative_to(root.folder):
+        raise ReportError(
+            f"!include {target} in {includer} resolves to {resolved}, outside {root.folder}, "
+            f"the {root.kind} that holds the document"
+        )
+    return included
+
 
 def _load_yaml_with_includes(
-    path: Path, ancestors: tuple[Path, ...], loaded: list[Path], text: str | None = None
+    path: Path,
+    ancestors: tuple[Path, ...],
+    loaded: list[Path],
+    text: str | None = None,
+    scope: _LoadScope | None = None,
 ) -> Any:
     """Parse a YAML file, resolving `!include <relative-path>` tags by splicing in the parsed content
     of the referenced file. Paths resolve relative to the *including* file's directory (not the cwd),
@@ -34,12 +122,22 @@ def _load_yaml_with_includes(
         raise ReportError(f"circular !include: {chain}")
     if len(ancestors) >= _MAX_INCLUDE_DEPTH:
         raise ReportError(f"!include nested more than {_MAX_INCLUDE_DEPTH} deep at {path}, likely a mistake")
+    load_scope = scope if scope is not None else _load_scope(path)
+    try:
+        load_scope.read_a_file()
+    except _TooManyFilesError as err:
+        raise ReportError(
+            f"the document reads more than {_MAX_FILES} files through !include, reaching {path}; no real "
+            "document needs that many, and a fan-out of includes is how an include bomb is built"
+        ) from err
     if text is None:
         text = read_text_file(path)
     loaded.append(resolved)
 
-    class _IncludeLoader(yaml.SafeLoader):
+    class _IncludeLoader(_AliasBoundedLoader):
         """SafeLoader subclass — `!include` scoped to this file's dir; keeps `yaml.load` safe."""
+
+        scope = load_scope
 
     def _construct_include(loader: yaml.SafeLoader, node: yaml.Node) -> Any:
         if not isinstance(node, yaml.ScalarNode):
@@ -49,13 +147,21 @@ def _load_yaml_with_includes(
             raise ReportError(f"!include in {path} needs a file path")
         if Path(target).is_absolute():
             raise ReportError(f"!include in {path} must be a relative path, not absolute: {target}")
-        return _load_yaml_with_includes(path.parent / target, (*ancestors, resolved), loaded)
+        included = _refuse_an_include_outside(load_scope.root, path, target)
+        return _load_yaml_with_includes(included, (*ancestors, resolved), loaded, scope=load_scope)
 
     _IncludeLoader.add_constructor("!include", _construct_include)
     try:
         return yaml.load(text, Loader=_IncludeLoader)
     except yaml.YAMLError as err:
         raise ReportError(f"invalid YAML in {path}: {err}") from err
+    except RecursionError as err:
+        raise ReportError(f"{path} nests too deeply or refers to itself") from err
+    except _TooManyAliasesError as err:
+        raise ReportError(
+            f"{path} uses more than {_MAX_ALIASES} YAML aliases, counting every file it includes; "
+            "no real document needs that many, and a flood of them is how a YAML bomb is built"
+        ) from err
 
 
 def _index_of(data: object) -> object:
@@ -88,8 +194,8 @@ def _part_file(index_path: Path, part_path: str) -> Path:
     return part
 
 
-def _loaded_part(path: Path) -> _LoadedPart:
-    data = _load_yaml_with_includes(path, (), [])
+def _loaded_part(path: Path, scope: _LoadScope) -> _LoadedPart:
+    data = _load_yaml_with_includes(path, (), [], scope=scope)
     if isinstance(_index_of(data), Mapping):
         raise ReportError(f"part {path} is itself an index; an index lists document files, not other indexes")
     try:
@@ -242,11 +348,11 @@ class _Document(NamedTuple):
     parts: tuple[tuple[int, Path], ...] = ()
 
 
-def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Document:
+def _combined_index(path: Path, data: Mapping[str, Any], index: Index, scope: _LoadScope) -> _Document:
     if data.get("publish") is not None:
         raise ReportError("an index document cannot carry `publish` yet; publish each part file on its own")
     intro = _intro_blocks(data)
-    parts = [_loaded_part(_part_file(path, part_path)) for part_path in index.parts]
+    parts = [_loaded_part(_part_file(path, part_path), scope) for part_path in index.parts]
     _refuse_a_doc_id_published_twice(parts)
     own_badges = _parsed_badges(data.get("badges", {}))
     badges = _merged_badges([(path, own_badges), *((part.path, part.report.badges) for part in parts)])
@@ -261,11 +367,12 @@ def _combined_index(path: Path, data: Mapping[str, Any], index: Index) -> _Docum
 
 
 def _load_document(path: Path) -> _Document:
-    data = _load_yaml_with_includes(path, (), [])
+    scope = _load_scope(path)
+    data = _load_yaml_with_includes(path, (), [], scope=scope)
     index = _index_of(data)
     if index is None:
         return _Document(data)
-    return _combined_index(path, cast("Mapping[str, Any]", data), _parsed_index(index))
+    return _combined_index(path, cast("Mapping[str, Any]", data), _parsed_index(index), scope)
 
 
 _PART_PLACE = re.compile(r"\bblocks\.(\d+)\.part\b")
@@ -306,8 +413,9 @@ def names_an_index(data: object) -> bool:
 
 def content_files(path: Path) -> tuple[Path, ...]:
     loaded: list[Path] = []
-    index = _index_of(_load_yaml_with_includes(path, (), loaded))
+    scope = _load_scope(path)
+    index = _index_of(_load_yaml_with_includes(path, (), loaded, scope=scope))
     if index is not None:
         for part_path in _parsed_index(index).parts:
-            _load_yaml_with_includes(_part_file(path, part_path), (), loaded)
+            _load_yaml_with_includes(_part_file(path, part_path), (), loaded, scope=scope)
     return tuple(loaded)

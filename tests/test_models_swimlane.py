@@ -42,6 +42,35 @@ def test_swimlane_step_col_must_be_a_declared_column() -> None:
         parse_report(make_report(blocks=[block]))
 
 
+def test_swimlane_step_n_given_as_an_integer_is_its_string() -> None:
+    block = _swimlane(
+        lanes=["A"],
+        columns=["C1", "C2"],
+        steps=[
+            {"lane": "A", "col": "C1", "n": 1, "label": "x"},
+            {"lane": "A", "col": "C2", "n": 0, "label": "y"},
+        ],
+    )
+
+    assert [step.n for step in _swimlane_block(make_report(blocks=[block])).steps] == ["1", "0"]
+
+
+def test_swimlane_step_n_given_as_a_quoted_number_with_leading_zeros_keeps_them() -> None:
+    block = _swimlane(
+        lanes=["A"], columns=["C1"], steps=[{"lane": "A", "col": "C1", "n": "007", "label": "x"}]
+    )
+
+    assert [step.n for step in _swimlane_block(make_report(blocks=[block])).steps] == ["007"]
+
+
+@pytest.mark.parametrize("n", [True, 1.5, ["1"]], ids=["bool", "float", "list"])
+def test_swimlane_step_n_that_is_not_a_string_or_an_integer_is_refused(n: object) -> None:
+    block = _swimlane(lanes=["A"], columns=["C1"], steps=[{"lane": "A", "col": "C1", "n": n, "label": "x"}])
+
+    with pytest.raises(ReportError, match=r"steps.0.n: Input should be a valid string"):
+        parse_report(make_report(blocks=[block]))
+
+
 def test_swimlane_step_value_accepts_int_and_float_and_defaults_to_none() -> None:
     block = _swimlane(
         lanes=["A"],

@@ -28,6 +28,7 @@ from skaldr.export import (
     EXPORT_MANIFEST,
     EXPORT_TARGETS,
     ExportTarget,
+    RenderedExport,
     export_adf,
     export_markdown,
     export_notion,
@@ -48,12 +49,18 @@ from skaldr.render import (
     render_html,
     render_report,
 )
-from skaldr.replace_file import create_file, replace_file, resolved_path
+from skaldr.replace_file import (
+    create_file,
+    refuse_a_symlink_on_a_default_path,
+    replace_file,
+    resolved_path,
+)
 from skaldr.version import skaldr_version
 
 _FETCH_TIMEOUT_SECONDS = 30
 _FETCH_LIMIT_BYTES = 16 * 1024 * 1024
 _FETCH_CHUNK_BYTES = 64 * 1024
+_TERMINAL_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‪-‮⁦-⁩]|\r(?!\n)")
 _POLL_INTERVAL_SECONDS = 0.4  # how often --watch re-stats the content file for changes
 
 
@@ -80,9 +87,12 @@ _PLAN_RULE_BLOCK = re.compile(
 )
 
 
-def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
+def _resolve_out_path(data_path: Path, out_arg: str | None, *, writes_html: bool) -> Path:
     """The HTML output path: the explicit `-o` value, or a default `out/<data-stem>.html` under the cwd."""
-    return resolved_path(Path(out_arg)) if out_arg else Path.cwd() / "out" / f"{data_path.stem}.html"
+    if out_arg:
+        return resolved_path(Path(out_arg))
+    default = Path.cwd() / "out" / f"{data_path.stem}.html"
+    return refuse_a_symlink_on_a_default_path(default, Path.cwd(), "-o") if writes_html else default
 
 
 _PUBLISH_COMMANDS = frozenset({"publish", "diff", "status"})
@@ -163,8 +173,22 @@ def _fail(message: str) -> int:
     return 1
 
 
+def _new_help() -> str:
+    parser = argparse.ArgumentParser(
+        prog="skaldr new", description="Write a starter content file you fill in, then render."
+    )
+    parser.add_argument("kind", help=f"what to start; the kinds are: {', '.join(_NEW_KINDS)}")
+    parser.add_argument(
+        "file", metavar="FILE", help="where to write it; an existing file is never overwritten"
+    )
+    return parser.format_help()
+
+
 def _run_new(arguments: list[str]) -> int:
     kinds = ", ".join(_NEW_KINDS)
+    if arguments and arguments[0] in ("-h", "--help"):
+        print(_new_help(), end="")
+        return 0
     if len(arguments) != 2:
         return _fail(f"usage: skaldr new <kind> <file>; the kinds are {kinds}")
     kind, file_name = arguments
@@ -259,7 +283,8 @@ def main(argv: list[str] | None = None) -> int:
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
         "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`. List a large "
         "file's headings and sections with `skaldr outline FILE` and print one of them word for word with "
-        "`skaldr show FILE#ANCHOR`.",
+        "`skaldr show FILE#ANCHOR`. Start a document with `skaldr new <kind> FILE` "
+        f"(kinds: {', '.join(_NEW_KINDS)}).",
     )
     parser.add_argument(
         "--version",
@@ -343,8 +368,9 @@ def main(argv: list[str] | None = None) -> int:
         "--if-stale",
         action="store_true",
         help="render only when the output is missing, older than the content file, any file it "
-        "!includes or any part of an index, or written with other --embed/--no-source/--live options; "
-        "otherwise print 'up to date' and exit 0. Without --live it keeps the reloader of a page "
+        "!includes or any part of an index, or written with other --embed/--no-source/--live options or "
+        "by another version of skaldr (an upgrade forces one re-render); otherwise print 'up to date' "
+        "and exit 0, which is a success like OK. Without --live it keeps the reloader of a page "
         "rendered with --live, so `--live` once and `--if-stale` after every edit keeps the page live. "
         "Makes an unconditional re-render after every edit free, so no watcher process is needed.",
     )
@@ -515,7 +541,7 @@ def main(argv: list[str] | None = None) -> int:
 
     data_path = Path(args.data[0]).resolve()
     try:
-        out_path = _resolve_out_path(data_path, args.out)
+        out_path = _resolve_out_path(data_path, args.out, writes_html=_writes_an_html_page(args))
     except OSError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -568,7 +594,17 @@ def main(argv: list[str] | None = None) -> int:
     for path in written:
         print(f"OK  {path}")
     print(_build_summary(report))
+    _warn_of_unfilled_placeholders(data_path, report)
     return 0
+
+
+def _warn_of_unfilled_placeholders(data_path: Path, report: Report) -> None:
+    unfilled = find_placeholders(report)
+    if unfilled:
+        print(
+            f"warning: {data_path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
+            file=sys.stderr,
+        )
 
 
 def _recorded_render(out_path: Path) -> RecordedRender | None:
@@ -700,13 +736,22 @@ def _extract_source(target: str) -> int:
         if target.startswith(("http://", "https://")):
             html = _fetch_page(target).decode("utf-8")
         else:
-            html = Path(target).read_text(encoding="utf-8")
+            html = Path(target).read_bytes().decode("utf-8")
     except (OSError, ValueError) as err:
         print(f"error: could not read {target}: {err}", file=sys.stderr)
         return 1
     source = extract_source(html)
     if source is None:
         print(f"error: no embedded skaldr source found in {target}", file=sys.stderr)
+        return 1
+    control = _TERMINAL_CONTROL.search(source)
+    if control is not None:
+        print(
+            f"error: the embedded source in {target} holds the control character "
+            f"U+{ord(control.group()):04X} at position {control.start()}, "
+            "which a terminal would act on; skaldr will not print it",
+            file=sys.stderr,
+        )
         return 1
     print(source, end="")
     return 0
@@ -736,10 +781,14 @@ def _reject_flags_that_do_not_fit_an_export(
 
 
 def _export_document(data_path: Path, target: ExportTarget, export_dir: str | None, chunk: int | None) -> int:
-    out_dir = (
-        Path(export_dir) if export_dir is not None else Path("out") / f"{data_path.stem}.{target}"
-    ).resolve()
     try:
+        out_dir = (
+            Path(export_dir)
+            if export_dir is not None
+            else refuse_a_symlink_on_a_default_path(
+                Path.cwd() / "out" / f"{data_path.stem}.{target}", Path.cwd(), "--export-dir"
+            )
+        ).resolve()
         report = load_report(data_path)
         match target:
             case "notion":
@@ -772,6 +821,7 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
         )
     for path in result.files:
         print(f"OK  {path}")
+    _warn_of_unfilled_placeholders(data_path, report)
     return 0
 
 
@@ -786,6 +836,15 @@ def _draft_the_publish_targets(path: Path, report: Report) -> None:
             raise
         return
     draft_targets(load_authored(path), installed_connectors())
+
+
+def _publishes_to_jira(report: Report) -> bool:
+    return report.publish is not None and any(target.service() == "jira" for target in report.publish.targets)
+
+
+def _refuse_an_export_too_big_to_publish(report: Report, rendered: RenderedExport) -> None:
+    if rendered.refused_for_its_size is not None and not _publishes_to_jira(report):
+        raise ReportError(rendered.refused_for_its_size)
 
 
 def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequence[ExportTarget] = ()) -> int:
@@ -803,7 +862,7 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
             unfilled = find_placeholders(report)
             _draft_the_publish_targets(path, report)
             for target in dict.fromkeys(targets):
-                render_export(report, target)
+                _refuse_an_export_too_big_to_publish(report, render_export(report, target))
         except (ReportError, PublishError, ConnectorError) as exc:
             failed += 1
             print(f"FAIL  {path}: {exc}", file=sys.stderr)
@@ -826,22 +885,17 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
 
 
 def _guide_source() -> str:
-    return package_text("skill/GUIDE.md")
+    guide = package_text("skill/GUIDE.md").rstrip()
+    example = package_text("skill/example.yaml").rstrip()
+    return f"{guide}\n\n## A complete example\n\n```yaml\n{example}\n```"
 
 
 def _guide_output(topic: str | Literal[True], list_topics_only: bool) -> str:
     if list_topics_only:
         return list_topics(_guide_source())
     if topic is True:
-        return _guide_text()
+        return _guide_source()
     return lookup(topic, _guide_source())
-
-
-def _guide_text() -> str:
-    """The authoring guide (GUIDE.md) with the live, tested example appended — printed by --guide."""
-    guide = package_text("skill/GUIDE.md").rstrip()
-    example = package_text("skill/example.yaml").rstrip()
-    return f"{guide}\n\n## A complete example\n\n```yaml\n{example}\n```"
 
 
 # Bundled skills, as (package resource dir, installed skill name under ~/.claude/skills/). The primary

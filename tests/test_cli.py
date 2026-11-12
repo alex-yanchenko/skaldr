@@ -26,6 +26,9 @@ _UNKNOWN_TONE_MESSAGE = (
 )
 
 
+_MARKER = "MARKER"
+
+
 def _note_table(**rows_or_groups: object) -> dict[str, object]:
     return {
         "type": "table",
@@ -137,6 +140,73 @@ def test_extract_source_reports_when_no_source_is_embedded(
 
     assert main(["--extract-source", str(plain)]) == 1
     assert "no embedded skaldr source" in capsys.readouterr().err
+
+
+def _source_with_a_marker() -> str:
+    return f"version: 1\nmeta: {{title: x}}\n# a note {_MARKER} SYNTHETIC-TITLE\n"
+
+
+def _page_carrying(source: str) -> str:
+    template = _source_with_a_marker()
+    html = render_html(parse_report(make_report()), source=template)
+    return html.replace(template, source)
+
+
+@pytest.mark.parametrize(
+    ("control", "code_point"),
+    [
+        pytest.param("\x1b", "U+001B", id="escape"),
+        pytest.param("\x07", "U+0007", id="bell"),
+        pytest.param("\x00", "U+0000", id="nul"),
+        pytest.param("\x0e", "U+000E", id="shift-out"),
+        pytest.param("\x1f", "U+001F", id="unit-separator"),
+        pytest.param("\x7f", "U+007F", id="delete"),
+        pytest.param("\x9b", "U+009B", id="c1-control-sequence-introducer"),
+        pytest.param("‮", "U+202E", id="right-to-left-override"),
+        pytest.param("⁧", "U+2067", id="right-to-left-isolate"),
+        pytest.param("\r", "U+000D", id="lone-carriage-return"),
+    ],
+)
+def test_extract_source_refuses_a_source_with_a_control_character_naming_it_and_its_position(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], control: str, code_point: str
+) -> None:
+    source = _source_with_a_marker().replace(_MARKER, control)
+    page = tmp_path / "page.html"
+    page.write_bytes(_page_carrying(source).encode("utf-8"))
+
+    exit_code = main(["--extract-source", str(page)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, captured.out, captured.err) == (
+        1,
+        "",
+        f"error: the embedded source in {page} holds the control character {code_point} at position "
+        f"{source.index(control)}, which a terminal would act on; skaldr will not print it\n",
+    )
+
+
+def test_extract_source_prints_a_source_with_a_tab(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = _source_with_a_marker().replace(_MARKER, "\t")
+    page = tmp_path / "page.html"
+    page.write_bytes(_page_carrying(source).encode("utf-8"))
+
+    exit_code = main(["--extract-source", str(page)])
+
+    assert (exit_code, capsys.readouterr().out) == (0, source)
+
+
+def test_extract_source_prints_a_source_whose_carriage_returns_come_before_newlines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = _source_with_a_marker().replace(_MARKER, "\r\n#")
+    page = tmp_path / "page.html"
+    page.write_bytes(_page_carrying(source).encode("utf-8"))
+
+    exit_code = main(["--extract-source", str(page)])
+
+    assert (exit_code, capsys.readouterr().out) == (0, source)
 
 
 def test_extract_source_reports_an_unreadable_target(
@@ -794,6 +864,59 @@ def test_check_notes_unfilled_placeholders_but_passes_without_strict(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "1 unfilled placeholder: url" in captured.out
+
+
+def test_render_warns_on_stderr_about_unfilled_placeholders_and_still_succeeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "{{url}} and {{ticket}}."}]))
+    out_path = tmp_path / "report.html"
+
+    exit_code = main([str(data_path), "-o", str(out_path)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, out_path.exists(), captured.err) == (
+        0,
+        True,
+        f"warning: {data_path}: 2 unfilled placeholders: ticket, url\n",
+    )
+    assert captured.out.startswith(f"OK  {out_path}\n")
+
+
+def test_render_warns_with_the_singular_noun_for_one_unfilled_placeholder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(meta={"title": "{{t}}"}))
+
+    assert main([str(data_path), "-o", str(tmp_path / "report.html")]) == 0
+
+    assert capsys.readouterr().err == f"warning: {data_path}: 1 unfilled placeholder: t\n"
+
+
+@pytest.mark.parametrize(
+    "target", ["markdown", "notion", "adf", "slack"], ids=["markdown", "notion", "adf", "slack"]
+)
+def test_export_warns_on_stderr_about_unfilled_placeholders_and_still_succeeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], target: str
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "{{url}} and {{ticket}}."}]))
+
+    exit_code = main([str(data_path), "--export", target, "--export-dir", str(tmp_path / "out")])
+
+    assert (exit_code, capsys.readouterr().err) == (
+        0,
+        f"warning: {data_path}: 2 unfilled placeholders: ticket, url\n",
+    )
+
+
+def test_render_without_unfilled_placeholders_prints_nothing_on_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    main([str(data_path), "-o", str(tmp_path / "report.html")])
+
+    assert capsys.readouterr().err == ""
 
 
 def test_check_strict_fails_on_unfilled_placeholders_with_a_plural_message(
@@ -1953,7 +2076,7 @@ def test_an_export_of_a_lone_surrogate_fails_and_writes_nothing(
     )
 
 
-def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a_link(
+def test_a_symlinked_default_output_path_is_refused_and_its_target_is_left_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -1967,12 +2090,70 @@ def test_a_symlinked_default_output_path_gets_the_page_in_its_target_and_stays_a
 
     exit_code = main([str(data_path)])
 
-    expected_page = render_html(parse_report(make_report()), source=data_path.read_text(encoding="utf-8"))
     assert (exit_code, capsys.readouterr().err, link.is_symlink(), target.read_text(encoding="utf-8")) == (
-        0,
-        "",
+        1,
+        f"error: {link} is a symlink to {target.resolve()}, so skaldr will not write through it; "
+        "remove it or pass -o to write elsewhere\n",
         True,
-        expected_page,
+        "earlier page",
+    )
+
+
+def test_a_symlinked_out_folder_is_refused_and_the_folder_it_points_to_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    link = tmp_path / "out"
+    link.symlink_to(elsewhere, target_is_directory=True)
+
+    exit_code = main([str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err, sorted(elsewhere.iterdir())) == (
+        1,
+        f"error: {link} is a symlink to {elsewhere.resolve()}, so skaldr will not write through it; "
+        "remove it or pass -o to write elsewhere\n",
+        [],
+    )
+
+
+def test_a_dangling_symlink_at_the_default_output_path_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+    link = tmp_path / "out" / "report.html"
+    link.parent.mkdir()
+    link.symlink_to(tmp_path / "nowhere" / "report.html")
+
+    exit_code = main([str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err, (tmp_path / "nowhere").exists()) == (
+        1,
+        f"error: {link} is a symlink to {tmp_path.resolve() / 'nowhere' / 'report.html'}, "
+        "so skaldr will not write through it; remove it or pass -o to write elsewhere\n",
+        False,
+    )
+
+
+def test_an_explicit_output_path_that_is_a_symlink_into_the_default_folder_still_gets_the_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+    target = tmp_path / "published" / "report.html"
+    target.parent.mkdir()
+    link = tmp_path / "out" / "report.html"
+    link.parent.mkdir()
+    link.symlink_to(target)
+
+    assert main([str(data_path), "-o", str(link), "--no-source"]) == 0
+
+    assert (link.is_symlink(), target.read_text(encoding="utf-8")) == (
+        True,
+        render_html(parse_report(make_report())),
     )
 
 

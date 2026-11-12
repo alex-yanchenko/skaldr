@@ -107,6 +107,7 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
 
 
 def test_the_example_is_refused_for_github_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
@@ -300,6 +301,32 @@ def test_a_page_cover_is_an_image_under_the_icon_led_title() -> None:
     assert render_export(report, "markdown").pages["page.md"] == (
         "# 📦 Q3\n\n![Cover](https://example.com/covers/q3.png)\n\nHello.\n"
     )
+
+
+def test_a_walkthrough_step_label_is_plain_text_and_its_sub_is_rich_text() -> None:
+    step = {
+        "label": "Scan [x]{bg=sky} *y*",
+        "sub": "a `code` sub",
+        "tone": "danger",
+        "detail": [{"type": "text", "body": "Both aisles."}],
+    }
+
+    assert markdown_of([{"type": "walkthrough", "steps": [step]}]) == (
+        "1. 🔴 **Scan \\[x\\]{bg=sky} \\*y\\*** *a `code` sub*\n\n   Both aisles.\n"
+    )
+
+
+def test_a_card_label_has_no_trailing_colon() -> None:
+    assert markdown_of(CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE) == (
+        "| 🟡 **Open rows** | Plain |\n| --- | --- |\n| 1 (100.0%) | 3 |\n\n"
+        "|  | c |\n| --- | --- |\n| **r** | 🟡 Open rows: |\n"
+    )
+
+
+def test_a_code_label_is_bold_text_above_the_block() -> None:
+    block = {"type": "code", "label": "Undo last commit", "content": "git reset HEAD~1", "lang": "shell"}
+
+    assert markdown_of([block]) == "**Undo last commit**\n\n```shell\ngit reset HEAD~1\n```\n"
 
 
 def test_markdown_special_characters_are_escaped_in_text_but_not_in_code_or_link_urls() -> None:

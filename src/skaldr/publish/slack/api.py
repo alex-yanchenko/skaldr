@@ -21,7 +21,7 @@ from skaldr.auth import HTTP_TIMEOUT_SECONDS, printable_only
 from skaldr.auth.slack import REJECTED_SIGN_IN_ERRORS, SLACK_API
 from skaldr.auth.store import SLACK_ROTATING_TOKENS
 from skaldr.errors import ConnectorError, ItemNotFoundError, WriteRejectedError
-from skaldr.publish.connector import SPLIT_ADVICE
+from skaldr.export import SPLIT_ADVICE
 from skaldr.publish.slack.responses import CanvasContent, CreatedCanvas, Identity, SlackResponse
 from skaldr.publish_block.target import JsonFields
 

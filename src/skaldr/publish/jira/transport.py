@@ -5,8 +5,8 @@ from typing import Self, TypeVar
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
 from skaldr.errors import ConnectorError, CreatedButUnfinishedError, ItemNotFoundError, WriteRejectedError
+from skaldr.export import SPLIT_ADVICE
 from skaldr.export.adf import JIRA_DESCRIPTION_LIMIT, compact_adf_length
-from skaldr.publish.connector import SPLIT_ADVICE
 from skaldr.publish.content import (
     FIELDS,
     TITLE,

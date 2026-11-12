@@ -52,6 +52,22 @@ API_AND_RISK_BADGES: dict[str, Any] = {
     **API_BADGES,
     "RISK": {"label": "risk", "tone": "red", "legend": False},
 }
+OPEN_ROWS_BADGE: dict[str, Any] = {
+    "OPEN": {"label": "Open rows:", "tone": "amber", "legend": False},
+}
+CARDS_LABELLED_WITH_A_TRAILING_COLON: list[dict[str, Any]] = [
+    {
+        "type": "cards",
+        "items": [{"badge": "OPEN", "of_matrix": "m"}, {"label": "  Plain:  ", "value": 3}],
+    },
+    {
+        "type": "matrix",
+        "id": "m",
+        "rows": ["r"],
+        "columns": ["c"],
+        "cells": [{"row": "r", "col": "c", "badge": "OPEN"}],
+    },
+]
 TEXT_X_BLOCK: dict[str, Any] = {"type": "text", "body": "x"}
 HAVE_BADGE: dict[str, Any] = {"HAVE": {"label": "Have", "tone": "green", "legend": False}}
 EDGE_BADGES: dict[str, Any] = {

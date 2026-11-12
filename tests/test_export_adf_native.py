@@ -129,7 +129,7 @@ def _lozenge(text: str, color: str) -> Json:
 
 
 def test_a_fact_strip_is_a_table_of_its_labels_as_header_cells_over_a_row_of_its_values() -> None:
-    node = FactStrip((LabelledValue("Site:", plain("West")), LabelledValue("Owner", plain("ops"))))
+    node = FactStrip((LabelledValue("Site", plain("West")), LabelledValue("Owner", plain("ops"))))
 
     assert _rendered(node) == _doc(
         _table(_row(_header("Site"), _header("Owner")), _row(_body("West"), _body("ops")))
@@ -155,7 +155,7 @@ def test_a_fact_strip_with_no_facts_writes_nothing() -> None:
 
 
 def test_a_key_value_list_is_a_two_column_table_with_the_keys_as_header_cells() -> None:
-    node = KeyValueList((LabelledValue("Owner:", plain("ops")), LabelledValue(None, plain("west"))))
+    node = KeyValueList((LabelledValue("Owner", plain("ops")), LabelledValue(None, plain("west"))))
 
     assert _rendered(node) == _doc(
         _table(_row(_header("Owner"), _body("ops")), _row(_header(""), _body("west")))
@@ -1173,7 +1173,7 @@ def test_a_decision_list_in_a_table_cell_is_a_decision_list() -> None:
 
 def test_section_fields_are_a_two_column_table_with_the_labels_as_header_cells() -> None:
     node = FactStrip(
-        (LabelledValue("Status:", plain("Open")), LabelledValue("Owner", plain("ops"))),
+        (LabelledValue("Status", plain("Open")), LabelledValue("Owner", plain("ops"))),
         of_section_fields=True,
     )
 
