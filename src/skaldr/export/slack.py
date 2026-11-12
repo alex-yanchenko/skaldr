@@ -11,6 +11,11 @@ from skaldr.export.capabilities import (
     CANVAS_TABLE_CELL_LIMIT,
     FIRST_LIST_NUMBER,
     TARGET_SUBJECTS,
+    canvas_heading_is_too_deep,
+    canvas_heading_level,
+    canvas_layout_has_too_many_columns,
+    canvas_table_cell_count,
+    canvas_table_has_too_many_cells,
     in_unicode_script_form,
 )
 from skaldr.export.folds import card_text, folded, link_card_detail, quote_lines
@@ -39,7 +44,6 @@ from skaldr.export.markup import (
     quoted,
     spaced,
     styled,
-    table_width,
 )
 from skaldr.export.runs import ExportRich, export_visible_text
 from skaldr.export.swaps import data_table_swapped_in, require_the_swap, web_address_of
@@ -281,7 +285,7 @@ def _canvas_callout(node: Callout) -> list[_CanvasBlock]:
 
 
 def _canvas_columns(node: Columns) -> list[_CanvasBlock]:
-    if len(node.columns) > CANVAS_LAYOUT_COLUMN_LIMIT:
+    if canvas_layout_has_too_many_columns(len(node.columns)):
         raise ExportInvariantError(
             f"a Slack canvas layout holds at most {CANVAS_LAYOUT_COLUMN_LIMIT} columns, not "
             f"{len(node.columns)}; the export check should have refused it"
@@ -555,8 +559,8 @@ class _CanvasWriter:
         return lines
 
     def table_lines(self, table: TableNode) -> list[str]:
-        cells = table_width(table) * (1 + len(table.rows))
-        if cells > CANVAS_TABLE_CELL_LIMIT:
+        cells = canvas_table_cell_count(table)
+        if canvas_table_has_too_many_cells(cells):
             raise ExportInvariantError(
                 f"a Slack canvas table holds at most {CANVAS_TABLE_CELL_LIMIT} cells, not {cells}; "
                 "the export check should have refused it"
@@ -573,8 +577,8 @@ class _CanvasWriter:
         return prefix + self.table_cell_runs.write(text)
 
     def heading_line(self, heading: Heading) -> str:
-        level = heading.level - self.heading_shift
-        if level > CANVAS_HEADING_LEVEL_LIMIT:
+        level = canvas_heading_level(heading.level, self.heading_shift)
+        if canvas_heading_is_too_deep(level):
             raise ExportInvariantError(
                 f"a Slack canvas holds headings down to level {CANVAS_HEADING_LEVEL_LIMIT}, "
                 f"so it has no form for '{export_visible_text(heading.text)}' at level {level}; "

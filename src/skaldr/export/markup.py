@@ -20,7 +20,7 @@ from skaldr.export.runs import (
     TonedLabel,
     write_chipless_export_run,
 )
-from skaldr.export.tree import CodeBlock, TableCell, TableNode, TableRow, ToneName
+from skaldr.export.tree import CodeBlock, TableCell, TableNode, TableRow, ToneName, table_width
 from skaldr.models import BADGE_COLOR_TONE, Person, ToneLiteral
 from skaldr.richtext import (
     AnchorLink,
@@ -150,10 +150,6 @@ def _padded(cells: Sequence[str], width: int) -> list[str]:
 
 def _pipe_table_row(cells: Sequence[str]) -> str:
     return "| " + " | ".join(cells) + " |"
-
-
-def table_width(table: TableNode) -> int:
-    return max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
 
 
 def _dot_tones_not_leading(tones: Sequence[ToneName], runs: ExportRich) -> tuple[ToneLiteral, ...]:

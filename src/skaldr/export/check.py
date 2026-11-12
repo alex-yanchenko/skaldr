@@ -8,9 +8,6 @@ from skaldr import models
 from skaldr.errors import ExportRejectedError
 from skaldr.export.capabilities import (
     BACKTICK,
-    CANVAS_HEADING_LEVEL_LIMIT,
-    CANVAS_LAYOUT_COLUMN_LIMIT,
-    CANVAS_TABLE_CELL_LIMIT,
     CAPABILITIES,
     CLOSING_TAG_OPENER,
     FIRST_LIST_NUMBER,
@@ -47,12 +44,17 @@ from skaldr.export.capabilities import (
     TextNumbering,
     TonedCell,
     UnwritableImage,
+    canvas_heading_is_too_deep,
+    canvas_heading_level,
+    canvas_layout_has_too_many_columns,
+    canvas_table_cell_count,
+    canvas_table_has_too_many_cells,
     character_without_a_unicode_form,
+    writes_definitions_as_blocks,
 )
 from skaldr.export.data_images import UnwritableDataImage, read_data_image
 from skaldr.export.folds import cell_text, folded, quote_lines
 from skaldr.export.inline import one_line
-from skaldr.export.markup import table_width
 from skaldr.export.mermaid import loses_meaning_in_a_diagram_label
 from skaldr.export.runs import (
     Break,
@@ -476,8 +478,8 @@ class _TreeWalk:
             yield self.hit(details, path)
 
     def deep_heading_hits(self, node: Node, level: int, text: ExportRich) -> Iterator[FeatureHit]:
-        canvas_level = level - self.heading_shift
-        if canvas_level > CANVAS_HEADING_LEVEL_LIMIT:
+        canvas_level = canvas_heading_level(level, self.heading_shift)
+        if canvas_heading_is_too_deep(canvas_level):
             yield self.hit(DeepHeading(_visible_text(text), canvas_level), node.authored_at)
 
     def document(self, body: Sequence[Node]) -> Iterator[FeatureHit]:
@@ -537,7 +539,7 @@ class _TreeWalk:
                 for tab in node.tabs:
                     yield from self.nodes(tab.children, inside)
             case Columns():
-                if len(node.columns) > CANVAS_LAYOUT_COLUMN_LIMIT:
+                if canvas_layout_has_too_many_columns(len(node.columns)):
                     yield self.hit(GridCells(len(node.columns)), node.authored_at)
                 yield from self.nodes(nested_nodes(node), place.in_a_column_of_the_tree())
             case Diagram():
@@ -611,8 +613,8 @@ class _TreeWalk:
             yield self.hit(details, unplaced.authored_at)
 
     def table_hits(self, node: TableNode) -> Iterator[FeatureHit]:
-        cells = table_width(node) * (1 + len(node.rows))
-        if cells > CANVAS_TABLE_CELL_LIMIT:
+        cells = canvas_table_cell_count(node)
+        if canvas_table_has_too_many_cells(cells):
             yield self.hit(CellCount(cells, _term(node)), node.authored_at)
 
 
@@ -700,7 +702,10 @@ def _where(hit: FeatureHit, rejection: Rejection) -> str | None:
 def feature_hits(
     report: Report, document: LoweredDocument, target: ExportTarget | None = None
 ) -> Iterator[FeatureHit]:
-    walk = _TreeWalk(_model_hits_in_document_order(report, document), target == "slack")
+    walk = _TreeWalk(
+        _model_hits_in_document_order(report, document),
+        target is not None and writes_definitions_as_blocks(target),
+    )
     return walk.document(document.body)
 
 
