@@ -18,6 +18,9 @@ _TABLE_HEADER_LINES = 2
 _NONE_TYPE = type(None)
 _BLOCK_TYPE_FIELD = "type"
 _INDENT = "  "
+_SECTION_LEVEL = 2
+_SUBSECTION_LEVEL = 3
+_HEADING_TAGS = {"h2": _SECTION_LEVEL, "h3": _SUBSECTION_LEVEL}
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,7 @@ class _Section:
     title: str
     first_line: int
     end_line: int
+    level: int = _SECTION_LEVEL
 
 
 def _block_models() -> dict[str, type[BaseModel]]:
@@ -121,24 +125,55 @@ def _plain(title: str) -> str:
     return title.replace("`", "").strip()
 
 
+def _starts_at_a_word(title: str, wanted: str) -> bool:
+    words = title.split()
+    return any(" ".join(words[at:]).startswith(wanted) for at in range(len(words)))
+
+
+def _first_matching_tier(pool: list[_Section], wanted: str) -> list[_Section]:
+    exact = [section for section in pool if _plain(section.title).casefold() == wanted]
+    if exact:
+        return exact[:1]
+    prefixed = [section for section in pool if _plain(section.title).casefold().startswith(wanted)]
+    if prefixed:
+        return prefixed
+    return [section for section in pool if _starts_at_a_word(_plain(section.title).casefold(), wanted)]
+
+
 @dataclass(frozen=True)
 class _Guide:
     lines: list[str]
     tokens: list[Token]
     sections: list[_Section]
+    subsections: list[_Section]
 
     @classmethod
     def parse(cls, text: str) -> "_Guide":
         lines = text.splitlines()
         tokens = MarkdownIt("commonmark").enable("table").parse(text)
         headings = [
-            (token.map[0], tokens[index + 1].content)
+            (token.map[0], _HEADING_TAGS[token.tag], tokens[index + 1].content)
             for index, token in enumerate(tokens)
-            if token.type == "heading_open" and token.tag == "h2" and token.map is not None
+            if token.type == "heading_open" and token.tag in _HEADING_TAGS and token.map is not None
         ]
-        ends = [first for first, _title in headings[1:]] + [len(lines)]
-        sections = [_Section(title, first, end) for (first, title), end in zip(headings, ends, strict=True)]
-        return cls(lines, tokens, sections)
+        found = [
+            _Section(
+                title,
+                first,
+                next((later for later, other, _ in headings[at + 1 :] if other <= level), len(lines)),
+                level,
+            )
+            for at, (first, level, title) in enumerate(headings)
+        ]
+        return cls(
+            lines,
+            tokens,
+            [item for item in found if item.level == _SECTION_LEVEL],
+            [item for item in found if item.level == _SUBSECTION_LEVEL],
+        )
+
+    def subsections_of(self, section: _Section) -> list[_Section]:
+        return [item for item in self.subsections if section.first_line < item.first_line < section.end_line]
 
     def section_text(self, section: _Section) -> str:
         return "\n".join(self.lines[section.first_line : section.end_line]).rstrip()
@@ -148,20 +183,11 @@ class _Guide:
 
     def section_matching(self, query: str) -> _Section | None:
         wanted = _plain(query).casefold()
-        exact = [section for section in self.sections if _plain(section.title).casefold() == wanted]
-        if exact:
-            return exact[0]
-        prefixed = [
-            section for section in self.sections if _plain(section.title).casefold().startswith(wanted)
-        ]
-        if prefixed:
-            return prefixed[0] if len(prefixed) == 1 and wanted else None
-        word_prefixed = [
-            section
-            for section in self.sections
-            if any(word.startswith(wanted) for word in _plain(section.title).casefold().split())
-        ]
-        return word_prefixed[0] if len(word_prefixed) == 1 and wanted else None
+        for pool in (self.sections, self.subsections):
+            matched = _first_matching_tier(pool, wanted)
+            if matched:
+                return matched[0] if len(matched) == 1 and wanted else None
+        return None
 
     def blocks_table_rows(self, name: str) -> str | None:
         blocks = self.section_named(_BLOCKS_SECTION)
@@ -218,6 +244,12 @@ def lookup(name: str, guide_text: str) -> str:
 
 def list_topics(guide_text: str) -> str:
     guide = _Guide.parse(guide_text)
-    return "\n".join(
-        ["Guide sections", *(section.title for section in guide.sections), "", "Blocks", *block_names()]
-    )
+    titles = [
+        line
+        for section in guide.sections
+        for line in (
+            section.title,
+            *(f"{_INDENT}{item.title}" for item in guide.subsections_of(section)),
+        )
+    ]
+    return "\n".join(["Guide sections", *titles, "", "Blocks", *block_names()])

@@ -827,22 +827,17 @@ def _check_files(paths: Sequence[str], *, strict: bool = False, targets: Sequenc
 
 
 def _guide_source() -> str:
-    return package_text("skill/GUIDE.md")
+    guide = package_text("skill/GUIDE.md").rstrip()
+    example = package_text("skill/example.yaml").rstrip()
+    return f"{guide}\n\n## A complete example\n\n```yaml\n{example}\n```"
 
 
 def _guide_output(topic: str | Literal[True], list_topics_only: bool) -> str:
     if list_topics_only:
         return list_topics(_guide_source())
     if topic is True:
-        return _guide_text()
+        return _guide_source()
     return lookup(topic, _guide_source())
-
-
-def _guide_text() -> str:
-    """The authoring guide (GUIDE.md) with the live, tested example appended — printed by --guide."""
-    guide = package_text("skill/GUIDE.md").rstrip()
-    example = package_text("skill/example.yaml").rstrip()
-    return f"{guide}\n\n## A complete example\n\n```yaml\n{example}\n```"
 
 
 # Bundled skills, as (package resource dir, installed skill name under ~/.claude/skills/). The primary
