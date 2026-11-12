@@ -163,8 +163,22 @@ def _fail(message: str) -> int:
     return 1
 
 
+def _new_help() -> str:
+    parser = argparse.ArgumentParser(
+        prog="skaldr new", description="Write a starter content file you fill in, then render."
+    )
+    parser.add_argument("kind", help=f"what to start; the kinds are: {', '.join(_NEW_KINDS)}")
+    parser.add_argument(
+        "file", metavar="FILE", help="where to write it; an existing file is never overwritten"
+    )
+    return parser.format_help()
+
+
 def _run_new(arguments: list[str]) -> int:
     kinds = ", ".join(_NEW_KINDS)
+    if arguments[:1] in (["--help"], ["-h"]):
+        print(_new_help(), end="")
+        return 0
     if len(arguments) != 2:
         return _fail(f"usage: skaldr new <kind> <file>; the kinds are {kinds}")
     kind, file_name = arguments
@@ -259,7 +273,8 @@ def main(argv: list[str] | None = None) -> int:
         epilog="Sign in to Notion or Jira with `skaldr auth`; see `skaldr auth --help`. Publish with "
         "`skaldr publish`, `skaldr diff` and `skaldr status`; see `skaldr publish --help`. List a large "
         "file's headings and sections with `skaldr outline FILE` and print one of them word for word with "
-        "`skaldr show FILE#ANCHOR`.",
+        "`skaldr show FILE#ANCHOR`. Start a document with `skaldr new <kind> FILE` "
+        f"(kinds: {', '.join(_NEW_KINDS)}).",
     )
     parser.add_argument(
         "--version",
@@ -569,6 +584,12 @@ def main(argv: list[str] | None = None) -> int:
     for path in written:
         print(f"OK  {path}")
     print(_build_summary(report))
+    unfilled = find_placeholders(report)
+    if unfilled:
+        print(
+            f"warning: {data_path}: {_plural(len(unfilled), 'unfilled placeholder')}: {', '.join(unfilled)}",
+            file=sys.stderr,
+        )
     return 0
 
 

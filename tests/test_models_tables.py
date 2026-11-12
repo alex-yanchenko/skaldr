@@ -619,6 +619,43 @@ def test_totals_column_must_be_a_number_column() -> None:
         parse_report(make_report(blocks=[table]))
 
 
+def _table_with_totals(totals: object) -> dict[str, object]:
+    return {
+        "type": "table",
+        "columns": [
+            {"key": "issue", "label": "Issue"},
+            {"key": "pts", "label": "Points", "kind": "number"},
+        ],
+        "rows": [{"issue": "x", "pts": 3}],
+        "totals": totals,
+    }
+
+
+def test_totals_given_a_bare_column_key_is_the_same_as_a_column_mapping() -> None:
+    shorthand = parse_report(make_report(blocks=[_table_with_totals("pts")])).blocks[0]
+    spelled_out = parse_report(make_report(blocks=[_table_with_totals({"column": "pts"})])).blocks[0]
+
+    assert shorthand == spelled_out
+
+
+def test_totals_given_a_bare_key_that_is_not_a_number_column_names_it() -> None:
+    with pytest.raises(ReportError, match=r"totals.column 'issue' must be a number column"):
+        parse_report(make_report(blocks=[_table_with_totals("issue")]))
+
+
+@pytest.mark.parametrize(
+    "totals",
+    [3, ["pts"], {"col": "pts"}, {}],
+    ids=["number", "list", "wrong-key", "empty-mapping"],
+)
+def test_totals_in_the_wrong_shape_names_the_expected_one(totals: object) -> None:
+    with pytest.raises(
+        ReportError,
+        match=r"totals takes a number column key or \{column: <number-column-key>\}",
+    ):
+        parse_report(make_report(blocks=[_table_with_totals(totals)]))
+
+
 def test_empty_badge_cell_is_allowed() -> None:
     table = make_reconciled_table(
         columns=[

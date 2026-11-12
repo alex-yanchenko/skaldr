@@ -25,7 +25,7 @@ class SwimlaneStep(FrozenModel):
     )
     n: NonBlank = Field(
         description="The number shown in the step's cell, a free string ('1', '3a', 'R1'); skaldr never "
-        "derives or renumbers it, so it reads exactly as written.",
+        "derives or renumbers it, so it reads exactly as written. An integer such as 1 is read as '1'.",
     )
     label: NonBlank = Field(description="Step label, shown beside the number.")
     group: str | None = Field(
@@ -54,6 +54,11 @@ class SwimlaneStep(FrozenModel):
         "post-MVP: a warm hollow badge that recedes). Unset, the HTML draws the step as `todo` and the "
         "Markdown exports show no state glyph. The value counts toward the totals in every state.",
     )
+
+    @field_validator("n", mode="before", json_schema_input_type=NonBlank | int)
+    @classmethod
+    def _an_integer_is_its_string(cls, value: Any) -> Any:
+        return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
 
     @property
     def shown_state(self) -> SwimlaneStepState:

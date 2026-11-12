@@ -796,6 +796,43 @@ def test_check_notes_unfilled_placeholders_but_passes_without_strict(
     assert "1 unfilled placeholder: url" in captured.out
 
 
+def test_render_warns_on_stderr_about_unfilled_placeholders_and_still_succeeds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(blocks=[{"type": "text", "body": "{{url}} and {{ticket}}."}]))
+    out_path = tmp_path / "report.html"
+
+    exit_code = main([str(data_path), "-o", str(out_path)])
+
+    captured = capsys.readouterr()
+    assert (exit_code, out_path.exists(), captured.err) == (
+        0,
+        True,
+        f"warning: {data_path}: 2 unfilled placeholders: ticket, url\n",
+    )
+    assert captured.out.startswith(f"OK  {out_path}\n")
+
+
+def test_render_warns_with_the_singular_noun_for_one_unfilled_placeholder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report(meta={"title": "{{t}}"}))
+
+    main([str(data_path), "-o", str(tmp_path / "report.html")])
+
+    assert capsys.readouterr().err == f"warning: {data_path}: 1 unfilled placeholder: t\n"
+
+
+def test_render_without_unfilled_placeholders_prints_nothing_on_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_path = _write(tmp_path, make_report())
+
+    main([str(data_path), "-o", str(tmp_path / "report.html")])
+
+    assert capsys.readouterr().err == ""
+
+
 def test_check_strict_fails_on_unfilled_placeholders_with_a_plural_message(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

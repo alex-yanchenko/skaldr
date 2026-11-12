@@ -210,6 +210,7 @@ other blank until you fill in the URL.
 
 A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts too, even though those fields are plain text and show the `{{name}}` as written.
 
+- Rendering a page with blanks still succeeds, and prints `warning: file.yaml: 2 unfilled placeholders: ticket, url` on stderr after the `OK` lines.
 - `skaldr --check file.yaml` reports the count (`… (2 unfilled placeholders: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
   you run before "final". Under the failing line it lists each blank with the fields that hold it:
@@ -760,7 +761,7 @@ columns:
 ```
 
 Step fields are explicit, and skaldr never derives or renumbers them: `lane` (a lane's key), `col`
-(a column's key), `n` (the number shown, a free string such as `"1"`, `"3a"` or `"R1"`), and
+(a column's key), `n` (the number shown, a free string such as `"1"`, `"3a"` or `"R1"`; an integer such as `1` is read as `"1"`), and
 `label`. Two steps in the same cell stack.
 
 Give steps an optional numeric `value` (points, hours, cost, headcount: whatever the matrix measures)
@@ -1244,7 +1245,7 @@ A reference's `url`, like a swimlane step's, must be a well-formed `http`, `http
   `reconcile` total. It has no meaning against a plain `totals` sum, so a table that sets
   `pct_of_total` without a `reconcile` is rejected at build time (add a `reconcile`, or drop the flag).
   It is also rejected on a column that is not a `number` column, which has no share to show.
-- **`totals`** adds a bold footer summing a number column (for tables that aren't reconciled).
+- **`totals`** adds a bold footer summing a number column (for tables that aren't reconciled). Write `totals: { column: pts }`, or just `totals: pts` for the column key `pts`; anything else fails naming the expected shape, `{column: <number-column-key>}`.
 - **`rollup`** (`{ by: <badge-column-key>, label? }`) adds a summary strip below the table that
   counts the rows by that badge column, one `<chip> <count>` per value (in first-appearance order).
   The counts are **derived from the rows**, so they can't drift the way a hand-typed summary would;
