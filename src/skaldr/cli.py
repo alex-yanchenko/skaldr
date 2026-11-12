@@ -50,7 +50,7 @@ from skaldr.render import (
 )
 from skaldr.replace_file import (
     create_file,
-    refuse_a_symlink_at_a_default_path,
+    refuse_a_symlink_on_a_default_path,
     replace_file,
     resolved_path,
 )
@@ -85,11 +85,12 @@ _PLAN_RULE_BLOCK = re.compile(
 )
 
 
-def _resolve_out_path(data_path: Path, out_arg: str | None) -> Path:
+def _resolve_out_path(data_path: Path, out_arg: str | None, *, writes_html: bool) -> Path:
     """The HTML output path: the explicit `-o` value, or a default `out/<data-stem>.html` under the cwd."""
     if out_arg:
         return resolved_path(Path(out_arg))
-    return refuse_a_symlink_at_a_default_path(Path.cwd() / "out" / f"{data_path.stem}.html", "-o")
+    default = Path.cwd() / "out" / f"{data_path.stem}.html"
+    return refuse_a_symlink_on_a_default_path(default, Path.cwd(), "-o") if writes_html else default
 
 
 _PUBLISH_COMMANDS = frozenset({"publish", "diff", "status"})
@@ -522,7 +523,7 @@ def main(argv: list[str] | None = None) -> int:
 
     data_path = Path(args.data[0]).resolve()
     try:
-        out_path = _resolve_out_path(data_path, args.out)
+        out_path = _resolve_out_path(data_path, args.out, writes_html=_writes_an_html_page(args))
     except OSError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -759,8 +760,8 @@ def _export_document(data_path: Path, target: ExportTarget, export_dir: str | No
         out_dir = (
             Path(export_dir)
             if export_dir is not None
-            else refuse_a_symlink_at_a_default_path(
-                Path.cwd() / "out" / f"{data_path.stem}.{target}", "--export-dir"
+            else refuse_a_symlink_on_a_default_path(
+                Path.cwd() / "out" / f"{data_path.stem}.{target}", Path.cwd(), "--export-dir"
             )
         ).resolve()
         report = load_report(data_path)

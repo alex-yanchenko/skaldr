@@ -15,12 +15,15 @@ def resolved_path(path: Path) -> Path:
     return resolved
 
 
-def refuse_a_symlink_at_a_default_path(path: Path, option_to_write_elsewhere: str) -> Path:
-    if path.is_symlink():
-        raise DefaultPathIsASymlinkError(
-            f"{path} is a symlink to {os.path.realpath(path)}, so skaldr will not write through it; "
-            f"remove it or pass {option_to_write_elsewhere} to write elsewhere"
-        )
+def refuse_a_symlink_on_a_default_path(path: Path, inside: Path, option_to_write_elsewhere: str) -> Path:
+    for part in (path, *path.parents):
+        if part == inside:
+            break
+        if part.is_symlink():
+            raise DefaultPathIsASymlinkError(
+                f"{part} is a symlink to {part.resolve()}, so skaldr will not write through it; "
+                f"remove it or pass {option_to_write_elsewhere} to write elsewhere"
+            )
     return path
 
 

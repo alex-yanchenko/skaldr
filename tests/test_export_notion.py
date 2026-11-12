@@ -2572,8 +2572,8 @@ def test_an_export_refuses_a_symlink_where_its_page_goes_and_leaves_its_target_a
         sorted(path.name for path in out_dir.iterdir()),
         target.read_text(encoding="utf-8") if target.exists() else None,
     ) == (
-        f"refusing to overwrite {out_dir / 'page.md'}, which is not on the {EXPORT_MANIFEST} list of "
-        "files skaldr wrote; move it away or choose another --export-dir",
+        f"refusing to overwrite {out_dir / 'page.md'}, which is a symlink, and an export does not write "
+        "through one; move it away or choose another --export-dir",
         True,
         ["page.md"],
         target_text,

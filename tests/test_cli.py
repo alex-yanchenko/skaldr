@@ -2028,6 +2028,26 @@ def test_a_symlinked_default_output_path_is_refused_and_its_target_is_left_alone
     )
 
 
+def test_a_symlinked_out_folder_is_refused_and_the_folder_it_points_to_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    data_path = _write(tmp_path, make_report())
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    link = tmp_path / "out"
+    link.symlink_to(elsewhere, target_is_directory=True)
+
+    exit_code = main([str(data_path)])
+
+    assert (exit_code, capsys.readouterr().err, sorted(elsewhere.iterdir())) == (
+        1,
+        f"error: {link} is a symlink to {elsewhere.resolve()}, so skaldr will not write through it; "
+        "remove it or pass -o to write elsewhere\n",
+        [],
+    )
+
+
 def test_a_dangling_symlink_at_the_default_output_path_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
