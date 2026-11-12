@@ -45,8 +45,8 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: |
           if [[ "$HEAD_REF" == release-please--* ]]; then uv sync; else uv sync --locked; fi
-      - run: uv run --with coverage==7.6.10 coverage run -m pytest
-      - run: uv run --with coverage==7.6.10 coverage report
+      - run: uv run coverage run -m pytest
+      - run: uv run coverage report
 
   build:
     runs-on: ubuntu-latest

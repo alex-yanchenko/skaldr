@@ -5,9 +5,8 @@ import yaml
 
 from tests.conftest import REPO_ROOT
 
-COVERAGE_VERSION = "7.6.10"
-COVERED_RUN = f"uv run --with coverage=={COVERAGE_VERSION} coverage run -m pytest"
-COVERAGE_REPORT = f"uv run --with coverage=={COVERAGE_VERSION} coverage report"
+COVERED_RUN = "uv run coverage run -m pytest"
+COVERAGE_REPORT = "uv run coverage report"
 
 
 def _pyproject() -> dict[str, Any]:
@@ -26,6 +25,12 @@ def test_coverage_measures_branches_of_the_skaldr_package_and_fails_under_97_per
         "run": {"branch": True, "source": ["skaldr"]},
         "report": {"fail_under": 97},
     }
+
+
+def test_coverage_is_a_locked_dev_dependency() -> None:
+    dev = _pyproject()["dependency-groups"]["dev"]
+
+    assert [entry for entry in dev if entry.startswith("coverage")] != []
 
 
 def test_the_ci_test_job_runs_the_suite_under_coverage_and_then_checks_the_gate() -> None:
