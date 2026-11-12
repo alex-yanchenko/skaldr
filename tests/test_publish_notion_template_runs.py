@@ -393,8 +393,10 @@ def test_a_page_a_person_wrote_in_after_a_failed_fill_is_not_filled_over_by_the_
         1,
         [],
         True,
-        f"error: Notion page {DOCUMENT_PAGE_ID} changed after skaldr read it, so nothing was written; "
-        "publish again\n",
+        f"error: notion page {NOTION_PAGE_ID}, document ({DOCUMENT_PAGE}) carries no skaldr stamp and holds "
+        "content that is not what skaldr was creating there, so skaldr will not adopt it; if it is the item "
+        "skaldr created, empty it in Notion and publish again, and if it is not, delete its entry from "
+        f"`pending_creates` in {state_path_for(path)}\n",
     )
 
 

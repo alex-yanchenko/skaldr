@@ -287,7 +287,7 @@ class SlackTransport:
         self._read.layouts[item_id] = keyed.raw_sections
         return RemoteItem(
             item_id,
-            ItemContent(title=keyed.title, sections=keyed.sections),
+            ItemContent(title=keyed.title, sections=keyed.sections_without_the_archived_line),
             keyed.raw_sections,
             keyed.stamp,
             marker=_digest(markdown),

@@ -26,6 +26,7 @@ from skaldr.publish.reading import (
     part_text,
     read_items_written_into,
     read_published,
+    refuse_items_skaldr_did_not_write,
     remote_edits,
     settle_interrupted_creates,
     shown_token,
@@ -189,6 +190,7 @@ def _preflight(prepared: Prepared, transports: Transports) -> _Preflight:
     refuse_moved_targets(prepared.drafts, prepared.state)
     _refuse_an_interrupted_create(prepared, creates.left_empty)
     published = read_published(prepared, transports)
+    refuse_items_skaldr_did_not_write(prepared, published.unowned)
     settled = prepared.with_state(published.state)
     written_into = read_items_written_into(settled, settled.plan, transports, {})
     return _Preflight(settled, published.readings, published.missing, written_into, creates.left_empty)

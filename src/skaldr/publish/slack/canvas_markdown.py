@@ -227,6 +227,12 @@ class KeyedCanvas:
     def archived(self) -> bool:
         return self.title.endswith(ARCHIVED_TITLE_MARKER)
 
+    @property
+    def sections_without_the_archived_line(self) -> dict[str, str]:
+        if not self.opens_with_the_archived_line:
+            return self.sections
+        return replace(self, content_start=self.content_start + 1).sections
+
     def _owned_spans(
         self, rendered: Mapping[str, str], saved_remote: Mapping[str, str]
     ) -> dict[int, tuple[int, str]]:

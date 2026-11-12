@@ -796,9 +796,10 @@ def test_a_canvas_whose_archive_stopped_before_the_rename_still_reads_so_the_arc
     read = transport.read_item(CANVAS, CONTENT)
     transport.archive_item(CANVAS)
 
-    assert (read.stamp, dict(read.raw_sections), slack.markdown_of(CANVAS)) == (
+    assert (read.stamp, dict(read.raw_sections), read.comparable.sections, slack.markdown_of(CANVAS)) == (
         None,
         {"intro": f"{archived_line('garden-handbook')}\n"},
+        {},
         ARCHIVED_CANVAS,
     )
 
