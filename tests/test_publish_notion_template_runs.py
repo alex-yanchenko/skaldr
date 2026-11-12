@@ -309,6 +309,58 @@ def test_a_page_left_empty_by_a_fill_that_failed_is_adopted_and_filled_by_the_ne
     assert notion.markdown_of(TOOLS_PAGE) == plain.markdown_of(TOOLS_PAGE)
 
 
+def test_a_dry_run_after_a_failed_fill_sends_no_write_and_lists_the_fill_as_a_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    notion.requests.clear()
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path)], registry=_registry(notion))
+
+    writes = [(request.method, request.url.path) for request in notion.requests if request.method != "GET"]
+    assert (exit_code, writes, notion.markdown_of(DOCUMENT_PAGE), capsys.readouterr().out) == (
+        0,
+        [],
+        "",
+        f"notion page {NOTION_PAGE_ID}: 1 to create, 0 to update, 0 to archive, 1 to fill\n"
+        f"  fill     document {DOCUMENT_PAGE}\n"
+        '  create   section tools "Tools"\n'
+        f"Dry run: nothing was sent. Publish with `skaldr publish {path} --apply`.\n",
+    )
+
+
+def test_an_apply_after_a_failed_fill_prints_the_fill_as_its_first_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_notion(make_notion_credentials())
+    save_notion_template(WORKSPACE, TEMPLATE_PAGE)
+    notion = _notion()
+    notion.scripted = [
+        Scripted(500, {"object": "error"}, method="PATCH", path=f"/v1/pages/{DOCUMENT_PAGE}/markdown")
+    ]
+    path = write_garden_report(tmp_path)
+    main(["publish", str(path), "--apply"], registry=_registry(notion))
+    capsys.readouterr()
+
+    exit_code = main(["publish", str(path), "--apply"], registry=_registry(notion))
+
+    assert (exit_code, capsys.readouterr().out.splitlines()[:2]) == (
+        0,
+        [
+            f"notion page {NOTION_PAGE_ID}: fill     document {DOCUMENT_PAGE}",
+            f'notion page {NOTION_PAGE_ID}: create   section tools "Tools"',
+        ],
+    )
+
+
 def test_a_page_a_person_wrote_in_after_a_failed_fill_is_not_filled_over_by_the_next_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

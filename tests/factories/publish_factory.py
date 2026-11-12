@@ -261,6 +261,25 @@ class FakeTransport:
     def stamp_by_hand(self, item_id: str, stamp: Stamp | None) -> None:
         self.items[item_id].stamp = stamp
 
+    def empty_item_by_hand(self, item_id: str) -> None:
+        item = self.items[item_id]
+        item.raw_sections = {}
+        item.stamp = None
+        item.revision = self._bump()
+
+    def fill_a_page_left_empty(self, item_id: str, request: NewItem, /) -> RemoteItem:
+        self._write(("fill", item_id))
+        item = self.items[item_id]
+        content = self.comparable_form(request.content)
+        item.title = content.title
+        item.raw_sections = dict(content.sections)
+        item.fields = self._kept_fields({**item.fields, **content.fields})
+        item.icon = content.icon or item.icon
+        item.cover = content.cover or item.cover
+        item.stamp = request.stamp
+        item.revision = self._bump()
+        return self._after_write(item_id)
+
     def set_icon_by_hand(self, item_id: str, icon: str | None) -> None:
         self.items[item_id].icon = icon
         self.report_an_edit_without_changing_content(item_id, ICON)

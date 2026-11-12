@@ -16,10 +16,11 @@ from skaldr.publish.engine import (
     RemoteEdit,
     apply_publish,
     diff_publish,
+    dry_run_publish,
     prepare_publish,
     publish_status,
 )
-from skaldr.publish.plan import ItemRef
+from skaldr.publish.plan import ItemRef, describe_plan
 from skaldr.publish.state import held_state_lock, load_state, state_path_for
 from skaldr.publish.transport import Stamp
 from skaldr.publish_block import JiraTarget, NotionTarget, TargetBase
@@ -164,6 +165,50 @@ def test_an_unfinished_create_whose_stamp_did_not_read_back_is_recorded_as_creat
         "created",
         [],
     )
+
+
+def test_a_dry_run_after_a_create_left_its_item_empty_sends_nothing_and_plans_the_fill(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    pending = _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+
+    dry_run = dry_run_publish(prepare_publish(path, fake_registry(transport)))
+
+    assert (describe_plan(dry_run.plan), dry_run.refusal, transport.writes(), _pending_creates(path)) == (
+        [
+            f"{TARGET_LABEL}: 0 to create, 0 to update, 0 to archive, 1 to fill",
+            "  fill     section tools page-2",
+        ],
+        None,
+        [],
+        pending,
+    )
+
+
+def test_an_apply_after_a_create_left_its_item_empty_fills_it_as_a_step_and_records_it_as_created(
+    tmp_path: Path,
+) -> None:
+    path = write_garden_report(tmp_path)
+    transport = FakeTransport()
+    _create_of_tools_left_unfinished(path, transport)
+    transport.empty_item_by_hand("page-2")
+
+    outcome = _publish(path, transport)
+    state = load_state(state_path_for(path), DOC_ID)
+    tools = state.targets[TARGET_LABEL].sections["tools"]
+
+    assert (outcome, transport.writes(), tools.item_id, tools.origin, state.pending_creates) == (
+        Applied(("fill     section tools page-2",)),
+        [("fill", "page-2")],
+        "page-2",
+        "created",
+        [],
+    )
+    assert transport.items["page-2"].content == transport.comparable_form(_drafted(path, "tools"))
+    assert transport.items["page-2"].stamp == Stamp(DOC_ID, "tools")
 
 
 def test_an_unfinished_create_stamped_for_another_document_stops_the_run_and_stays_pending(

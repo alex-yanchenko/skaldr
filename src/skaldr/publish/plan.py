@@ -42,6 +42,13 @@ class CreateStep:
 
 
 @dataclass(frozen=True)
+class FillStep:
+    item: ItemRef
+    draft: ItemDraft
+    item_id: str
+
+
+@dataclass(frozen=True)
 class WriteFieldsStep:
     item: ItemRef
     parts: tuple[Part, ...]
@@ -86,6 +93,7 @@ class WriteContentStep:
 
 Step = (
     CreateStep
+    | FillStep
     | WriteFieldsStep
     | WriteSectionStep
     | RemoveSectionStep
@@ -168,6 +176,7 @@ def _retired(ref: ItemRef, item: PublishedItem) -> Step:
 class _RemoteFacts:
     rewritten: Mapping[ItemRef, Collection[Part]]
     missing: Collection[ItemRef]
+    left_empty: Mapping[ItemRef, str]
 
 
 def _target_plan(
@@ -178,6 +187,9 @@ def _target_plan(
     for item in draft.items:
         ref = ItemRef(draft.label, item.section_id)
         existing = published_item(published, item.section_id)
+        if existing is None and ref in facts.left_empty:
+            creates.append(FillStep(ref, item, facts.left_empty[ref]))
+            continue
         if existing is None or ref in facts.missing:
             into_id = connector.existing_item_id(draft.target) if item.section_id is None else None
             creates.append(CreateStep(ref, item, into_id))
@@ -250,10 +262,11 @@ def plan_publish(
     registry: ConnectorRegistry,
     rewritten: Mapping[ItemRef, Collection[Part]] = MappingProxyType({}),
     missing: Collection[ItemRef] = (),
+    left_empty: Mapping[ItemRef, str] = MappingProxyType({}),
 ) -> PublishPlan:
     _refuse_shared_items(state)
     drafted = {draft.label for draft in drafts}
-    facts = _RemoteFacts(rewritten, missing)
+    facts = _RemoteFacts(rewritten, missing, left_empty)
     return PublishPlan(
         (
             *(
@@ -274,6 +287,8 @@ def describe_step(step: Step) -> str:
         case CreateStep():
             into = f" into {step.into_id}" if step.into_id else ""
             return f'create   {item_label(step.item.section_id)} "{step.draft.content.title}"{into}'
+        case FillStep():
+            return f"fill     {item_label(step.item.section_id)} {step.item_id}"
         case WriteFieldsStep():
             return (
                 f"update   {item_label(step.item.section_id)}: {', '.join(part.label for part in step.parts)}"
@@ -298,9 +313,11 @@ def _counts(steps: Sequence[Step]) -> str:
     creates = sum(isinstance(step, CreateStep) for step in steps)
     archives = sum(isinstance(step, ArchiveStep) for step in steps)
     releases = sum(isinstance(step, ReleaseStep) for step in steps)
-    updates = len(steps) - creates - archives - releases
+    fills = sum(isinstance(step, FillStep) for step in steps)
+    updates = len(steps) - creates - archives - releases - fills
     counted = f"{creates} to create, {updates} to update, {archives} to archive"
-    return f"{counted}, {releases} to release" if releases else counted
+    released = f"{counted}, {releases} to release" if releases else counted
+    return f"{released}, {fills} to fill" if fills else released
 
 
 def describe_plan(plan: PublishPlan) -> list[str]:

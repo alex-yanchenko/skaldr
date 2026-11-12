@@ -22,10 +22,8 @@ from skaldr.publish.prepared import Prepared, Transports, with_item
 from skaldr.publish.state import ItemOrigin, PendingCreate, PublishedItem, PublishState
 from skaldr.publish.transport import (
     FillsAPageLeftEmpty,
-    NewItem,
     RefusesFieldsAnItemCannotHold,
     RemoteItem,
-    Stamp,
     Transport,
     is_unset,
 )
@@ -196,7 +194,7 @@ def _rendered_where_it_matches(remote: ItemContent, draft: ItemContent, transpor
     return ItemContent(title=title, sections=sections, fields=fields, icon=icon, cover=cover)
 
 
-def _adopted(remote: RemoteItem, draft: ItemDraft | None, transport: Transport) -> PublishedItem:
+def adopted_item(remote: RemoteItem, draft: ItemDraft | None, transport: Transport) -> PublishedItem:
     rendered = (
         remote.comparable
         if draft is None
@@ -218,8 +216,15 @@ def _pending_target(prepared: Prepared, pending: PendingCreate) -> TargetBase:
     return target_type.model_validate(pending.target_as_written)
 
 
-def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> PublishState:
+@dataclass(frozen=True)
+class SettledCreates:
+    state: PublishState
+    left_empty: Mapping[ItemRef, str]
+
+
+def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> SettledCreates:
     state = prepared.state
+    left_empty: dict[ItemRef, str] = {}
     for pending in prepared.state.pending_creates:
         item_id = pending.into_id or pending.created_id
         if item_id is None:
@@ -231,23 +236,22 @@ def settle_interrupted_creates(prepared: Prepared, transports: Transports) -> Pu
         created_by_skaldr = pending.into_id is None
         if remote is not None and created_by_skaldr:
             refuse_another_documents_item(ref, remote, prepared.doc_id)
-        draft = prepared.draft_of(ref)
         if (
             remote is not None
             and created_by_skaldr
-            and draft is not None
+            and prepared.draft_of(ref) is not None
             and _left_empty_by_the_create(remote)
             and isinstance(transport, FillsAPageLeftEmpty)
         ):
-            stamp = Stamp(prepared.doc_id, ref.section_id)
-            remote = transport.fill_a_page_left_empty(item_id, NewItem(target, stamp, draft.content))
+            left_empty[ref] = item_id
+            continue
         remaining = [held for held in state.pending_creates if held != pending]
         state = state.model_copy(update={"pending_creates": remaining})
         if remote is not None and (created_by_skaldr or remote.doc_id == prepared.doc_id):
-            held = _adopted(remote, prepared.draft_of(ref), transport)
+            held = adopted_item(remote, prepared.draft_of(ref), transport)
             origin: ItemOrigin = "created" if created_by_skaldr else "adopted"
             state = with_item(state, ref, target, held.model_copy(update={"origin": origin}))
-    return state
+    return SettledCreates(state, left_empty)
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ from skaldr.publish.content import (
 from skaldr.publish.plan import (
     ArchiveStep,
     CreateStep,
+    FillStep,
     ItemRef,
     PublishPlan,
     ReleaseStep,
@@ -27,6 +28,7 @@ from skaldr.publish.plan import (
     published_item,
 )
 from skaldr.publish.prepared import Prepared, Transports, with_item
+from skaldr.publish.reading import adopted_item
 from skaldr.publish.state import (
     InFlightWrite,
     PendingCreate,
@@ -41,6 +43,7 @@ from skaldr.publish.transport import (
     AddSection,
     ContentWrite,
     FieldsWrite,
+    FillsAPageLeftEmpty,
     NewItem,
     PlacesItsCreates,
     RawSections,
@@ -269,6 +272,8 @@ class Applier:
         match step:
             case CreateStep():
                 return self._created(target_plan, step)
+            case FillStep():
+                return self._filled(target_plan, step)
             case WriteFieldsStep():
                 return self._write_fields(target_plan, step)
             case WriteSectionStep():
@@ -296,6 +301,22 @@ class Applier:
                 )
             case _:
                 assert_never(step)
+
+    def _filled(self, target_plan: TargetPlan, step: FillStep) -> PublishState:
+        transport = self.transports.for_target(target_plan.label)
+        assert isinstance(transport, FillsAPageLeftEmpty)
+        request = NewItem(target_plan.target, self._stamp(step.item), step.draft.content)
+        remote = transport.fill_a_page_left_empty(step.item_id, request)
+        self.remote[step.item] = remote
+        filled = adopted_item(remote, step.draft, transport).model_copy(update={"origin": "created"})
+        state = with_item(self.state, step.item, target_plan.target, filled)
+        remaining = [
+            pending
+            for pending in state.pending_creates
+            if (pending.target, pending.section_id, pending.created_id)
+            != (step.item.target, step.item.section_id, step.item_id)
+        ]
+        return state.model_copy(update={"pending_creates": remaining})
 
     def _created(self, target_plan: TargetPlan, step: CreateStep) -> PublishState:
         parent = None if step.item.section_id is None else self._item(ItemRef(step.item.target, None))
