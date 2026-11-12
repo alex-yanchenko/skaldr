@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +34,7 @@ from tests.factories.auth_factory import (
     seed_notion,
 )
 from tests.factories.jira_factory import DONE, FakeJira
+from tests.factories.match_factory import exactly
 from tests.factories.notion_factory import InMemoryNotion, notion_registry, numbered_id
 from tests.factories.publish_factory import (
     DOC_ID,
@@ -158,10 +158,6 @@ def _pending_refusal(path: Path, parts: str) -> str:
     )
 
 
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
-
-
 @pytest.mark.parametrize("apply", [pytest.param(["--apply"], id="apply"), pytest.param([], id="dry-run")])
 def test_a_planted_retiring_entry_does_not_trash_an_unstamped_notion_page_that_holds_other_content(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], apply: list[str]
@@ -219,7 +215,7 @@ def test_a_planted_section_entry_does_not_retire_an_unstamped_fake_item_that_hol
     path = write_garden_report(tmp_path)
     _plant_a_section(path, fake_registry(transport), _planted_item(retiring=retiring, origin=origin))
 
-    with pytest.raises(PublishError, match=_exactly(_refusal(path, verb, "the title, section intro"))):
+    with pytest.raises(PublishError, match=exactly(_refusal(path, verb, "the title, section intro"))):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert (transport.writes(), transport.items[TEAMMATE_PAGE].archived) == ([], False)
 
@@ -244,7 +240,7 @@ def test_a_planted_pending_create_does_not_adopt_or_fill_an_unstamped_fake_item_
     path = write_garden_report(tmp_path)
     _plant_a_pending_create(path)
 
-    with pytest.raises(PublishError, match=_exactly(_pending_refusal(path, parts))):
+    with pytest.raises(PublishError, match=exactly(_pending_refusal(path, parts))):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert (transport.writes(), transport.items[TEAMMATE_PAGE].content) == (
         [],
@@ -260,7 +256,7 @@ def test_an_unstamped_item_with_child_pages_this_document_does_not_hold_is_not_a
     path = write_garden_report(tmp_path)
     _plant_a_section(path, fake_registry(transport), _planted_item())
 
-    with pytest.raises(PublishError, match=_exactly(_refusal(path, "archive", "child page teammate-child"))):
+    with pytest.raises(PublishError, match=exactly(_refusal(path, "archive", "child page teammate-child"))):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert transport.writes() == []
 
@@ -271,7 +267,7 @@ def test_an_empty_unstamped_item_with_a_title_skaldr_did_not_write_is_not_archiv
     path = write_garden_report(tmp_path)
     _plant_a_section(path, fake_registry(transport), _planted_item())
 
-    with pytest.raises(PublishError, match=_exactly(_refusal(path, "archive", "the title"))):
+    with pytest.raises(PublishError, match=exactly(_refusal(path, "archive", "the title"))):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert transport.writes() == []
 
@@ -293,7 +289,7 @@ def test_an_unstamped_item_with_an_icon_or_cover_skaldr_never_set_is_not_archive
     path = write_garden_report(tmp_path)
     _plant_a_section(path, fake_registry(transport), _planted_item())
 
-    with pytest.raises(PublishError, match=_exactly(_refusal(path, "archive", parts))):
+    with pytest.raises(PublishError, match=exactly(_refusal(path, "archive", parts))):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert transport.writes() == []
 
@@ -313,7 +309,7 @@ def test_an_item_whose_owned_property_a_person_changed_after_its_stamp_went_is_n
     transport.forget_calls()
     refusal = _refusal(path, "write to", "property Owner", item=f"{TARGET_LABEL}, section tools (page-2)")
 
-    with pytest.raises(PublishError, match=_exactly(refusal)):
+    with pytest.raises(PublishError, match=exactly(refusal)):
         apply_publish(prepare_publish(path, fake_registry(transport)), overwrite=True)
     assert transport.writes() == []
 
@@ -374,7 +370,7 @@ def test_a_planted_entry_does_not_close_an_unstamped_jira_issue_without_the_docu
     path, registry = _planted_jira_issue(tmp_path, jira)
     refusal = _refusal(path, "archive", parts, item=f"{JIRA_LABEL}, section gone (DEMO-9)", service="Jira")
 
-    with pytest.raises(PublishError, match=_exactly(refusal)):
+    with pytest.raises(PublishError, match=exactly(refusal)):
         apply_publish(prepare_publish(path, registry))
     assert [call for call in jira.calls() if call[0] != "GET"] == []
 
@@ -482,7 +478,7 @@ def test_overwrite_does_not_write_over_an_unstamped_item_whose_content_skaldr_di
     transport.forget_calls()
     refusal = _refusal(path, "write to", "section teammate", item=f"{TARGET_LABEL}, section tools (page-2)")
 
-    with pytest.raises(PublishError, match=_exactly(refusal)):
+    with pytest.raises(PublishError, match=exactly(refusal)):
         apply_publish(prepare_publish(path, fake_registry(transport)), overwrite=True)
     assert transport.writes() == []
 
@@ -502,7 +498,7 @@ def test_an_edit_made_while_a_write_put_the_stamp_back_stops_the_next_write_on_t
     transport.forget_calls()
 
     with pytest.raises(
-        WriteRejectedError, match=_exactly("the layout skaldr sent for page-1 is not the one on the service")
+        WriteRejectedError, match=exactly("the layout skaldr sent for page-1 is not the one on the service")
     ):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert transport.items["page-1"].raw_sections["planting"] == "## Planting\nSow in late spring.\n"
@@ -605,7 +601,7 @@ def test_a_write_that_partly_landed_on_an_item_that_lost_its_stamp_is_finished_a
         tmp_path, publish=whole, blocks=make_garden_blocks(tools="Rake.", planting="Sow in May.")
     )
     transport.land_only_the_first_section_of_the_next_content_write()
-    with pytest.raises(ConnectorError, match=_exactly(DROPPED_AFTER_WRITE)):
+    with pytest.raises(ConnectorError, match=exactly(DROPPED_AFTER_WRITE)):
         apply_publish(prepare_publish(path, registry))
 
     outcome = apply_publish(prepare_publish(path, registry))
@@ -628,7 +624,7 @@ def test_an_item_that_loses_its_stamp_and_gains_text_during_the_run_is_not_writt
         "will not write to it"
     )
 
-    with pytest.raises(WriteRejectedError, match=_exactly(refusal)):
+    with pytest.raises(WriteRejectedError, match=exactly(refusal)):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert transport.writes() == [("write_section", "page-1", "planting")]
 
@@ -646,7 +642,7 @@ def test_a_named_page_holding_a_property_the_document_sets_to_another_value_is_n
         "skaldr will not write into it; empty the page, or publish under it with `parent_page` instead"
     )
 
-    with pytest.raises(PublishError, match=_exactly(refusal)):
+    with pytest.raises(PublishError, match=exactly(refusal)):
         apply_publish(prepare_publish(path, fake_registry(transport)))
     assert transport.writes() == []
 

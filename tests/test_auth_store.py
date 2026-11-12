@@ -36,7 +36,6 @@ from skaldr.auth.store import (
     normalise_site,
     refuse_an_unusable_keychain,
     require_jira,
-    require_notion,
     save_jira,
     stored_jira_sign_ins,
     stored_notion_sign_ins,
@@ -64,6 +63,7 @@ from tests.factories.auth_factory import (
     SlowSaveKeyring,
     assert_secret_not_in_error_chain,
     insecure_keyring_refusal,
+    keyring_answering_once_the_notice_is_logged,
     legacy_entry_json,
     make_jira_credentials,
     make_notion_credentials,
@@ -364,13 +364,8 @@ def test_a_notion_access_token_in_the_environment_is_skipped_when_a_workspace_is
             "Not signed in to Jira at https://example.atlassian.net; run `skaldr auth jira`",
         ),
         (lambda: require_jira("legacy"), "Not signed in to Jira at legacy; run `skaldr auth jira`"),
-        (lambda: require_notion(), "Not signed in to Notion; run `skaldr auth notion`"),
-        (
-            lambda: require_notion(WORKSPACE_ID),
-            f"Not signed in to Notion workspace {WORKSPACE_ID}; run `skaldr auth notion`",
-        ),
     ],
-    ids=["jira", "a jira site", "the legacy jira entry", "notion", "a notion workspace"],
+    ids=["jira", "a jira site", "the legacy jira entry"],
 )
 def test_requiring_a_sign_in_that_is_not_there_says_how_to_add_it(
     find: Callable[[], object], refusal: str
@@ -383,15 +378,8 @@ def test_requiring_a_sign_in_that_is_not_there_says_how_to_add_it(
 
 def test_requiring_a_sign_in_returns_the_matching_one() -> None:
     save_jira(make_jira_credentials())
-    seed_notion(make_notion_credentials())
 
-    assert (
-        require_jira("example.atlassian.net"),
-        require_notion("11111111-1111-4111-8111-111111111111"),
-    ) == (
-        SignIn(make_jira_credentials(), "keychain"),
-        SignIn(make_notion_credentials(), "keychain"),
-    )
+    assert require_jira("example.atlassian.net") == SignIn(make_jira_credentials(), "keychain")
 
 
 def test_a_legacy_jira_entry_is_read_and_moved_to_its_site_key(keychain: InMemoryKeyring) -> None:
@@ -940,9 +928,19 @@ def test_a_program_that_sets_up_no_logging_shows_the_keychain_notice_on_stderr(t
         [
             "import keyring",
             "from skaldr.auth import store",
+            "import sys",
             "from tests.factories.auth_factory import SlowKeyring",
-            "store.KEYCHAIN_NOTICE_SECONDS = 0.05",
-            "keyring.set_keyring(SlowKeyring(answers_after=0.3))",
+            "slow = SlowKeyring(answers_after=30)",
+            "class AnswersOnceTheNoticeIsWritten:",
+            "    def write(self, text):",
+            "        sys.__stderr__.write(text)",
+            "        slow.released.set()",
+            "        return len(text)",
+            "    def flush(self):",
+            "        sys.__stderr__.flush()",
+            "store.KEYCHAIN_NOTICE_SECONDS = 0.01",
+            "keyring.set_keyring(slow)",
+            "sys.stderr = AnswersOnceTheNoticeIsWritten()",
             "print(store.stored_jira_sign_ins())",
         ]
     )
@@ -1167,12 +1165,14 @@ def test_a_locked_keychain_is_reported(operation: Callable[[], object]) -> None:
 def test_a_slow_keychain_says_what_skaldr_is_waiting_for_and_then_answers(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.05)
-    slow = SlowKeyring(answers_after=0.5)
-    slow.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
-    keyring.set_keyring(slow)
+    monkeypatch.setattr(store, "KEYCHAIN_NOTICE_SECONDS", 0.01)
+    monkeypatch.setattr(store, "KEYCHAIN_TIMEOUT_SECONDS", 25.0)
 
-    loaded = load_jira()
+    with keyring_answering_once_the_notice_is_logged() as slow:
+        slow.entries[("skaldr", "jira")] = make_jira_credentials().model_dump_json()
+        keyring.set_keyring(slow)
+
+        loaded = load_jira()
 
     assert (loaded, caplog.record_tuples, capsys.readouterr().err) == (
         SignIn(make_jira_credentials(), "keychain"),

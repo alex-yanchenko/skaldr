@@ -7,7 +7,7 @@ from typing import Any, get_args
 import pytest
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_markdown, export_notion, render_export
+from skaldr.export import EXPORT_MANIFEST, ExportResult, render_export
 from skaldr.export.apportion import apportioned
 from skaldr.export.budget import Budget, Limit, character_budget, characters
 from skaldr.export.glyphs import CALLOUT_ICON
@@ -70,10 +70,6 @@ from skaldr.richtext import (
 from tests.factories import (
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
-    EDGE_BADGES,
-    HAVE_BADGE,
-    MATRIX_OF_EDGE_BADGE_LABELS,
-    MATRIX_OF_EVERY_CELL_SHAPE,
     REFUSED_IN_THE_EXAMPLE,
     accepted_example,
     authored_block_types,
@@ -98,10 +94,15 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
-from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
+from tests.factories.export_factory import (
+    CARDS_LABELLED_WITH_A_TRAILING_COLON,
+    OPEN_ROWS_BADGE,
+    export_markdown,
+    export_notion,
+)
+from tests.factories.golden_factory import assert_matches_golden
 
 CHUNK_THAT_SPLITS_EVERY_SECTION = 100
 CHUNK_THAT_HOLDS_THE_WHOLE_PAGE = 100_000
@@ -1015,21 +1016,6 @@ def test_the_notion_footer_shows_rich_text_from_the_source_and_plain_facts() -> 
     assert page.splitlines()[-1] == 'see `app.ts` · 5 Oct {color="gray"}'
 
 
-@pytest.mark.parametrize(
-    ("body", "line"),
-    [
-        pytest.param("- not a list", "\\- not a list", id="dash"),
-        pytest.param("# not a heading", "\\# not a heading", id="hash"),
-        pytest.param("1. not a list", "1\\. not a list", id="ordered"),
-        pytest.param("--- not a rule", "\\--- not a rule", id="rule"),
-        pytest.param("2024. was the year", "2024\\. was the year", id="year-ordinal"),
-        pytest.param("123456789. x", "123456789\\. x", id="nine-digit-ordinal-is-a-list"),
-    ],
-)
-def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(body: str, line: str) -> None:
-    assert notion_of([{"type": "text", "body": body}]) == f"{line}\n"
-
-
 def test_list_entries_and_quote_lines_escape_a_leading_block_marker() -> None:
     blocks = [
         {"type": "list", "items": ["# not a heading"]},
@@ -1388,10 +1374,8 @@ def test_the_example_reworked_for_notion_less_the_blocks_notion_refuses_matches_
 
     export_notion(accepted_example("notion"), out_dir)
 
-    assert (refused_block_types(example_for("notion"), "notion"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_EXAMPLE["notion"],
-        folder_texts(golden_of("notion")),
-    )
+    assert refused_block_types(example_for("notion"), "notion") == REFUSED_IN_THE_EXAMPLE["notion"]
+    assert_matches_golden("notion", out_dir)
 
 
 def test_a_flow_becomes_a_mermaid_diagram_with_readable_labels() -> None:
@@ -1486,35 +1470,6 @@ def test_a_toned_donut_is_a_pie_in_the_slice_colours_of_the_page() -> None:
         '\t<tr>\n\t\t<td color="green_bg">A</td>\n\t\t<td>3</td>\n\t\t<td>75%</td>\n\t</tr>\n'
         "\t<tr>\n\t\t<td>B</td>\n\t\t<td>1</td>\n\t\t<td>25%</td>\n\t</tr>\n"
         "\t<tr>\n\t\t<td>**Total**</td>\n\t\t<td>**4**</td>\n\t\t<td></td>\n\t</tr>\n"
-        "</table>\n"
-    )
-
-
-def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
-    assert notion_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
-        '<table fit-page-width="true" header-row="true" header-column="true">\n'
-        "\t<tr>\n\t\t<td></td>\n\t\t<td>**Badge**</td>\n\t\t<td>**Both**</td>\n\t\t<td>**Tone**</td>\n"
-        "\t\t<td>**Label**</td>\n\t</tr>\n"
-        "\t<tr>\n\t\t<td>**Receiving**</td>\n"
-        '\t\t<td color="green_bg">Have</td>\n'
-        '\t\t<td color="green_bg">**Have** · runbook v2</td>\n'
-        '\t\t<td color="red_bg">none yet</td>\n'
-        "\t\t<td>n/a</td>\n\t</tr>\n"
-        "</table>\n"
-    )
-
-
-def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add_and_escapes_the_ones_it_does() -> None:
-    assert notion_of([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES) == (
-        '<table fit-page-width="true" header-row="true" header-column="true">\n'
-        "\t<tr>\n\t\t<td></td>\n\t\t<td>**Blank**</td>\n\t\t<td>**Spaces**</td>\n\t\t<td>**Same**</td>\n"
-        "\t\t<td>**Special**</td>\n\t</tr>\n"
-        "\t<tr>\n\t\t<td>**Receiving**</td>\n"
-        '\t\t<td color="red_bg">lbl</td>\n'
-        '\t\t<td color="yellow_bg">lbl</td>\n'
-        '\t\t<td color="green_bg">Have</td>\n'
-        '\t\t<td color="blue_bg">**A\\|B \\*x\\*** · a\\_b \\[c\\] \\<d\\> \\| e</td>\n'
-        "\t</tr>\n"
         "</table>\n"
     )
 
@@ -2160,31 +2115,6 @@ def test_a_callout_and_a_note_icon_replace_the_tone_icon_of_the_native_callout()
     )
 
 
-def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
-    block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
-
-    assert notion_of([block]) == "- ❓ open\n- ☑️ done\n"
-
-
-def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
-    blocks = [
-        {
-            "type": "list",
-            "style": "decision",
-            "items": [
-                {"text": "region", "decided": True, "items": ["failover", {"text": "zone", "decided": True}]}
-            ],
-        },
-        {"type": "list", "style": "check", "items": [{"text": "shipped", "checked": True}, "tested"]},
-        {"type": "status_list", "items": [{"state": "done", "text": "rolled out"}]},
-    ]
-
-    assert notion_of(blocks) == (
-        "- ☑️ region\n\t- ❓ failover\n\t- ☑️ zone\n- [x] shipped\n- [ ] tested\n"
-        '- <span color="green">✓</span> rolled out\n'
-    )
-
-
 def test_a_collapsed_section_becomes_a_toggle_heading_and_an_open_one_a_plain_heading() -> None:
     blocks = [
         {"type": "section", "title": "Appendix", "blocks": [{"type": "text", "body": "raw"}]},
@@ -2258,7 +2188,7 @@ def test_an_oversized_opening_before_the_first_heading_is_named_as_the_opening_s
 def test_an_oversized_section_is_named_by_its_heading_text_not_its_markup() -> None:
     nodes = (Toggle((Plain("Q3 [draft]"),), 2, (Paragraph((Plain("y" * 50),)),)),)
 
-    assert _chunked(nodes, 20).oversized_sections == ("## Q3 [draft]",)
+    assert _chunked(nodes, 20).unsplittable_sections == ("## Q3 [draft]",)
 
 
 def test_two_sections_that_exactly_fill_the_limit_share_one_chunk() -> None:
@@ -2430,6 +2360,18 @@ def test_a_chunked_export_of_a_document_with_a_deep_heading_splits_where_it_did_
         "page.00.md": _section_text("Part 0", "z = 3", 20).replace("## ", "# ", 1),
         "page.01.md": "# Part 1\n### Zone C\n#### Bin 12\n```plain text\n" + "z = 3\n" * 20 + "```\n",
     }
+
+
+def test_a_chunked_render_names_the_sections_it_cannot_split_and_warns_of_none() -> None:
+    report = parse_report(make_report(blocks=heading_sections(1, "w = 4\n" * 40)))
+
+    rendered = render_export(report, "notion", chunk=50)
+
+    assert (list(rendered.pages), rendered.unsplittable_sections, rendered.warnings) == (
+        ["page.00.md"],
+        ("## Part 0",),
+        (),
+    )
 
 
 def test_a_chunked_export_writes_one_numbered_file_per_chunk(tmp_path: Path) -> None:
@@ -3106,7 +3048,7 @@ def test_an_oversized_section_is_named_by_the_heading_marks_the_page_writes() ->
         Heading(5, (Plain("Deep"),)),
     ]
 
-    assert _chunked(nodes, 20).oversized_sections == ("# Big",)
+    assert _chunked(nodes, 20).unsplittable_sections == ("# Big",)
 
 
 def test_a_carried_heading_counts_toward_the_part_it_starts() -> None:

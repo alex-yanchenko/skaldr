@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from skaldr.errors import ExportRejectedError
+from skaldr.export import ExportResult, render_export, write_export
 from skaldr.export.budget import RenderedBlock
 from skaldr.export.check import reject_what_the_target_cannot_show
 from skaldr.export.lower import assemble_item_page, lower_regions, lower_report, lowering_for
@@ -275,6 +276,22 @@ def heading_sections(count: int, body: str) -> list[dict[str, Any]]:
         for index in range(count)
         for block in ({"type": "heading", "text": f"Part {index}"}, {"type": "code", "content": body})
     ]
+
+
+def export_notion(report: Report, out_dir: Path, *, chunk: int | None = None) -> ExportResult:
+    return write_export(out_dir, render_export(report, "notion", chunk=chunk))
+
+
+def export_markdown(report: Report, out_dir: Path) -> ExportResult:
+    return write_export(out_dir, render_export(report, "markdown"))
+
+
+def export_adf(report: Report, out_dir: Path) -> ExportResult:
+    return write_export(out_dir, render_export(report, "adf"))
+
+
+def export_slack(report: Report, out_dir: Path) -> ExportResult:
+    return write_export(out_dir, render_export(report, "slack"))
 
 
 def folder_texts(folder: Path) -> dict[str, str]:

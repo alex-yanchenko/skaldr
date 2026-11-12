@@ -25,10 +25,10 @@ from skaldr.richtext import (
     TextRunWriter,
     Tinted,
     parse_rich,
-    visible_text,
     write_runs,
 )
 from skaldr.richtext_syntax import MAX_NESTING
+from tests.factories.richtext_factory import visible_text
 
 FULL_CONTEXT = RichContext(
     reference_numbers={"sop": 1},

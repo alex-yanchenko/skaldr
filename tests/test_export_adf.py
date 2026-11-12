@@ -77,6 +77,7 @@ from tests.factories.adf_factory import minimal_nodes, showcase_nodes
 from tests.factories.adf_factory import para as _para
 from tests.factories.adf_factory import text_entry as _text_entry
 from tests.factories.capability_factory import xy_chart
+from tests.factories.match_factory import exactly
 
 Json = Mapping[str, object]
 
@@ -103,10 +104,6 @@ def _item(*blocks: Json) -> Json:
 
 def _rendered(*nodes: Node, links: IssueLinks | None = None) -> Json:
     return json.loads(json.dumps(render_adf(nodes, links)))
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 STRONG: Json = {"type": "strong"}
@@ -994,14 +991,14 @@ def test_a_lowered_node_with_no_adf_form_is_an_internal_error_naming_it(
 ) -> None:
     monkeypatch.setattr(blocks_module, "Divider", FutureBlock)
 
-    with pytest.raises(ExportInvariantError, match=_exactly("ADF has no form for the lowered node Divider")):
+    with pytest.raises(ExportInvariantError, match=exactly("ADF has no form for the lowered node Divider")):
         render_adf((Divider(),))
 
 
 def test_a_block_the_check_would_refuse_is_an_internal_error_when_the_writer_is_called_alone() -> None:
     with pytest.raises(
         ExportInvariantError,
-        match=_exactly(
+        match=exactly(
             "ADF does not allow a table inside a panel, written from a TableNode; "
             "the export check should have refused it"
         ),

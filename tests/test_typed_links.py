@@ -15,10 +15,10 @@ from skaldr.richtext import (
     RichContext,
     Styled,
     parse_rich,
-    visible_text,
 )
 from skaldr.typed_links import issue_key_in_url, issue_url
 from tests.factories import make_report, markdown_of, notion_of, slack_of
+from tests.factories.richtext_factory import visible_text
 
 ADA = Person(
     notion="user://11111111-2222-3333-4444-555555555555", jira="5b10a2844c20165700ede21g", slack="U0EXAMPLE1"

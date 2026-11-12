@@ -5,7 +5,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_adf
+from skaldr.export import EXPORT_MANIFEST, ExportResult
 from skaldr.export.adf import compact_adf_length
 from skaldr.models import load_report
 from tests.factories import (
@@ -22,9 +22,10 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
+from tests.factories.export_factory import export_adf
+from tests.factories.golden_factory import assert_matches_golden
 
 HI_DOCUMENT = {
     "version": 1,
@@ -52,10 +53,8 @@ def test_the_example_reworked_for_jira_less_the_blocks_adf_refuses_matches_the_a
 
     export_adf(accepted_example("adf"), out_dir)
 
-    assert (refused_block_types(example_for("adf"), "adf"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_EXAMPLE["adf"],
-        folder_texts(golden_of("adf")),
-    )
+    assert refused_block_types(example_for("adf"), "adf") == REFUSED_IN_THE_EXAMPLE["adf"]
+    assert_matches_golden("adf", out_dir)
 
 
 def test_an_adf_export_writes_the_body_as_page_adf_json_without_the_title(tmp_path: Path) -> None:
@@ -181,14 +180,19 @@ def test_an_adf_export_over_the_jira_limit_names_the_size_and_the_limit(tmp_path
     result = export_adf(accepted_example("adf"), out_dir)
 
     written = json.loads((out_dir / "page.adf.json").read_text(encoding="utf-8"))
-    assert result.oversized_sections == (_oversize_warning(compact_adf_length(written)),)
+    assert (result.warnings, result.unsplittable_sections) == (
+        (_oversize_warning(compact_adf_length(written)),),
+        (),
+    )
     assert compact_adf_length(written) > 32_767
 
 
 def test_an_adf_export_within_the_limit_has_no_warning(tmp_path: Path) -> None:
     report = load_report(write_report(tmp_path, make_report(blocks=[{"type": "text", "body": "Hi."}])))
 
-    assert export_adf(report, tmp_path / "out").oversized_sections == ()
+    result = export_adf(report, tmp_path / "out")
+
+    assert (result.warnings, result.unsplittable_sections) == ((), ())
 
 
 def test_the_cli_warns_when_the_adf_description_is_over_the_jira_limit(

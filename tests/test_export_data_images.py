@@ -7,7 +7,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportRejectedError, ReportError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, ExportTarget, export_markdown, render_export
+from skaldr.export import EXPORT_MANIFEST, ExportResult, ExportTarget, render_export
 from skaldr.export.data_images import (
     IMAGE_FILE_EXTENSIONS,
     DataImage,
@@ -38,6 +38,7 @@ from skaldr.export.tree import (
 )
 from skaldr.models import load_report, parse_report
 from tests.factories import make_report, write_report
+from tests.factories.export_factory import export_markdown
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\nsynthetic aisle photo"
 JPEG_BYTES = b"\xff\xd8\xffsynthetic dock photo"

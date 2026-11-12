@@ -1,11 +1,10 @@
 import re
-import time
 from collections.abc import Iterator
 from html.parser import HTMLParser
-from typing import cast
+from typing import NoReturn, cast
 
 import pytest
-from markupsafe import Markup
+from markupsafe import Markup, escape
 from pygments.lexer import Lexer
 from pygments.token import Keyword, Text, _TokenType  # pyright: ignore[reportPrivateUsage]
 
@@ -507,9 +506,16 @@ def test_a_query_past_the_size_cap_is_left_for_the_plain_path() -> None:
 
 
 @pytest.mark.parametrize(("language", "unit"), [("perl", "<<"), ("rust", 'r#"')])
-def test_a_pathological_block_at_the_size_cap_renders_within_a_bound(language: str, unit: str) -> None:
-    content = unit * (highlight.MAX_HIGHLIGHTED_CHARACTERS // len(unit))
-    started = time.perf_counter()
+def test_a_pathological_block_past_the_size_cap_is_never_given_to_a_lexer(
+    monkeypatch: pytest.MonkeyPatch, language: str, unit: str
+) -> None:
+    content = unit * (highlight.MAX_HIGHLIGHTED_CHARACTERS // len(unit) + 1)
+
+    def refuse_to_lex(name: str) -> NoReturn:
+        raise AssertionError(f"a lexer for {name} was looked up for a block past the size cap")
+
+    monkeypatch.setattr(highlight, "find_lexer", refuse_to_lex)
+
     panel = code_panel(content=content, lang=language)
-    assert time.perf_counter() - started < 3
-    assert visible_text(panel) == content
+
+    assert panel == f'<div class="code"><pre>{escape(content)}</pre></div>'

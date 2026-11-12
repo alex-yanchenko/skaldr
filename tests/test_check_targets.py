@@ -113,7 +113,7 @@ def test_for_without_check_is_a_usage_error(tmp_path: Path, capsys: pytest.Captu
 
     assert (exited.value.code, capsys.readouterr().err.splitlines()[-1]) == (
         2,
-        f"{Path(sys.argv[0]).name}: error: {FOR_WITHOUT_CHECK}",
+        f"skaldr: error: {FOR_WITHOUT_CHECK}",
     )
 
 

@@ -6,11 +6,9 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError, PublishError
-from skaldr.publish.content import FIELDS, TITLE, ItemContent, section_part
-from skaldr.publish.drafts import draft_targets, load_authored
+from skaldr.publish.content import FIELDS, TITLE, section_part
 from skaldr.publish.engine import (
     Applied,
-    ApplyOutcome,
     ItemStatus,
     PublishDiff,
     Refused,
@@ -35,9 +33,11 @@ from tests.factories.publish_factory import (
     REFUSED_WRITE,
     TARGET_LABEL,
     FakeTransport,
+    drafted_content,
     fake_registry,
     make_garden_blocks,
     make_notion_publish,
+    publish_to_fakes,
     write_garden_report,
 )
 from tests.factories.report_factory import NOTION_PAGE_ID
@@ -60,18 +60,9 @@ LEGEND_TEXT = (
 FIRST_PUBLISH = ('create   document "Garden handbook"', 'create   section tools "Tools"')
 
 
-def _publish(path: Path, transport: FakeTransport, *, overwrite: bool = False) -> ApplyOutcome:
-    return apply_publish(prepare_publish(path, fake_registry(transport)), overwrite=overwrite)
-
-
-def _drafted(path: Path, section_id: str | None = None) -> ItemContent:
-    (target,) = draft_targets(load_authored(path), fake_registry(FakeTransport()))
-    return next(item.content for item in target.items if item.section_id == section_id)
-
-
 def _published_then_rewritten(tmp_path: Path, transport: FakeTransport, **rewritten: Any) -> Path:
     path = write_garden_report(tmp_path)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, **rewritten)
     transport.forget_calls()
     return path
@@ -85,12 +76,12 @@ def test_a_first_publish_creates_the_document_then_its_split_section_under_it(tm
     path = write_garden_report(tmp_path)
     transport = FakeTransport()
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), transport.items["page-2"].content) == (
         Applied(FIRST_PUBLISH),
         [("create", "Garden handbook", "", ""), ("create", "Tools", "page-1", "")],
-        _drafted(path, "tools"),
+        drafted_content(path, "tools"),
     )
 
 
@@ -100,12 +91,12 @@ def test_publishing_again_writes_only_the_section_the_yaml_changed(tmp_path: Pat
         tmp_path, transport, blocks=make_garden_blocks(planting="Sow after the last frost.")
     )
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), transport.items["page-1"].content) == (
         Applied(("update   document: planting (blocks[2])",)),
         [("write_section", "page-1", "planting")],
-        _drafted(path),
+        drafted_content(path),
     )
 
 
@@ -137,7 +128,7 @@ def _garden_published_then_given_a_deep_heading_in(
     tmp_path: Path, transport: FakeTransport, section_id: str
 ) -> Path:
     path = write_garden_report(tmp_path, blocks=_garden_with_watering())
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, blocks=_garden_with_watering(deep_in=section_id))
     transport.forget_calls()
     return path
@@ -149,18 +140,18 @@ def test_a_deep_heading_in_one_section_rewrites_the_other_sections_of_the_page_o
     transport = FakeTransport()
     path = _garden_published_then_given_a_deep_heading_in(tmp_path, transport, "planting")
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (
         outcome,
         transport.writes(),
         transport.items["page-1"].content,
-        _drafted(path).sections["planting"],
-        _drafted(path).sections["watering"],
+        drafted_content(path).sections["planting"],
+        drafted_content(path).sections["watering"],
     ) == (
         Applied(("update   document: planting (blocks[2])", "update   document: watering (blocks[3])")),
         [("write_section", "page-1", "planting"), ("write_section", "page-1", "watering")],
-        _drafted(path),
+        drafted_content(path),
         "# Planting\nSow in spring.\n### Zone C\n#### Bin 12\n",
         "# Watering\nWater daily.\n",
     )
@@ -169,19 +160,19 @@ def test_a_deep_heading_in_one_section_rewrites_the_other_sections_of_the_page_o
 def test_publishing_again_after_the_headings_moved_changes_nothing(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = _garden_published_then_given_a_deep_heading_in(tmp_path, transport, "planting")
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     transport.forget_calls()
 
-    assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
+    assert (publish_to_fakes(path, transport), transport.writes()) == (Applied(()), [])
 
 
 def test_a_deep_heading_in_a_split_section_moves_only_that_sections_own_page(tmp_path: Path) -> None:
     path = write_garden_report(tmp_path, blocks=_garden_with_watering(deep_in="tools"))
 
     assert (
-        list(_drafted(path, "tools").sections.values()),
-        _drafted(path).sections["planting"],
-        _drafted(path).sections["watering"],
+        list(drafted_content(path, "tools").sections.values()),
+        drafted_content(path).sections["planting"],
+        drafted_content(path).sections["watering"],
     ) == (
         [LEGEND_TEXT, '# Tools\n<span color="blue">**api**</span>\n- Spade.\n### Zone C\n#### Bin 12\n'],
         "## Planting\nSow in spring.\n",
@@ -192,7 +183,7 @@ def test_a_deep_heading_in_a_split_section_moves_only_that_sections_own_page(tmp
 def test_a_split_sections_own_page_decides_its_heading_shift_on_what_that_page_holds(tmp_path: Path) -> None:
     path = write_garden_report(tmp_path, blocks=_garden_with_watering(deep_in="planting"))
 
-    assert list(_drafted(path, "tools").sections.values()) == [LEGEND_TEXT, TOOLS_TEXT]
+    assert list(drafted_content(path, "tools").sections.values()) == [LEGEND_TEXT, TOOLS_TEXT]
 
 
 def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: Path) -> None:
@@ -203,22 +194,22 @@ def test_an_apply_that_fails_midway_resumes_from_the_step_that_failed(tmp_path: 
     transport.fail_on_write(2)
 
     with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     first_try = transport.writes()
     transport.forget_calls()
     transport.stop_failing()
-    second_try = _publish(path, transport)
+    second_try = publish_to_fakes(path, transport)
 
     assert (first_try, second_try, transport.writes(), transport.items["page-2"].content) == (
         [("write_section", "page-1", "planting")],
         Applied(("update   section tools: tools (blocks[1])",)),
         [("write_section", "page-2", "tools")],
-        _drafted(path, "tools"),
+        drafted_content(path, "tools"),
     )
 
 
 def _apply(path: Path, transport: FakeTransport) -> object:
-    return _publish(path, transport)
+    return publish_to_fakes(path, transport)
 
 
 def _dry_run(path: Path, transport: FakeTransport) -> object:
@@ -261,7 +252,7 @@ def test_an_apply_that_fails_still_closes_the_transport_it_opened(tmp_path: Path
     before = transport.closes
 
     with pytest.raises(ConnectorError, match=f"^{REFUSED_WRITE}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
 
     assert transport.closes - before == 1
 
@@ -271,16 +262,16 @@ def test_a_remote_edit_stops_the_publish_and_overwrite_then_replaces_it(tmp_path
     path = _published_then_rewritten(tmp_path, transport, blocks=make_garden_blocks(tools="Rake."))
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
 
-    refused = _publish(path, transport)
+    refused = publish_to_fakes(path, transport)
     refused_writes = transport.writes()
-    overwritten = _publish(path, transport, overwrite=True)
+    overwritten = publish_to_fakes(path, transport, overwrite=True)
 
     assert (refused, refused_writes, overwritten, transport.writes(), transport.items["page-1"].content) == (
         Refused((_planting_edit(),), "edited"),
         [],
         Applied(("update   document: planting (blocks[2])", "update   section tools: tools (blocks[1])")),
         [("write_section", "page-1", "planting"), ("write_section", "page-2", "tools")],
-        _drafted(path),
+        drafted_content(path),
     )
 
 
@@ -288,10 +279,10 @@ def test_overwrite_refuses_again_when_the_item_changed_after_the_diff(tmp_path: 
     transport = FakeTransport()
     path = _published_then_rewritten(tmp_path, transport)
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     transport.edit_section_by_hand("page-1", "planting", "## Planting\nSow in summer.\n")
 
-    outcome = _publish(path, transport, overwrite=True)
+    outcome = publish_to_fakes(path, transport, overwrite=True)
 
     assert (outcome, transport.writes()) == (
         Refused((_planting_edit(current="## Planting\nSow in summer.\n"),), "changed since the diff"),
@@ -304,8 +295,8 @@ def test_overwrite_refuses_an_edit_no_diff_has_shown_and_proceeds_once_it_has(tm
     path = _published_then_rewritten(tmp_path, transport)
     transport.edit_section_by_hand("page-1", "planting", LATE_SPRING)
 
-    unseen = _publish(path, transport, overwrite=True)
-    seen = _publish(path, transport, overwrite=True)
+    unseen = publish_to_fakes(path, transport, overwrite=True)
+    seen = publish_to_fakes(path, transport, overwrite=True)
 
     assert (unseen, seen, transport.writes()) == (
         Refused((_planting_edit(),), "changed since the diff"),
@@ -319,7 +310,7 @@ def test_an_edit_the_service_reports_without_a_visible_change_still_stops_the_pu
     path = _published_then_rewritten(tmp_path, transport)
     transport.report_an_edit_without_changing_content("page-1", section_part("planting"))
 
-    assert _publish(path, transport) == Refused(
+    assert publish_to_fakes(path, transport) == Refused(
         (RemoteEdit(DOCUMENT, section_part("planting"), "blocks[2]", SPRING, SPRING, None, None),), "edited"
     )
 
@@ -332,10 +323,10 @@ def test_a_field_edit_the_service_reports_counts_only_for_fields_skaldr_publishe
         )
     }
     path = write_garden_report(tmp_path, **owned)
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     transport.report_an_edit_without_changing_content("page-1", FIELDS)
 
-    assert _publish(path, transport) == Refused(
+    assert publish_to_fakes(path, transport) == Refused(
         (
             RemoteEdit(
                 DOCUMENT,
@@ -356,11 +347,11 @@ def test_labels_the_service_reads_back_in_another_order_are_not_a_remote_edit(tm
     labelled = {"parent_page": NOTION_PAGE_ID, "fields": {"Tags": ["soil", "seeds"]}}
     reordered = {**labelled, "fields": {"Tags": ["seeds", "soil"]}}
     path = write_garden_report(tmp_path, publish=make_notion_publish(split=["tools"], where=labelled))
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, publish=make_notion_publish(split=["tools"], where=reordered))
     transport.forget_calls()
 
-    assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
+    assert (publish_to_fakes(path, transport), transport.writes()) == (Applied(()), [])
 
 
 def test_a_page_stamped_by_another_document_is_refused_naming_both_documents(tmp_path: Path) -> None:
@@ -373,7 +364,7 @@ def test_a_page_stamped_by_another_document_is_refused_naming_both_documents(tmp
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     assert transport.writes() == []
 
 
@@ -387,7 +378,7 @@ def test_a_published_item_restamped_by_another_document_is_refused(tmp_path: Pat
     )
 
     with pytest.raises(PublishError, match=f"^{re.escape(expected)}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     assert transport.writes() == []
 
 
@@ -398,7 +389,7 @@ def test_an_unstamped_page_the_target_names_is_written_into_and_stamped(tmp_path
         tmp_path, publish=make_notion_publish(split=["tools"], where={"page": NOTION_PAGE_ID})
     )
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (
         outcome,
@@ -418,7 +409,7 @@ def test_a_section_removed_from_the_yaml_archives_its_item_and_leaves_the_state_
     without_tools = [block for block in make_garden_blocks() if block.get("id") != "tools"]
     path = _published_then_rewritten(tmp_path, transport, publish=make_notion_publish(), blocks=without_tools)
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (
         outcome,
@@ -520,7 +511,9 @@ def test_a_diff_counts_as_showing_the_remote_edit_to_overwrite(tmp_path: Path) -
 
     diff_publish(prepare_publish(path, fake_registry(transport)))
 
-    assert _publish(path, transport, overwrite=True) == Applied(("update   document: planting (blocks[2])",))
+    assert publish_to_fakes(path, transport, overwrite=True) == Applied(
+        ("update   document: planting (blocks[2])",)
+    )
 
 
 def test_the_status_names_each_item_in_sync_edited_changed_or_never_published(tmp_path: Path) -> None:
@@ -570,7 +563,7 @@ def test_a_saved_copy_from_before_the_transport_changed_its_form_is_still_in_syn
 
     statuses = publish_status(prepare_publish(path, fake_registry(transport)))
     diff = diff_publish(prepare_publish(path, fake_registry(transport)))
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (statuses, diff, outcome, transport.writes()) == (
         (ItemStatus(DOCUMENT, "page-1", ("in sync",)), ItemStatus(TOOLS, "page-2", ("in sync",))),
@@ -608,12 +601,12 @@ def test_an_archive_that_never_landed_is_sent_again_after_the_transport_changed_
     path = _published_then_rewritten(tmp_path, transport, publish=make_notion_publish(), blocks=without_tools)
     transport.lose_the_next_write()
     with pytest.raises(ConnectorError, match=f"^{LOST_WRITE}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     transport.stop_failing()
     transport.ignores_span_colors = True
     transport.forget_calls()
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), transport.items["page-2"].archived) == (
         Applied(("archive  section tools (page-2)",)),
@@ -645,5 +638,5 @@ def test_a_partly_landed_write_after_the_transport_changed_its_form_writes_only_
     assert (outcome, transport.writes(), transport.items["page-1"].content) == (
         Applied(("update   document: planting (blocks[2])",)),
         [("write_content", "page-1")],
-        _drafted(path),
+        drafted_content(path),
     )

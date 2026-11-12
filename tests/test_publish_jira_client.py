@@ -1,5 +1,3 @@
-import re
-
 import httpx2
 import pytest
 from pydantic import JsonValue
@@ -22,6 +20,7 @@ from skaldr.publish.jira.api import (
 )
 from tests.factories.auth_factory import summarise
 from tests.factories.jira_factory import CLOSE, SITE, FakeJira, Reply, summarised_request
+from tests.factories.match_factory import exactly
 
 PARAGRAPH: JsonValue = {"version": 1, "type": "doc", "content": [{"type": "paragraph"}]}
 STAMP = EntityProperty(key="skaldr.stamp", value={"doc_id": "garden-handbook", "section_id": None})
@@ -30,10 +29,6 @@ CHANGELOG = f"{ISSUE}/changelog"
 COMMENTS = f"{ISSUE}/comment"
 CREATE = "/rest/api/3/issue"
 MYSELF = "/rest/api/3/myself"
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 def _seeded() -> FakeJira:
@@ -187,7 +182,7 @@ def test_a_changelog_page_that_does_not_start_where_it_was_asked_to_is_an_error(
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly(
+        match=exactly(
             "Jira answered GET /rest/api/3/issue/DEMO-1/changelog with a page starting at entry 0 when "
             "skaldr asked for entry 1, so skaldr cannot read the issue's whole history"
         ),
@@ -323,7 +318,7 @@ def test_a_comments_page_that_does_not_start_where_it_was_asked_to_is_an_error()
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly(
+        match=exactly(
             "Jira answered GET /rest/api/3/issue/DEMO-1/comment with a page starting at entry 0 when skaldr "
             "asked for entry 1, so skaldr cannot read the issue's whole list of comments"
         ),
@@ -415,7 +410,7 @@ def test_a_retry_after_longer_than_a_minute_is_not_waited_for_and_is_quoted() ->
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly(
+        match=exactly(
             "Jira kept refusing GET /rest/api/3/issue/DEMO-1 as too many requests (HTTP 429) after 1 "
             "attempt; Jira asked to wait 3600 seconds, so publish again after that"
         ),
@@ -492,7 +487,7 @@ def test_a_server_error_asking_to_wait_longer_than_a_minute_is_not_waited_for() 
     jira.answer_next("GET", ISSUE, Reply(503, {"errorMessages": ["Maintenance"]}, {"Retry-After": "3600"}))
 
     with pytest.raises(
-        ConnectorError, match=_exactly("Jira answered HTTP 503 to GET /rest/api/3/issue/DEMO-1: Maintenance")
+        ConnectorError, match=exactly("Jira answered HTTP 503 to GET /rest/api/3/issue/DEMO-1: Maintenance")
     ):
         jira.client().get_issue("DEMO-1", ["summary"])
     assert (jira.sleeps, len(jira.requests)) == ([], 1)
@@ -504,7 +499,7 @@ def test_a_refused_write_carrying_a_retry_after_is_not_retried() -> None:
 
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly("Jira refused PUT /rest/api/3/issue/DEMO-1 (HTTP 400): Bad summary"),
+        match=exactly("Jira refused PUT /rest/api/3/issue/DEMO-1 (HTTP 400): Bad summary"),
     ):
         jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
     assert (jira.sleeps, len(jira.requests)) == ([], 1)
@@ -552,7 +547,7 @@ def test_a_server_error_on_a_write_is_not_retried_because_it_may_have_landed() -
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly("Jira answered HTTP 503 to PUT /rest/api/3/issue/DEMO-1: Service unavailable"),
+        match=exactly("Jira answered HTTP 503 to PUT /rest/api/3/issue/DEMO-1: Service unavailable"),
     ) as raised:
         jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
     assert (type(raised.value), jira.sleeps, len(jira.requests)) == (ConnectorError, [], 1)
@@ -568,7 +563,7 @@ def test_a_dropped_connection_on_a_read_is_retried_and_on_a_write_is_not() -> No
     jira.answer_next("PUT", ISSUE, dropped)
     with pytest.raises(
         ConnectorError,
-        match=_exactly(f"could not reach Jira at {SITE} for PUT /rest/api/3/issue/DEMO-1: connection reset"),
+        match=exactly(f"could not reach Jira at {SITE} for PUT /rest/api/3/issue/DEMO-1: connection reset"),
     ):
         client.edit_issue("DEMO-1", {"summary": "Garden guide"})
 
@@ -625,9 +620,7 @@ def test_a_read_that_never_connects_fails_after_four_attempts() -> None:
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly(
-            f"could not reach Jira at {SITE} for GET /rest/api/3/issue/DEMO-1: connection refused"
-        ),
+        match=exactly(f"could not reach Jira at {SITE} for GET /rest/api/3/issue/DEMO-1: connection refused"),
     ):
         jira.client().get_issue("DEMO-1", ["summary"])
     assert jira.sleeps == [2.0, 4.0, 8.0]
@@ -636,7 +629,7 @@ def test_a_read_that_never_connects_fails_after_four_attempts() -> None:
 def test_a_missing_issue_is_item_not_found() -> None:
     with pytest.raises(
         ItemNotFoundError,
-        match=_exactly(
+        match=exactly(
             "Jira has no issue DEMO-9 that this account can see (HTTP 404 to GET /rest/api/3/issue/DEMO-9)"
         ),
     ):
@@ -816,7 +809,7 @@ def test_a_definite_refusal_of_a_write_is_write_rejected(reply: Reply, message: 
     jira = _seeded()
     jira.answer_next("PUT", ISSUE, reply)
 
-    with pytest.raises(WriteRejectedError, match=_exactly(message)):
+    with pytest.raises(WriteRejectedError, match=exactly(message)):
         jira.client().edit_issue("DEMO-1", {"summary": "Garden guide"})
 
 
@@ -866,7 +859,7 @@ def test_the_fake_keeps_a_queued_answer_for_the_request_it_was_queued_for() -> N
     issue = client.get_issue("DEMO-1", ["summary"])
     with pytest.raises(
         WriteRejectedError,
-        match=_exactly("Jira refused PUT /rest/api/3/issue/DEMO-1 (HTTP 400): Bad summary"),
+        match=exactly("Jira refused PUT /rest/api/3/issue/DEMO-1 (HTTP 400): Bad summary"),
     ):
         client.edit_issue("DEMO-1", {"summary": "Garden guide"})
 
@@ -882,6 +875,6 @@ def test_an_answer_skaldr_cannot_read_is_a_connector_error() -> None:
 
     with pytest.raises(
         ConnectorError,
-        match=_exactly("Jira's answer to GET /rest/api/3/issue/DEMO-1 is not the issue skaldr asked for"),
+        match=exactly("Jira's answer to GET /rest/api/3/issue/DEMO-1 is not the issue skaldr asked for"),
     ):
         jira.client().get_issue("DEMO-1", ["summary"])

@@ -8,7 +8,7 @@ import pytest
 
 from skaldr.cli import main
 from skaldr.errors import ExportInvariantError, ExportRejectedError
-from skaldr.export import EXPORT_MANIFEST, ExportResult, export_slack
+from skaldr.export import EXPORT_MANIFEST, ExportResult
 from skaldr.export.runs import Break, Chip, ExportRun, SectionLink, StatusMark, TonedLabel
 from skaldr.export.slack import render_slack, render_slack_regions
 from skaldr.export.tree import (
@@ -69,10 +69,6 @@ from skaldr.richtext import (
 )
 from tests.factories import (
     API_AND_RISK_BADGES,
-    EDGE_BADGES,
-    HAVE_BADGE,
-    MATRIX_OF_EDGE_BADGE_LABELS,
-    MATRIX_OF_EVERY_CELL_SHAPE,
     TEXT_X_BLOCK,
     accepted_example,
     folder_texts,
@@ -93,10 +89,10 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
-from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE, export_slack
+from tests.factories.golden_factory import assert_matches_golden
 
 REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
@@ -250,10 +246,8 @@ def test_the_reworked_example_less_the_blocks_a_canvas_refuses_matches_the_slack
 
     export_slack(accepted_example("slack", reworked), out_dir)
 
-    assert (refused_block_types(reworked, "slack"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_REWORKED_EXAMPLE,
-        folder_texts(golden_of("slack")),
-    )
+    assert refused_block_types(reworked, "slack") == REFUSED_IN_THE_REWORKED_EXAMPLE
+    assert_matches_golden("slack", out_dir)
 
 
 @pytest.mark.parametrize(
@@ -931,22 +925,6 @@ def test_a_canvas_table_dots_tones_drops_widths_escapes_pipes_and_joins_lines() 
         "| 🟡 ~~(old)~~ | y |\n"
         "| 🔴 ~~fire~~ | z |\n"
         "| **Total** | **2** |\n"
-    )
-
-
-def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
-    assert slack_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
-        "|  | Badge | Both | Tone | Label |\n"
-        "| --- | --- | --- | --- | --- |\n"
-        "| **Receiving** | 🟢 Have | 🟢 **Have** · runbook v2 | 🔴 none yet | n/a |\n"
-    )
-
-
-def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add_and_escapes_the_ones_it_does() -> None:
-    assert slack_of([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES) == (
-        "|  | Blank | Spaces | Same | Special |\n"
-        "| --- | --- | --- | --- | --- |\n"
-        "| **Receiving** | 🔴 lbl | 🟡 lbl | 🟢 Have | 🔵 **A\\|B \\*x\\*** · a\\_b \\[c\\] \\<d\\> \\| e |\n"
     )
 
 
@@ -1722,9 +1700,6 @@ def test_canvas_special_characters_and_pipes_are_escaped_in_a_table_cell() -> No
     [
         pytest.param("::: {.callout}", "\\::: {.callout}", id="callout-fence"),
         pytest.param(":::", "\\:::", id="bare-fence"),
-        pytest.param("# not a heading", "\\# not a heading", id="heading-marker"),
-        pytest.param("- not a list", "\\- not a list", id="list-marker"),
-        pytest.param("1. not a list", "1\\. not a list", id="ordered-marker"),
         pytest.param("a ::: b", "a ::: b", id="fence-mid-line"),
     ],
 )

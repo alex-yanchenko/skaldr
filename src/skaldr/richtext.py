@@ -403,7 +403,3 @@ class VisibleText(TextRunWriter):
 
     def math(self, expression: str, /) -> str:
         return expression
-
-
-def visible_text(runs: Rich) -> str:
-    return write_runs(runs, VisibleText())

@@ -1,5 +1,4 @@
 import json
-import re
 from collections.abc import Mapping
 
 import pytest
@@ -43,6 +42,7 @@ from skaldr.export.tree import (
 from skaldr.richtext import Citation, Plain, Styled
 from tests.factories import check_nodes, refusal_of
 from tests.factories.adf_factory import cell, para, pie_over_its_table, text_entry
+from tests.factories.match_factory import exactly
 
 Json = Mapping[str, object]
 
@@ -51,10 +51,6 @@ STRONG: Json = {"type": "strong"}
 STRIKE: Json = {"type": "strike"}
 SUPERSCRIPT: Json = {"type": "subsup", "attrs": {"type": "sup"}}
 RUNBOOK = "https://example.com/runbook"
-
-
-def _exactly(message: str) -> str:
-    return f"^{re.escape(message)}$"
 
 
 def _rendered(*nodes: Node) -> Json:
@@ -868,7 +864,7 @@ def test_a_toggle_two_deep_in_a_table_form_grid_cell_passes_the_check_and_stops_
     check_nodes((Columns(cells),), "adf")
     with pytest.raises(
         ExportInvariantError,
-        match=_exactly(
+        match=exactly(
             "ADF does not allow a nestedExpand inside a nested_expand, written from a Toggle; "
             "the export check should have refused it"
         ),
@@ -881,7 +877,7 @@ def test_a_cell_block_the_writer_cannot_mark_is_an_internal_error() -> None:
 
     with pytest.raises(
         ExportInvariantError,
-        match=_exactly(
+        match=exactly(
             "ADF cannot mark a codeBlock inside a table cell; "
             "the lowering should hold only paragraphs and lists there"
         ),

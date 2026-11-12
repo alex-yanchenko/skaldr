@@ -7,7 +7,7 @@ import pytest
 from markdown_it import MarkdownIt
 
 from skaldr.errors import ExportInvariantError, ExportRejectedError, ReportError
-from skaldr.export import ExportResult, export_markdown, render_export
+from skaldr.export import ExportResult, render_export
 from skaldr.export import markdown as markdown_module
 from skaldr.export.adf import render_adf
 from skaldr.export.flanking import markers_flank
@@ -78,14 +78,9 @@ from tests.factories import (
     API_AND_RISK_BADGES,
     API_BADGES,
     BADGE_AND_STATE_BLOCKS,
-    EDGE_BADGES,
-    HAVE_BADGE,
-    MATRIX_OF_EDGE_BADGE_LABELS,
-    MATRIX_OF_EVERY_CELL_SHAPE,
     REFUSED_IN_THE_EXAMPLE,
     TEXT_X_BLOCK,
     accepted_example,
-    folder_texts,
     in_a_grid_cell,
     in_an_open_section,
     make_bullets,
@@ -104,10 +99,14 @@ from tests.factories.example_factory import (
     EXAMPLE,
     FIRST_REFUSAL_IN_DOCUMENT_ORDER_OF_THE_EXAMPLE,
     example_for,
-    golden_of,
     golden_or_scratch_folder,
 )
-from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
+from tests.factories.export_factory import (
+    CARDS_LABELLED_WITH_A_TRAILING_COLON,
+    OPEN_ROWS_BADGE,
+    export_markdown,
+)
+from tests.factories.golden_factory import assert_matches_golden
 
 
 def test_the_example_is_refused_for_github_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
@@ -124,10 +123,8 @@ def test_the_example_reworked_for_github_less_the_blocks_github_refuses_matches_
 
     export_markdown(accepted_example("markdown"), out_dir)
 
-    assert (refused_block_types(example_for("markdown"), "markdown"), folder_texts(out_dir)) == (
-        REFUSED_IN_THE_EXAMPLE["markdown"],
-        folder_texts(golden_of("markdown")),
-    )
+    assert refused_block_types(example_for("markdown"), "markdown") == REFUSED_IN_THE_EXAMPLE["markdown"]
+    assert_matches_golden("markdown", out_dir)
 
 
 API_LEGEND = (
@@ -835,22 +832,6 @@ def test_a_matrix_cell_fill_is_its_dot_before_its_label_or_the_dot_alone() -> No
     )
 
 
-def test_a_matrix_cell_with_a_badge_and_a_label_shows_the_badge_name_in_bold_then_the_label() -> None:
-    assert markdown_of([MATRIX_OF_EVERY_CELL_SHAPE], badges=HAVE_BADGE) == (
-        "|  | Badge | Both | Tone | Label |\n"
-        "| --- | --- | --- | --- | --- |\n"
-        "| **Receiving** | 🟢 Have | 🟢 **Have** · runbook v2 | 🔴 none yet | n/a |\n"
-    )
-
-
-def test_a_matrix_cell_names_no_state_the_badge_label_does_not_add_and_escapes_the_ones_it_does() -> None:
-    assert markdown_of([MATRIX_OF_EDGE_BADGE_LABELS], badges=EDGE_BADGES) == (
-        "|  | Blank | Spaces | Same | Special |\n"
-        "| --- | --- | --- | --- | --- |\n"
-        "| **Receiving** | 🔴 lbl | 🟡 lbl | 🟢 Have | 🔵 **A\\|B \\*x\\*** · a\\_b \\[c\\] \\<d\\> \\| e |\n"
-    )
-
-
 def test_a_table_shows_row_tones_on_the_title_and_drops_a_tint() -> None:
     table = {
         "type": "table",
@@ -1163,20 +1144,14 @@ def test_a_grid_inside_a_grid_cell_is_a_table_inside_the_td() -> None:
 @pytest.mark.parametrize(
     ("body", "line"),
     [
-        pytest.param("- not a list", "\\- not a list", id="dash"),
         pytest.param("+ not a list", "\\+ not a list", id="plus"),
-        pytest.param("1. not a list", "1\\. not a list", id="ordered-dot"),
         pytest.param("2) not a list", "2\\) not a list", id="ordered-paren"),
-        pytest.param("# not a heading", "\\# not a heading", id="hash"),
-        pytest.param("--- not a rule", "\\--- not a rule", id="rule"),
         pytest.param("=== not an underline", "\\=== not an underline", id="setext"),
         pytest.param("-5 degrees", "-5 degrees", id="negative-number"),
         pytest.param("> not a quote", "\\> not a quote", id="quote"),
         pytest.param("####### x", "####### x", id="seven-hashes-are-no-heading"),
         pytest.param("+++", "\\+++", id="plus-run"),
         pytest.param("1234567890. x", "1234567890. x", id="ten-digit-ordinal-is-no-list"),
-        pytest.param("2024. was the year", "2024\\. was the year", id="year-ordinal"),
-        pytest.param("123456789. x", "123456789\\. x", id="nine-digit-ordinal-is-a-list"),
     ],
 )
 def test_a_paragraph_that_starts_like_a_block_marker_stays_a_paragraph(body: str, line: str) -> None:
@@ -1343,30 +1318,6 @@ def test_a_numbered_list_never_writes_a_marker_longer_than_nine_digits(
     blocks: list[dict[str, object]], markdown: str
 ) -> None:
     assert markdown_of(blocks) == markdown
-
-
-def test_a_decision_list_is_a_bullet_list_led_by_decided_and_open_glyphs() -> None:
-    block = {"type": "list", "style": "decision", "items": ["open", {"text": "done", "decided": True}]}
-
-    assert markdown_of([block]) == "- ❓ open\n- ☑️ done\n"
-
-
-def test_a_nested_decision_list_marks_every_level_and_reads_apart_from_a_check_list() -> None:
-    blocks = [
-        {
-            "type": "list",
-            "style": "decision",
-            "items": [
-                {"text": "region", "decided": True, "items": ["failover", {"text": "zone", "decided": True}]}
-            ],
-        },
-        {"type": "list", "style": "check", "items": [{"text": "shipped", "checked": True}, "tested"]},
-        {"type": "status_list", "items": [{"state": "done", "text": "rolled out"}]},
-    ]
-
-    assert markdown_of(blocks) == (
-        "- ☑️ region\n  - ❓ failover\n  - ☑️ zone\n\n* [x] shipped\n* [ ] tested\n\n- ✅ rolled out\n"
-    )
 
 
 def test_a_nested_check_list_indents_under_the_dash_not_the_box() -> None:

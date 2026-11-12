@@ -1,14 +1,32 @@
 import json
+import os
 import re
 import shutil
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TypedDict
 
 import pytest
 
 NODE = shutil.which("node")
-requires_node = pytest.mark.skipif(NODE is None, reason="the page scripts run under node")
+
+
+def should_skip_node_tests(node: str | None, environ: Mapping[str, str]) -> bool:
+    return node is None and not environ.get("CI")
+
+
+def node_binary() -> str:
+    if NODE is None:
+        pytest.fail("node is not installed, and the page script tests need it")
+    return NODE
+
+
+def node_requirement(node: str | None, environ: Mapping[str, str]) -> pytest.MarkDecorator:
+    return pytest.mark.skipif(should_skip_node_tests(node, environ), reason="the page scripts run under node")
+
+
+requires_node = node_requirement(NODE, os.environ)
 
 _PAGE_DRIVER = """
 const vm = require("vm");
@@ -203,7 +221,6 @@ def _drive_page(
     popover_supported: bool = True,
     narrow: bool = False,
 ) -> _DrivenPage:
-    assert NODE is not None
     payload = {
         "scripts": scripts,
         "storage": run.storage,
@@ -217,7 +234,7 @@ def _drive_page(
         "narrow": narrow,
     }
     finished = subprocess.run(
-        [NODE, "-e", _PAGE_DRIVER],
+        [node_binary(), "-e", _PAGE_DRIVER],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -250,11 +267,10 @@ def run_print_cycle(scripts: list[str], disclosures: list[bool]) -> PrintCycle:
 
 
 def call_script_function(script: str, name: str, argument: str) -> object:
-    assert NODE is not None
     declaration = re.search(rf"^\t*function {name}\(.*?^\t\}}$", script, flags=re.DOTALL | re.MULTILINE)
     assert declaration is not None
     finished = subprocess.run(
-        [NODE, "-e", _FUNCTION_DRIVER],
+        [node_binary(), "-e", _FUNCTION_DRIVER],
         input=json.dumps({"source": declaration.group(0), "call": name, "argument": argument}),
         capture_output=True,
         text=True,

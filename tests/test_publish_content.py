@@ -11,7 +11,6 @@ from skaldr.publish.content import (
     ItemContent,
     SectionChanges,
     comparable,
-    content_digest,
     differing_parts,
     placed_section,
     same_fields,
@@ -162,27 +161,3 @@ def test_only_an_icon_or_cover_some_content_sets_is_kept(
     remote = ItemContent(title="Tools", icon="🔥", cover=OTHER_COVER_URL)
 
     assert with_look_owned_by(remote, *owners) == expected
-
-
-def test_the_digest_of_content_without_an_icon_or_cover_is_the_digest_it_always_had() -> None:
-    content = ItemContent(title="Tools", sections={"a": "A\n"}, fields={"labels": ["x", "y"]})
-
-    assert (
-        content_digest(content),
-        content_digest(content) == content_digest(content.model_copy(update={"icon": "🌱"})),
-        content_digest(content) == content_digest(content.model_copy(update={"cover": COVER_URL})),
-    ) == ("300524f6dd9bec32a3667db844a46c094620ef6792d8793b148962a796ed5d6d", False, False)
-
-
-def test_the_digest_ignores_label_order_and_follows_section_text() -> None:
-    first = ItemContent(title="Tools", sections={"a": "A\n"}, fields={"labels": ["x", "y"]})
-    reordered = ItemContent(title="Tools", sections={"a": "A\n"}, fields={"labels": ["y", "x"]})
-    edited = ItemContent(title="Tools", sections={"a": "A edited\n"}, fields={"labels": ["x", "y"]})
-
-    assert (
-        content_digest(first) == content_digest(reordered),
-        content_digest(first) == content_digest(edited),
-    ) == (
-        True,
-        False,
-    )

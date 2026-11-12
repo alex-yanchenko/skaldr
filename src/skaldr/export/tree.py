@@ -103,6 +103,10 @@ class TableNode:
     authored_at: str | None = field(default=None, compare=False)
 
 
+def table_width(table: TableNode) -> int:
+    return max(len(cells) for cells in (table.header, *(row.cells for row in table.rows)))
+
+
 @dataclass(frozen=True)
 class CodeBlock:
     content: str

@@ -12,7 +12,6 @@ from skaldr.export.lower import (
     lower_regions,
     lower_report,
     lowering_for,
-    region_for_section,
 )
 from skaldr.export.markdown import render_markdown_document
 from skaldr.export.notion import render_notion, render_notion_regions
@@ -152,19 +151,6 @@ def test_a_region_index_outside_the_top_level_blocks_is_refused(source_index: in
         lower_region(lowering_for(_field_guide()), source_index)
 
     assert str(refusal.value) == f"the report has no top-level block {source_index}; its blocks are 0 to 4"
-
-
-def test_a_section_id_finds_its_region() -> None:
-    regions = (INTRO, SET_UP, FIRST_WEEK, WRAP_UP, CLOSING)
-
-    assert region_for_section(regions, "st1") == SET_UP
-
-
-def test_a_section_id_with_no_region_is_refused() -> None:
-    with pytest.raises(RegionNotFoundError) as refusal:
-        region_for_section((INTRO, SET_UP), "st2")
-
-    assert str(refusal.value) == "no top-level section has the id 'st2'"
 
 
 def test_only_a_top_level_section_id_is_a_section_id() -> None:

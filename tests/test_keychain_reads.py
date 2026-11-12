@@ -19,7 +19,6 @@ from skaldr.auth.store import (
     load_jira,
     load_notion,
     require_jira,
-    require_notion,
     require_notion_for_a_target,
     save_jira,
     save_notion_returning_the_replaced,
@@ -364,7 +363,9 @@ def test_a_session_renewing_inside_a_command_takes_the_token_another_skaldr_stor
     store.save_notion_returning_the_replaced(make_notion_credentials(access_token="first-access"))
 
     with store.reading_each_keychain_item_once():
-        session = NotionSession(require_notion())
+        signed_in = store.load_notion()
+        assert signed_in is not None
+        session = NotionSession(signed_in)
         counting.entries[("skaldr", f"notion:{WORKSPACE_ID}")] = make_notion_credentials(
             access_token="second-access"
         ).model_dump_json()

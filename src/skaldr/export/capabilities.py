@@ -4,7 +4,7 @@ from typing import Final, Literal, Self
 
 from skaldr.errors import ExportInvariantError
 from skaldr.export.data_images import ACCEPTED_IMAGE_TYPES_IN_WORDS
-from skaldr.export.tree import PanesKind, ToneName
+from skaldr.export.tree import PanesKind, TableNode, ToneName, table_width
 from skaldr.export_targets import EXPORT_TARGETS, ExportTarget
 from skaldr.richtext import ScriptPosition
 
@@ -862,6 +862,30 @@ class EnclosingContainers:
         tags = self.tags_a_code_line_must_not_equal()
         lines = (line.strip(SPACES_AND_TABS) for line in content.split("\n"))
         return next((CodeLine(line, tags[line]) for line in lines if line in tags), None)
+
+
+def canvas_table_cell_count(table: TableNode) -> int:
+    return table_width(table) * (1 + len(table.rows))
+
+
+def canvas_table_has_too_many_cells(cells: int) -> bool:
+    return cells > CANVAS_TABLE_CELL_LIMIT
+
+
+def canvas_heading_level(level: int, shift: int) -> int:
+    return level - shift
+
+
+def canvas_heading_is_too_deep(canvas_level: int) -> bool:
+    return canvas_level > CANVAS_HEADING_LEVEL_LIMIT
+
+
+def canvas_layout_has_too_many_columns(columns: int) -> bool:
+    return columns > CANVAS_LAYOUT_COLUMN_LIMIT
+
+
+def writes_definitions_as_blocks(target: ExportTarget | None) -> bool:
+    return target == "slack"
 
 
 def swaps(feature: Feature, target: ExportTarget) -> bool:

@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from skaldr.errors import ConnectorError
-from skaldr.publish.engine import Applied, ApplyOutcome, apply_publish, diff_publish, prepare_publish
+from skaldr.publish.engine import Applied, diff_publish, prepare_publish
 from skaldr.publish.output import diff_lines
 from skaldr.publish.state import load_state, state_path_for
 from skaldr.publish_block.target import JsonFields
@@ -16,13 +16,10 @@ from tests.factories.publish_factory import (
     FakeTransport,
     fake_registry,
     make_notion_publish,
+    publish_to_fakes,
     write_garden_report,
 )
 from tests.factories.report_factory import NOTION_PAGE_ID
-
-
-def _publish(path: Path, transport: FakeTransport) -> ApplyOutcome:
-    return apply_publish(prepare_publish(path, fake_registry(transport)))
 
 
 def _with_fields(fields: JsonFields) -> dict[str, Any]:
@@ -32,11 +29,11 @@ def _with_fields(fields: JsonFields) -> dict[str, Any]:
 def test_adding_a_field_the_service_already_holds_is_not_a_remote_edit(tmp_path: Path) -> None:
     transport = FakeTransport(service_fields={"Status": "Open"})
     path = write_garden_report(tmp_path, **_with_fields({"Area": "Shed"}))
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, **_with_fields({"Area": "Shed", "Status": "Open"}))
     transport.forget_calls()
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, transport.writes(), transport.items["page-1"].fields) == (
         Applied(("update   document: fields",)),
@@ -48,9 +45,9 @@ def test_adding_a_field_the_service_already_holds_is_not_a_remote_edit(tmp_path:
 def test_after_a_write_skaldr_owns_only_the_fields_it_rendered(tmp_path: Path) -> None:
     transport = FakeTransport(reads_cleared_fields_as_null=True)
     path = write_garden_report(tmp_path, **_with_fields({"Area": "Shed", "Owner": "Rowan"}))
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, **_with_fields({"Area": "Shed"}))
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
 
     document = load_state(state_path_for(path), DOC_ID).targets[TARGET_LABEL].document
 
@@ -65,15 +62,15 @@ def test_an_interrupted_fields_write_whose_empty_value_the_service_dropped_is_re
 ) -> None:
     transport = FakeTransport(drops_unset_fields=True)
     path = write_garden_report(tmp_path, **_with_fields({"Area": "Shed"}))
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, **_with_fields({"Area": "Orchard", "Notes": ""}))
     transport.drop_the_connection_after_write(1)
     with pytest.raises(ConnectorError, match=f"^{DROPPED_AFTER_WRITE}$"):
-        _publish(path, transport)
+        publish_to_fakes(path, transport)
     transport.stop_failing()
     transport.forget_calls()
 
-    assert (_publish(path, transport), transport.writes()) == (Applied(()), [])
+    assert (publish_to_fakes(path, transport), transport.writes()) == (Applied(()), [])
 
 
 def test_a_page_whose_properties_the_service_reports_as_unset_is_empty(tmp_path: Path) -> None:
@@ -81,7 +78,7 @@ def test_a_page_whose_properties_the_service_reports_as_unset_is_empty(tmp_path:
     transport.seed(NOTION_PAGE_ID, "Blank page", None, fields={"Done": False, "Count": 0}, set_properties=())
     path = write_garden_report(tmp_path, publish=make_notion_publish(where={"page": NOTION_PAGE_ID}))
 
-    outcome = _publish(path, transport)
+    outcome = publish_to_fakes(path, transport)
 
     assert (outcome, list(load_state(state_path_for(path), DOC_ID).targets)) == (
         Applied((f'create   document "Garden handbook" into {NOTION_PAGE_ID}',)),
@@ -92,7 +89,7 @@ def test_a_page_whose_properties_the_service_reports_as_unset_is_empty(tmp_path:
 def test_the_diff_text_names_a_changed_fields_part_plainly(tmp_path: Path) -> None:
     transport = FakeTransport()
     path = write_garden_report(tmp_path, **_with_fields({"Area": "Shed"}))
-    _publish(path, transport)
+    publish_to_fakes(path, transport)
     write_garden_report(tmp_path, **_with_fields({"Area": "Barn"}))
 
     lines = diff_lines(diff_publish(prepare_publish(path, fake_registry(transport))))

@@ -53,10 +53,6 @@ def _authored_blocks(data: object) -> list[object]:
     return list(cast("list[object]", blocks)) if isinstance(blocks, list) else []
 
 
-def authored_from(data: Mapping[str, object]) -> Authored:
-    return Authored(models.parse_report(data), _authored_blocks(data))
-
-
 def load_authored(path: Path) -> Authored:
     report, data = models.load_report_and_source(path)
     return Authored(report, _authored_blocks(data))

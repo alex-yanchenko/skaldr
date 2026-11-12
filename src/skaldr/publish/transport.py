@@ -161,12 +161,6 @@ class ReplaceSection:
     text: str
     follows: str | None
 
-    def moves_within(self, raw_sections: RawSections) -> bool:
-        keys = list(raw_sections)
-        position = keys.index(self.key)
-        sits_after = keys[position - 1] if position > 0 else None
-        return sits_after != self.follows
-
 
 @dataclass(frozen=True)
 class RemoveSection:
