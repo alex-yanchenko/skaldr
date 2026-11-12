@@ -81,8 +81,9 @@ class MatrixCell(FrozenModel):
     )
     tone: BadgeColor | None = Field(
         default=None,
-        description="A one-off fill colour (palette or semantic name) for a cell with no vocabulary "
-        "badge, e.g. a RACI letter or a ✓. Use this OR `badge`, not both.",
+        description="A one-off fill colour for a cell with no vocabulary badge, e.g. a RACI letter or a ✓: "
+        "a palette name (slate, blue, green, amber, red, violet, teal, sky) or a semantic name "
+        "(neutral, info, success, warning, danger, accent). Use this OR `badge`, not both.",
     )
     label: NonBlank | None = Field(
         default=None,

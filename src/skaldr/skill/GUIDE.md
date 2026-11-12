@@ -53,7 +53,7 @@ and labels the schema marks with `pattern: \S` must hold visible text. An empty 
 at its path with `String should have at least 1 character`, and a whitespace-only one with `String
 should match pattern '\S'`. To leave an optional one empty, leave the field out.
 
-`--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options or by another version of skaldr. A page it cannot read its options from, and content it cannot load, count as stale too, so the render runs and reports the problem. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
+`--if-stale` renders only when the page is missing, is older than the content file or any file it pulls in with `!include`, or was written with different `--embed`, `--no-source` or `--live` options or by another version of skaldr (an upgrade forces one re-render). Otherwise it prints `up to date` and exits 0, which is a success like `OK`. A page it cannot read its options from, and content it cannot load, count as stale too, so the render runs and reports the problem. Without `--live` it keeps the reloader of a page that was rendered with `--live`, at the same interval, so rendering once with `--live` and then running `--if-stale` after every edit keeps the open tab refreshing. To drop the reloader, render once without `--if-stale`.
 
 A flag the command would ignore is refused with a usage error instead: `--if-stale` with `--watch`, `--no-source` when no HTML page is written (with `--check` or `--pdf` alone, or with `--emit-json`), and any other flag or a content file next to `--write-schema`, `--extract-source`, `--guide`, `--install-skill` or `--install-plan-rule`, each of which runs on its own. The one flag `--guide` accepts is `--list`, which only works with a bare `--guide`.
 
@@ -210,7 +210,7 @@ other blank until you fill in the URL.
 
 A blank in the page's `meta` title, subtitle lines, `date` or `updated` counts too, even though those fields are plain text and show the `{{name}}` as written.
 
-- `skaldr --check file.yaml` reports the count (`… (2 placeholders unfilled: ticket, url)`) but still passes.
+- `skaldr --check file.yaml` reports the count (`… (2 unfilled placeholders: ticket, url)`) but still passes.
 - `skaldr --check --strict file.yaml` **fails** while any blank remains, which makes it the gate
   you run before "final". Under the failing line it lists each blank with the fields that hold it:
 

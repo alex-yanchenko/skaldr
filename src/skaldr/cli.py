@@ -343,8 +343,9 @@ def main(argv: list[str] | None = None) -> int:
         "--if-stale",
         action="store_true",
         help="render only when the output is missing, older than the content file, any file it "
-        "!includes or any part of an index, or written with other --embed/--no-source/--live options; "
-        "otherwise print 'up to date' and exit 0. Without --live it keeps the reloader of a page "
+        "!includes or any part of an index, or written with other --embed/--no-source/--live options or "
+        "by another version of skaldr (an upgrade forces one re-render); otherwise print 'up to date' "
+        "and exit 0, which is a success like OK. Without --live it keeps the reloader of a page "
         "rendered with --live, so `--live` once and `--if-stale` after every edit keeps the page live. "
         "Makes an unconditional re-render after every edit free, so no watcher process is needed.",
     )

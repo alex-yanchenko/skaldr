@@ -43,8 +43,8 @@ fabrication, so honesty is on you.
    `--export markdown`, `--export notion`, `--export adf` or `--export slack` in place of `-o`;
    each writes `out/<name>.<target>/`.
 4. **Confirm it rendered.** A structural mistake fails the build with a precise path
-   (`blocks.3.items.2.value: ...`). Read it, fix, re-run. Done = skaldr prints `OK` and the output
-   file exists. To validate without writing anything (e.g. over a glob), use
+   (`blocks.3.items.2.value: ...`). Read it, fix, re-run. Done = `OK` (`up to date` under
+   `--if-stale`) and the output file exists. To validate without writing anything (e.g. over a glob), use
    `skaldr --check report.yaml`; to read the normalised model back as JSON, `skaldr --emit-json
    report.yaml`.
 5. **Surface it, local-first.** A skaldr page works as a live working doc: render once with
