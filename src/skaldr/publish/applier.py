@@ -41,6 +41,7 @@ from skaldr.publish.state import (
 from skaldr.publish.transport import (
     NO_SECTIONS,
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     FillsAPageLeftEmpty,
@@ -284,8 +285,9 @@ class Applier:
                 return self._write_content(target_plan, step)
             case ArchiveStep():
                 transport = self.transports.for_target(target_plan.label)
+                archive = Archive(self._stamp(step.item), self._item(step.item).published_sections)
                 return self._retired(
-                    target_plan, step.item, "archive", lambda: transport.archive_item(step.item_id)
+                    target_plan, step.item, "archive", lambda: transport.archive_item(step.item_id, archive)
                 )
             case ReleaseStep():
                 transport = self.transports.for_target(target_plan.label)

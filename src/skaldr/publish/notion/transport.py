@@ -16,6 +16,7 @@ from skaldr.publish.keyed import (
     finished_after_a_change,
     finished_after_a_create,
     refuse_a_change_since_the_read,
+    refuse_to_archive_what_skaldr_did_not_write,
     refused_when_not_found,
 )
 from skaldr.publish.notion.api import Answer, NotionApi
@@ -54,6 +55,7 @@ from skaldr.publish.notion.responses import Page
 from skaldr.publish.notion.template import check_the_template_is_empty
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -324,12 +326,22 @@ class NotionTransport:
             page = self._api.update_page(item_id, body)
         return self._remote(item_id, page, markdown, layout)
 
-    def archive_item(self, item_id: str, /) -> None:
+    def archive_item(self, item_id: str, request: Archive, /) -> None:
         try:
             self._live_page(item_id)
         except ItemNotFoundError:
             return
+        saved = request.published.saved_remote
+        keyed = keyed_page(
+            self._api.page_markdown(item_id).markdown, self._read.layouts.get(_page_key(item_id), saved)
+        )
+        refuse_to_archive_what_skaldr_did_not_write(
+            _page_named(item_id), keyed.stamp, keyed.sections, self._comparable_sections(saved), request
+        )
         self._api.update_page(item_id, {"in_trash": True})
+
+    def _comparable_sections(self, sections: Mapping[str, str]) -> Mapping[str, str]:
+        return self.comparable_form(ItemContent(title="", sections=dict(sections))).sections
 
     def release_item(self, item_id: str, request: Release, /) -> None:
         keyed, markdown = self._unchanged_since_read(item_id, request.raw_sections)

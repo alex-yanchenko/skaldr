@@ -34,6 +34,7 @@ from skaldr.publish.notion.transport import (
 )
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     LinksWrite,
@@ -61,6 +62,7 @@ from tests.factories.notion_factory import (
 
 PARENT_PAGE_ID = "fedcba9876543210fedcba9876543210"
 STAMP = Stamp("garden-handbook", None)
+ARCHIVE = Archive(STAMP)
 STAMP_LINE = 'Published with skaldr from document garden-handbook {color="gray"}'
 WELCOME = "## Welcome\nWelcome to the garden.\n"
 PLANTING = "## Planting\nSow in spring.\n"
@@ -381,8 +383,8 @@ def test_a_page_in_the_trash_is_not_found_and_archiving_it_again_sends_nothing()
     notion = _notion()
     transport, created = _created(notion)
 
-    transport.archive_item(created.item_id)
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     assert [(method, path, body) for method, path, body in _sent(notion) if method != "GET"] == [
         ("PATCH", f"/v1/pages/{created.item_id}", {"in_trash": True})
@@ -395,7 +397,7 @@ def test_archiving_a_page_notion_no_longer_has_sends_nothing() -> None:
     notion = _notion()
     transport = notion.transport()
 
-    transport.archive_item(numbered_id(77))
+    transport.archive_item(numbered_id(77), ARCHIVE)
 
     assert notion.writes() == []
 

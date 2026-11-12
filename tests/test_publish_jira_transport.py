@@ -12,6 +12,7 @@ from skaldr.publish.jira.transport import JiraTransport
 from skaldr.publish.notion.page_markdown import keyed_page, stamp_line
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -44,6 +45,7 @@ DOC_ID = "garden-handbook"
 DOC_LABEL = "skaldr-garden-handbook"
 STAMP = Stamp(DOC_ID, None)
 SECTION_STAMP = Stamp(DOC_ID, "planting")
+ARCHIVE = Archive(STAMP)
 LONGEST_LINKABLE_DOC_ID = "garden-" + "a" * 192
 TARGET = JiraTarget.model_validate(make_jira_target(where={"project": "DEMO", "issue_type": "Task"}))
 UNDER_A_PARENT = JiraTarget.model_validate(
@@ -979,7 +981,7 @@ def test_archiving_closes_the_issue_comments_why_and_marks_it_archived() -> None
     jira = FakeJira()
     transport, created = _created(jira)
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
     why = "skaldr archived this issue: the document garden-handbook no longer has the content it held."
@@ -1022,8 +1024,8 @@ def test_an_archive_retried_after_its_stamp_was_not_saved_finds_its_comment_and_
             "Jira refused PUT /rest/api/3/issue/DEMO-1/properties/skaldr.stamp (HTTP 400): Bad value"
         ),
     ):
-        transport.archive_item(created.item_id)
-    transport.archive_item(created.item_id)
+        transport.archive_item(created.item_id, ARCHIVE)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
     assert (issue.comments, issue.fields["status"], issue.properties["skaldr.stamp"]) == (
@@ -1055,7 +1057,7 @@ def test_an_archive_comment_jira_saved_with_attributes_of_its_own_still_counts_a
     }
     jira.issues["DEMO-1"].comments.append(saved)
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
     assert (issue.comments, issue.fields["status"]) == ([saved], DONE)
@@ -1065,7 +1067,7 @@ def test_archiving_an_issue_without_a_stamp_comments_without_a_doc_id_and_stamps
     jira = FakeJira()
     jira.seed("DEMO-3", summary="Notes")
 
-    _transport(jira).archive_item("DEMO-3")
+    _transport(jira).archive_item("DEMO-3", ARCHIVE)
 
     issue = jira.issues["DEMO-3"]
     assert (issue.comments, issue.fields["status"], issue.properties) == (
@@ -1100,7 +1102,7 @@ def test_an_unreadable_stamp_stops_a_read_and_an_archive(stamp: JsonValue) -> No
     with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
         transport.read_item("DEMO-3", ItemContent(title=""))
     with pytest.raises(ConnectorError, match=_exactly(UNREADABLE_STAMP)):
-        transport.archive_item("DEMO-3")
+        transport.archive_item("DEMO-3", ARCHIVE)
     assert jira.issues["DEMO-3"].comments == []
 
 
@@ -1120,10 +1122,10 @@ def test_an_unreadable_layout_reads_the_description_as_one_section() -> None:
 def test_an_archived_issue_reads_as_not_found_and_archiving_it_again_sends_nothing() -> None:
     jira = FakeJira()
     transport, created = _created(jira)
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
     jira.forget_requests()
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
     archived_again = jira.calls()
     with pytest.raises(
         ItemNotFoundError, match=_exactly("skaldr archived DEMO-1, so it no longer publishes there")
@@ -1141,7 +1143,7 @@ def test_an_issue_already_done_is_marked_archived_without_a_transition_or_a_comm
     transport, created = _created(jira)
     jira.edit_by_hand(created.item_id, status=DONE)
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     assert ([call for call in jira.calls() if call[0] != "GET"], jira.issues["DEMO-1"].comments) == (
         [("PUT", "/rest/api/3/issue/DEMO-1/properties/skaldr.stamp")],
@@ -1161,7 +1163,7 @@ def test_an_issue_with_no_way_to_a_done_status_is_not_archived() -> None:
             "in Jira, then publish again"
         ),
     ):
-        transport.archive_item(created.item_id)
+        transport.archive_item(created.item_id, ARCHIVE)
     assert jira.issues["DEMO-1"].comments == []
 
 
@@ -1170,7 +1172,7 @@ def test_a_done_transition_is_found_by_its_status_category_not_its_name() -> Non
     transport, created = _created(jira)
     jira.issues["DEMO-1"].fields["status"] = IN_PROGRESS
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     assert _transition_bodies(jira) == [{"transition": {"id": "31"}}]
 
@@ -1200,9 +1202,9 @@ def test_a_transition_that_fails_after_the_comment_never_gets_the_comment_posted
     for refusal in refusals:
         jira.answer_next("POST", "/rest/api/3/issue/DEMO-1/transitions", refusal)
         with pytest.raises(ConnectorError) as failed:
-            transport.archive_item(created.item_id)
+            transport.archive_item(created.item_id, ARCHIVE)
         raised.append(str(failed.value))
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
     assert (raised, len(issue.comments), issue.fields["status"], issue.properties["skaldr.stamp"]) == (
@@ -1404,7 +1406,7 @@ def test_an_issue_whose_status_jira_does_not_name_cannot_be_archived(status: Jso
         issue.fields["status"] = status
 
     with pytest.raises(ConnectorError, match=_exactly("Jira did not say which status DEMO-3 is in")):
-        _transport(jira).archive_item("DEMO-3")
+        _transport(jira).archive_item("DEMO-3", ARCHIVE)
     assert (issue.comments, issue.properties) == ([], {})
 
 
@@ -1437,7 +1439,7 @@ def _retitle(transport: JiraTransport, created: RemoteItem) -> object:
 
 
 def _archive(transport: JiraTransport, created: RemoteItem) -> object:
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
     return None
 
 
@@ -1480,7 +1482,7 @@ def test_archiving_through_a_close_that_sets_a_resolution_leaves_the_resolution_
     jira = FakeJira()
     transport, created = _created(jira)
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
     assert (issue.fields["status"], issue.fields["resolution"], _transition_bodies(jira)) == (
@@ -1500,7 +1502,7 @@ def test_a_close_whose_screen_requires_a_resolution_stops_the_archive_and_never_
 
     for _ in range(2):
         with pytest.raises(WriteRejectedError, match=_exactly(refusal)):
-            transport.archive_item(created.item_id)
+            transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
     assert (issue.comments, issue.fields["status"], issue.properties["skaldr.stamp"]) == (
@@ -1788,7 +1790,7 @@ def test_removing_the_last_link_clears_the_mark_so_archiving_reads_no_remote_lin
     marked = jira.issues["DEMO-1"].properties["skaldr.stamp"]
     jira.forget_requests()
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     assert (marked, [call for call in jira.calls() if call[1].endswith("/remotelink")]) == (
         _stamp_value(STAMP),
@@ -1806,7 +1808,7 @@ def test_a_remote_link_already_gone_when_archiving_deletes_it_does_not_stop_the_
         Reply(404, {"errorMessages": ["No remote link with that globalId."]}),
     )
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     issue = jira.issues["DEMO-1"]
     assert (issue.fields["status"], issue.properties["skaldr.stamp"]) == (
@@ -1821,7 +1823,7 @@ def test_archiving_removes_the_links_skaldr_wrote_for_the_item_and_keeps_the_oth
     transport.write_links(created.item_id, LinksWrite(STAMP, (HANDBOOK_PAGE, ROTA_PAGE)))
     jira.link_by_hand("DEMO-1", None, ROTA_PAGE.url, ROTA_PAGE.title)
 
-    transport.archive_item(created.item_id)
+    transport.archive_item(created.item_id, ARCHIVE)
 
     assert (jira.issues["DEMO-1"].remote_links, jira.issues["DEMO-1"].fields["status"]) == (
         [_remote_link(None, ROTA_PAGE, 10_003)],

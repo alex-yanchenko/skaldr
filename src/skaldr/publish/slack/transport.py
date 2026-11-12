@@ -30,6 +30,7 @@ from skaldr.publish.slack.canvas_markdown import (
 from skaldr.publish.transport import (
     NO_PUBLISHED,
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -159,7 +160,7 @@ class SlackTransport:
             self._api.edit_canvas(item_id, _rename(request.title))
         return self._remote(item_id, self._markdown(item_id), layout)
 
-    def archive_item(self, item_id: str, /) -> None:
+    def archive_item(self, item_id: str, _request: Archive, /) -> None:
         try:
             markdown = self._markdown_of_any_canvas(item_id)
         except ItemNotFoundError:

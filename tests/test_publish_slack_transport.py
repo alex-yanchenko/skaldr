@@ -11,6 +11,7 @@ from skaldr.publish.slack.canvas_markdown import UNKEYED_SECTION, archived_line
 from skaldr.publish.slack.transport import SlackTransport
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -32,6 +33,7 @@ from tests.factories.slack_factory import InMemorySlack
 
 TITLE_TEXT = "Garden handbook"
 STAMP = Stamp("garden-handbook", None)
+ARCHIVE = Archive(STAMP)
 STAMP_LINE = "Published with skaldr from document garden-handbook"
 CONTENT = ItemContent(
     title=TITLE_TEXT,
@@ -568,7 +570,7 @@ def _a_stamp_link_change(transport: SlackTransport, _raw: dict[str, str]) -> Non
 
 
 def _an_archive(transport: SlackTransport, _raw: dict[str, str]) -> None:
-    transport.archive_item(CANVAS)
+    transport.archive_item(CANVAS, ARCHIVE)
 
 
 def _a_release(transport: SlackTransport, raw: dict[str, str]) -> None:
@@ -720,10 +722,10 @@ def test_archiving_deletes_what_skaldr_published_leaves_one_line_renames_and_is_
     _created(slack)
     transport = slack.transport()
 
-    transport.archive_item(CANVAS)
+    transport.archive_item(CANVAS, ARCHIVE)
     first = list(slack.requests)
     slack.forget_requests()
-    transport.archive_item(CANVAS)
+    transport.archive_item(CANVAS, ARCHIVE)
 
     assert (first, _edits(slack), slack.markdown_of(CANVAS)) == (
         [
@@ -743,7 +745,7 @@ def test_archiving_keeps_what_people_wrote_below_the_stamp() -> None:
     transport = slack.transport()
     transport.read_item(CANVAS, CONTENT)
 
-    transport.archive_item(CANVAS)
+    transport.archive_item(CANVAS, ARCHIVE)
 
     assert slack.markdown_of(CANVAS) == f"{ARCHIVED_CANVAS}\nBring gloves.\n"
 
@@ -762,9 +764,9 @@ def test_an_archive_stopped_at_either_edit_is_finished_by_the_next_and_keeps_wha
     transport.read_item(CANVAS, CONTENT)
     slack.fail_next("canvases.edit", "internal_error", after=failing_edit)
     with pytest.raises(ConnectorError):
-        transport.archive_item(CANVAS)
+        transport.archive_item(CANVAS, ARCHIVE)
 
-    slack.transport().archive_item(CANVAS)
+    slack.transport().archive_item(CANVAS, ARCHIVE)
 
     assert slack.markdown_of(CANVAS) == f"{ARCHIVED_CANVAS}\nBring gloves.\n"
 
@@ -775,7 +777,7 @@ def test_a_rename_that_fails_after_the_archive_replaced_the_body_says_the_archiv
     slack.fail_next("canvases.edit", "internal_error", operation="rename")
 
     with pytest.raises(ConnectorError) as raised:
-        slack.transport().archive_item(CANVAS)
+        slack.transport().archive_item(CANVAS, ARCHIVE)
 
     assert (type(raised.value), str(raised.value), slack.markdown_of(CANVAS)) == (
         ConnectorError,
@@ -790,11 +792,11 @@ def test_a_canvas_whose_archive_stopped_before_the_rename_still_reads_so_the_arc
     _created(slack)
     slack.fail_next("canvases.edit", "internal_error", after=EDITS_OF_AN_ARCHIVE - 1)
     with pytest.raises(ConnectorError):
-        slack.transport().archive_item(CANVAS)
+        slack.transport().archive_item(CANVAS, ARCHIVE)
     transport = slack.transport()
 
     read = transport.read_item(CANVAS, CONTENT)
-    transport.archive_item(CANVAS)
+    transport.archive_item(CANVAS, ARCHIVE)
 
     assert (read.stamp, dict(read.raw_sections), read.comparable.sections, slack.markdown_of(CANVAS)) == (
         None,
@@ -812,7 +814,7 @@ def test_archiving_a_canvas_edited_after_the_read_writes_nothing() -> None:
     slack.edit_by_hand(CANVAS, "Sow in spring.", "Sow in June.")
 
     with pytest.raises(WriteRejectedError) as raised:
-        transport.archive_item(CANVAS)
+        transport.archive_item(CANVAS, ARCHIVE)
 
     assert (str(raised.value), _edits(slack)) == (
         f"Slack canvas {CANVAS} changed after skaldr read it, so nothing was written; publish again",
@@ -824,7 +826,7 @@ def test_archiving_a_canvas_whose_archived_line_landed_only_renames_it() -> None
     slack = InMemorySlack()
     canvas_id = slack.add_canvas(TITLE_TEXT, f"{archived_line('garden-handbook')}\n")
 
-    slack.transport().archive_item(canvas_id)
+    slack.transport().archive_item(canvas_id, ARCHIVE)
 
     assert (_edits(slack), slack.canvases[canvas_id].title) == (
         [{"operation": "rename", "title_content": {"type": "markdown", "markdown": ARCHIVED_TITLE}}],
@@ -836,7 +838,7 @@ def test_archiving_a_canvas_whose_archived_line_still_has_the_stamp_drops_the_st
     slack = InMemorySlack()
     canvas_id = slack.add_canvas(TITLE_TEXT, f"{archived_line('garden-handbook')}\n\n{STAMP_LINE}\n")
 
-    slack.transport().archive_item(canvas_id)
+    slack.transport().archive_item(canvas_id, ARCHIVE)
 
     assert (slack.requests[1:], slack.markdown_of(canvas_id)) == (
         [
@@ -851,7 +853,7 @@ def test_an_archived_canvas_reads_as_not_found() -> None:
     slack = InMemorySlack()
     _created(slack)
     transport = slack.transport()
-    transport.archive_item(CANVAS)
+    transport.archive_item(CANVAS, ARCHIVE)
 
     with pytest.raises(ItemNotFoundError, match=f"^Slack canvas {CANVAS} was archived by skaldr$"):
         transport.read_item(CANVAS, CONTENT)
@@ -863,7 +865,7 @@ def test_a_canvas_renamed_with_the_marker_reads_as_archived_and_archiving_it_sen
     slack.rename_by_hand(CANVAS, ARCHIVED_TITLE)
     transport = slack.transport()
 
-    transport.archive_item(CANVAS)
+    transport.archive_item(CANVAS, ARCHIVE)
 
     with pytest.raises(ItemNotFoundError, match=f"^Slack canvas {CANVAS} was archived by skaldr$"):
         transport.read_item(CANVAS, CONTENT)
@@ -873,7 +875,7 @@ def test_a_canvas_renamed_with_the_marker_reads_as_archived_and_archiving_it_sen
 def test_archiving_a_canvas_that_is_gone_sends_nothing() -> None:
     slack = InMemorySlack()
 
-    slack.transport().archive_item("F999999999")
+    slack.transport().archive_item("F999999999", ARCHIVE)
 
     assert slack.writes() == []
 

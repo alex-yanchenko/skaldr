@@ -12,9 +12,11 @@ from skaldr.publish import ConnectorRegistry, ContentLimit
 from skaldr.publish.connector import NO_SECTION_DEFAULTS, SectionDefaults, WriteGranularity
 from skaldr.publish.content import COVER, FIELDS, ICON, ItemContent, Part, section_part
 from skaldr.publish.drafts import Authored, authored_from
+from skaldr.publish.keyed import refuse_to_archive_what_skaldr_did_not_write
 from skaldr.publish.state import PublishState
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -450,7 +452,13 @@ class FakeTransport:
     def editor_name(self, user_id: str, /) -> str:
         return user_id
 
-    def archive_item(self, item_id: str, /) -> None:
+    def archive_item(self, item_id: str, request: Archive, /) -> None:
+        item = self.items[item_id]
+        saved = self.comparable_form(ItemContent(title="", sections=dict(request.published.saved_remote)))
+        held = self.comparable_form(self._remote(item_id).comparable)
+        refuse_to_archive_what_skaldr_did_not_write(
+            item_id, item.stamp, held.sections, saved.sections, request
+        )
         self._write(("archive", item_id))
         self.items[item_id].archived = True
         self._drop_the_connection_if_asked()

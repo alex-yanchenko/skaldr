@@ -10,11 +10,13 @@ from skaldr.publish.jira.description import description_doc, section_blocks, sec
 from skaldr.publish.jira.transport import STAMP_PROPERTY, JiraTransport
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
     LinksWrite,
     NewItem,
+    PublishedSections,
     Release,
     RemoteItem,
     RemoveSection,
@@ -30,12 +32,14 @@ from skaldr.publish_block.target import JsonFields
 from tests.factories import NOTION_PAGE_ID, make_jira_target, make_notion_target, make_slack_target
 from tests.factories.jira_factory import SITE, FakeJira
 from tests.factories.notion_factory import InMemoryNotion, numbered_id
-from tests.factories.publish_factory import DOC_ID, FakeTransport
+from tests.factories.publish_factory import DOC_ID, OTHER_DOC_ID, FakeTransport
 from tests.factories.slack_factory import TEAM_ID, WORKSPACE_URL, InMemorySlack
 
 OTHER_PAGE_ID = "fedcba9876543210fedcba9876543210"
+TEAMMATES_TEXT = "Team notes."
 STAMP = Stamp(DOC_ID, None)
 SECTION_STAMP = Stamp(DOC_ID, "tools")
+ARCHIVE = Archive(STAMP)
 CONTENT = ItemContent(
     title="Garden handbook",
     sections={"intro": "Welcome.\n", "planting": "Sow in spring.\n"},
@@ -115,6 +119,7 @@ class Instance:
     edit_section_by_hand: Callable[[str, str, str], None]
     count_writes: Callable[[], int]
     unstamped_item_id: Callable[[], str]
+    teammates_item_id: Callable[[], str]
 
 
 def _as_written(text: str) -> str:
@@ -144,16 +149,24 @@ class TransportUnderTest:
     reads_links_with_the_item: bool = True
     stamp_refusal: Callable[[str, Stamp], str] = field(default=_fake_stamp_refusal)
     stamps_on_a_fields_write: bool = True
+    item_named: Callable[[str], str] = field(default=_as_written)
+    checks_what_it_archives: bool = True
 
 
 def _fake_instance(transport: FakeTransport) -> Instance:
     transport.seed("empty-page", "Blank page", None, fields={"Status": None})
+
+    def teammates_item_id() -> str:
+        transport.seed("teammates-page", "Team notes", None, {"notes": f"{TEAMMATES_TEXT}\n"})
+        return "teammates-page"
+
     return Instance(
         transport,
         "empty-page",
         transport.edit_section_by_hand,
         lambda: len(transport.writes()),
         lambda: "empty-page",
+        teammates_item_id,
     )
 
 
@@ -170,8 +183,17 @@ def _notion() -> Instance:
         notion.edit_by_hand(item_id, CONTENT.sections[key].rstrip("\n"), text.rstrip("\n"))
 
     return Instance(
-        notion.transport(), empty_page, edit_section_by_hand, lambda: len(notion.writes()), lambda: empty_page
+        notion.transport(),
+        empty_page,
+        edit_section_by_hand,
+        lambda: len(notion.writes()),
+        lambda: empty_page,
+        lambda: notion.add_page(numbered_id(901), "Team notes", TEAMMATES_TEXT),
     )
+
+
+def _notion_page_named(item_id: str) -> str:
+    return f"Notion page {item_id}"
 
 
 def _notion_link(item_id: str, title: str) -> ItemLink:
@@ -204,7 +226,17 @@ def _jira() -> Instance:
         del jira.issues[created.item_id].properties[STAMP_PROPERTY]
         return created.item_id
 
-    return Instance(transport, None, edit_section_by_hand, count_writes, unstamped_item_id)
+    def teammates_item_id() -> str:
+        notes = ItemContent(title="Team notes", sections={"notes": _as_adf(TEAMMATES_TEXT)})
+        created = transport.create_item(NewItem(JIRA_TARGET, STAMP, notes))
+        del jira.issues[created.item_id].properties[STAMP_PROPERTY]
+        return created.item_id
+
+    return Instance(transport, None, edit_section_by_hand, count_writes, unstamped_item_id, teammates_item_id)
+
+
+def _jira_issue_named(item_id: str) -> str:
+    return f"Jira issue {item_id}"
 
 
 def _jira_link(item_id: str, _title: str) -> ItemLink:
@@ -228,6 +260,7 @@ def _slack() -> Instance:
         edit_section_by_hand,
         lambda: len(slack.writes()),
         lambda: slack.add_canvas("Blank canvas", "Welcome.\n"),
+        lambda: slack.add_canvas("Team notes", f"{TEAMMATES_TEXT}\n"),
     )
 
 
@@ -252,6 +285,7 @@ TRANSPORTS = [
             reports_edits=False,
             expected_link=_notion_link,
             stamp_refusal=_notion_stamp_refusal,
+            item_named=_notion_page_named,
         ),
         id="notion",
     ),
@@ -269,6 +303,7 @@ TRANSPORTS = [
             reads_links_with_the_item=False,
             stamp_refusal=_jira_stamp_refusal,
             stamps_on_a_fields_write=False,
+            item_named=_jira_issue_named,
         ),
         id="jira",
     ),
@@ -283,6 +318,7 @@ TRANSPORTS = [
             form_fixture=SLACK_COMPARABLE_FORM_IDEMPOTENCE_FIXTURE,
             expected_link=_slack_link,
             stamp_refusal=_slack_stamp_refusal,
+            checks_what_it_archives=False,
         ),
         id="slack",
     ),
@@ -352,11 +388,67 @@ def test_an_archived_item_reads_as_not_found_and_archiving_again_is_harmless(
 ) -> None:
     instance, created = _created(under_test)
 
-    instance.transport.archive_item(created.item_id)
-    instance.transport.archive_item(created.item_id)
+    instance.transport.archive_item(created.item_id, ARCHIVE)
+    instance.transport.archive_item(created.item_id, ARCHIVE)
 
     with pytest.raises(ItemNotFoundError):
         instance.transport.read_item(created.item_id, _content(under_test))
+
+
+def _unless_it_checks_what_it_archives(under_test: TransportUnderTest) -> None:
+    if not under_test.checks_what_it_archives:
+        pytest.skip("this transport leaves the ownership of what it archives to the engine")
+
+
+def test_an_archive_of_an_item_stamped_for_another_document_is_rejected_and_changes_nothing(
+    under_test: TransportUnderTest,
+) -> None:
+    _unless_it_checks_what_it_archives(under_test)
+    instance, created = _created(under_test, Stamp(OTHER_DOC_ID, None))
+
+    with pytest.raises(WriteRejectedError) as refused:
+        instance.transport.archive_item(created.item_id, ARCHIVE)
+
+    read = instance.transport.read_item(created.item_id, _content(under_test))
+    assert (str(refused.value), read.stamp) == (
+        f"{under_test.item_named(created.item_id)} is not stamped with doc_id '{DOC_ID}', so skaldr will not "
+        "archive it",
+        Stamp(OTHER_DOC_ID, None),
+    )
+
+
+def test_an_archive_of_an_unstamped_item_holding_content_skaldr_did_not_write_is_rejected_and_changes_nothing(
+    under_test: TransportUnderTest,
+) -> None:
+    _unless_it_checks_what_it_archives(under_test)
+    instance = under_test.make()
+    item_id = instance.teammates_item_id()
+    writes_before = instance.count_writes()
+
+    with pytest.raises(WriteRejectedError) as refused:
+        instance.transport.archive_item(item_id, ARCHIVE)
+
+    read = instance.transport.read_item(item_id, ItemContent(title=""))
+    assert (str(refused.value), instance.count_writes() - writes_before, read.stamp) == (
+        f"{under_test.item_named(item_id)} carries no skaldr stamp and holds content skaldr did not write, "
+        "so skaldr will not archive it",
+        0,
+        None,
+    )
+
+
+def test_an_unstamped_item_holding_what_skaldr_last_wrote_is_archived(under_test: TransportUnderTest) -> None:
+    instance, created = _created(under_test)
+    transport = instance.transport
+    unstamped = instance.teammates_item_id()
+    read = transport.read_item(unstamped, ItemContent(title=""))
+    saved = PublishedSections(dict(read.comparable.sections), dict(read.comparable.sections))
+
+    transport.archive_item(unstamped, Archive(STAMP, saved))
+
+    with pytest.raises(ItemNotFoundError):
+        transport.read_item(unstamped, ItemContent(title=""))
+    assert transport.read_item(created.item_id, _content(under_test)).stamp == STAMP
 
 
 def test_a_release_clears_the_sections_the_named_fields_and_the_stamp_and_can_be_repeated(

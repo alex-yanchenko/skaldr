@@ -10,6 +10,7 @@ __all__ = [
     "NO_PUBLISHED",
     "NO_SECTIONS",
     "AddSection",
+    "Archive",
     "ContentWrite",
     "FieldsWrite",
     "FillsAPageLeftEmpty",
@@ -175,6 +176,12 @@ class ContentWrite:
 
 
 @dataclass(frozen=True)
+class Archive:
+    stamp: Stamp
+    published: PublishedSections = NO_PUBLISHED
+
+
+@dataclass(frozen=True)
 class Release:
     raw_sections: RawSections
     field_names: tuple[str, ...]
@@ -254,7 +261,7 @@ class Transport(Protocol):
 
     def write_fields(self, item_id: str, request: FieldsWrite, /) -> RemoteItem: ...
 
-    def archive_item(self, item_id: str, /) -> None: ...
+    def archive_item(self, item_id: str, request: Archive, /) -> None: ...
 
     def release_item(self, item_id: str, request: Release, /) -> None: ...
 

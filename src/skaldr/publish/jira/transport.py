@@ -33,8 +33,10 @@ from skaldr.publish.jira.description import (
     section_text,
     split_description,
 )
+from skaldr.publish.keyed import refuse_to_archive_what_skaldr_did_not_write
 from skaldr.publish.transport import (
     AddSection,
+    Archive,
     ContentWrite,
     FieldsWrite,
     ItemLink,
@@ -329,11 +331,18 @@ class JiraTransport:
             self._client.edit_issue(item_id, changes)
         return self._verified(item_id, self._read(item_id), frozenset(changes))
 
-    def archive_item(self, item_id: str, /) -> None:
+    def archive_item(self, item_id: str, request: Archive, /) -> None:
         self._last_reads.pop(item_id, None)
         current = self._stamp(item_id) or StampValue(doc_id=None)
         if current.archived:
             return
+        sections = (
+            {} if current.stamp is not None else self._read_with(item_id, ()).remote.comparable.sections
+        )
+        saved = self.comparable_form(ItemContent(title="", sections=dict(request.published.saved_remote)))
+        refuse_to_archive_what_skaldr_did_not_write(
+            f"Jira issue {item_id}", current.stamp, sections, saved.sections, request
+        )
         if current.linked and current.stamp is not None:
             self._delete_links(item_id, current.stamp, self.read_links(item_id, current.stamp))
         status = _status(self._client.get_issue(item_id, [STATUS_FIELD]))
