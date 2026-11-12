@@ -32,6 +32,7 @@ from skaldr.richtext import DateMention, Placeholder, Plain, Styled, Tinted
 from tests.conftest import REPO_ROOT
 from tests.factories import API_BADGES, BADGE_AND_STATE_BLOCKS, accepted_example, make_report
 from tests.factories.adf_factory import minimal_nodes, showcase_nodes
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
 
 ADF_SCHEMA_FILE = REPO_ROOT / "tests" / "schemas" / "adf-schema-57.7.4-full.json"
 SITE = IssueLinks("https://example.atlassian.net", frozenset({"PLAN"}))
@@ -245,6 +246,26 @@ def test_a_date_with_a_label_and_a_date_range_with_a_label_are_accepted_by_the_a
         },
         [],
     )
+
+
+def test_a_card_label_has_no_trailing_colon_in_its_status_lozenge_and_header() -> None:
+    document = json.loads(
+        json.dumps(
+            render_adf_document(
+                lower_report(
+                    parse_report(
+                        make_report(blocks=CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE)
+                    )
+                )
+            )
+        )
+    )
+
+    header = document["content"][0]["content"][0]["content"]
+    assert [cell["content"][0]["content"] for cell in header] == [
+        [{"type": "status", "attrs": {"text": "Open rows", "color": "yellow"}}],
+        [{"type": "text", "text": "Plain"}],
+    ]
 
 
 def test_a_code_label_is_bold_text_above_the_code_block_and_the_document_validates() -> None:

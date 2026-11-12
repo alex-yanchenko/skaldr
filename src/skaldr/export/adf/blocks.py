@@ -53,7 +53,7 @@ from skaldr.export.adf.nodes import (
 from skaldr.export.apportion import apportioned, apportioned_at_least
 from skaldr.export.folds import folded, link_card_detail, reference_runs
 from skaldr.export.glyphs import cover_link_paragraph
-from skaldr.export.inline import bold, one_line, plain
+from skaldr.export.inline import bold, plain
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, StatusMark, export_visible_text
 from skaldr.export.swaps import (
     data_table_swapped_in,
@@ -201,13 +201,9 @@ def _marked_block(block: AdfBlock, mark: AdfMark) -> AdfBlock:
     )
 
 
-def _label_runs(label: str | None) -> ExportRich:
-    return plain(one_line(label or "").removesuffix(":").rstrip())
-
-
 def _card_label(card: Card) -> ExportRich:
     if card.badge is None:
-        return _label_runs(card.label)
+        return plain(card.label or "")
     return (Chip.on_one_line(card.label or "", card.badge),)
 
 
@@ -625,7 +621,7 @@ class _AdfBlocks:
     def fact_strip_blocks(self, node: FactStrip) -> list[AdfBlock]:
         if not node.facts:
             return []
-        labels = [_label_runs(fact.label) for fact in node.facts]
+        labels = [plain(fact.label or "") for fact in node.facts]
         values = [self.run_cell(fact.value, header=False) for fact in node.facts]
         if not any(labels):
             return [_table_of([values])]
@@ -633,7 +629,7 @@ class _AdfBlocks:
 
     def labelled_rows(self, pairs: Sequence[LabelledValue]) -> list[AdfBlock]:
         rows = [
-            [self.run_cell(_label_runs(pair.label), header=True), self.run_cell(pair.value, header=False)]
+            [self.run_cell(plain(pair.label or ""), header=True), self.run_cell(pair.value, header=False)]
             for pair in pairs
         ]
         return [_table_of(rows)] if rows else []

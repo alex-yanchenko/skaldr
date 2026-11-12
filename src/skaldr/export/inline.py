@@ -29,6 +29,10 @@ def one_line(text: str) -> str:
     return " ".join(text.split())
 
 
+def label_text(label: str | None) -> str:
+    return one_line(label or "").removesuffix(":").rstrip()
+
+
 def plain(text: str) -> Rich:
     collapsed = one_line(text)
     return (Plain(collapsed),) if collapsed else ()

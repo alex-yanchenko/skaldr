@@ -107,6 +107,7 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
 
 
 def test_the_example_is_refused_for_github_at_its_first_refusal_in_document_order(tmp_path: Path) -> None:
@@ -312,6 +313,13 @@ def test_a_walkthrough_step_label_is_plain_text_and_its_sub_is_rich_text() -> No
 
     assert markdown_of([{"type": "walkthrough", "steps": [step]}]) == (
         "1. 🔴 **Scan \\[x\\]{bg=sky} \\*y\\*** *a `code` sub*\n\n   Both aisles.\n"
+    )
+
+
+def test_a_card_label_has_no_trailing_colon() -> None:
+    assert markdown_of(CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE) == (
+        "| 🟡 **Open rows** | Plain |\n| --- | --- |\n| 1 (100.0%) | 3 |\n\n"
+        "|  | c |\n| --- | --- |\n| **r** | 🟡 Open rows: |\n"
     )
 
 

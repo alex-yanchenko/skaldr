@@ -4,7 +4,7 @@ from typing import assert_never
 
 from skaldr import compute, models
 from skaldr.code_language import block_code_language
-from skaldr.export.inline import bold, one_line, plain
+from skaldr.export.inline import bold, label_text, one_line, plain
 from skaldr.export.lower.context import Lowering, bullets, spaced, with_bold_label
 from skaldr.export.runs import Chip, DecisionMark, ExportRich, Gauge, Mark, SectionLink, StatusMark
 from skaldr.export.tree import (
@@ -86,7 +86,9 @@ def _list_entry(item: str | models.ListItem, shape: _ListShape, lowering: Loweri
 
 
 def lower_fact_strip(block: models.FactStrip) -> list[Node]:
-    return [FactStrip(tuple(LabelledValue(fact.label, plain(fact.value)) for fact in block.facts))]
+    return [
+        FactStrip(tuple(LabelledValue(label_text(fact.label), plain(fact.value)) for fact in block.facts))
+    ]
 
 
 def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> list[Node]:
@@ -95,7 +97,8 @@ def lower_section_fields(fields: models.SectionFields, lowering: Lowering) -> li
         return []
     return [
         FactStrip(
-            tuple(LabelledValue(fact.label, _fact_values(fact)) for fact in facts), of_section_fields=True
+            tuple(LabelledValue(label_text(fact.label), _fact_values(fact)) for fact in facts),
+            of_section_fields=True,
         )
     ]
 
@@ -107,11 +110,19 @@ def _fact_values(fact: compute.SectionFact) -> ExportRich:
 
 
 def lower_key_value(block: models.KeyValue, lowering: Lowering) -> list[Node]:
-    return [KeyValueList(tuple(LabelledValue(pair.label, lowering.rich(pair.value)) for pair in block.pairs))]
+    return [
+        KeyValueList(
+            tuple(LabelledValue(label_text(pair.label), lowering.rich(pair.value)) for pair in block.pairs)
+        )
+    ]
 
 
 def lower_def_list(block: models.DefList, lowering: Lowering) -> list[Node]:
-    return [DefinitionList(tuple(Definition(item.term, lowering.prose(item.body)) for item in block.items))]
+    return [
+        DefinitionList(
+            tuple(Definition(label_text(item.term), lowering.prose(item.body)) for item in block.items)
+        )
+    ]
 
 
 def lower_cards(block: models.Cards, lowering: Lowering) -> list[Node]:
@@ -121,7 +132,7 @@ def lower_cards(block: models.Cards, lowering: Lowering) -> list[Node]:
 def _derived_card(card: models.Card, badge: models.Badge, lowering: Lowering) -> Card:
     count, total = compute.derived_card_tally(card, lowering.matrix_tallies, lowering.table_tallies)
     share = plain(f"{compute.fmt(count)} ({compute.pct(count, total)})")
-    return Card(card.label or badge.label, share, note=card.note or "", badge=badge.tone)
+    return Card(label_text(card.label or badge.label), share, note=card.note or "", badge=badge.tone)
 
 
 def _delta(delta: models.CardDelta) -> ExportRich:
@@ -139,7 +150,7 @@ def _card(card: models.Card, lowering: Lowering) -> Card:
         parts.append(_delta(card.delta))
     parts.append(lowering.chips(card.badges))
     return Card(
-        card.label,
+        label_text(card.label),
         spaced([part for part in parts if part]),
         note=card.note or "",
         tone=_tone_unless_a_chip_shows_it(card, lowering),

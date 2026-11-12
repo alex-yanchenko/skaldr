@@ -20,7 +20,7 @@ from skaldr.export.github_html import (
     underlined,
 )
 from skaldr.export.glyphs import callout_icon, tab_title_led_by_its_icon
-from skaldr.export.inline import one_line, plain
+from skaldr.export.inline import plain
 from skaldr.export.lower.context import joined_by_breaks, toned
 from skaldr.export.markup import (
     DIVIDER_LINE,
@@ -310,14 +310,10 @@ def _cell_widths(node: Columns) -> list[int | None]:
     return [column.ratio if sized else None for column in node.columns]
 
 
-def _label_text(label: str | None) -> str:
-    return one_line(label or "").removesuffix(":").rstrip()
-
-
 def _card_header(card: Card) -> ExportRich:
     if card.badge is not None:
         return (Chip.on_one_line(card.label or "", card.badge),)
-    return toned(card.tone, plain(_label_text(card.label)))
+    return toned(card.tone, plain(card.label or ""))
 
 
 def _card_value(card: Card) -> ExportRich:
@@ -463,7 +459,7 @@ class _MarkdownWriter:
         return [*lines, "</tr>", "</table>"]
 
     def fact_strip_lines(self, node: FactStrip) -> list[str]:
-        header = tuple(TableCell(plain(_label_text(fact.label))) for fact in node.facts)
+        header = tuple(TableCell(plain(fact.label or "")) for fact in node.facts)
         row = TableRow(tuple(TableCell(fact.value) for fact in node.facts))
         return self.table_lines(TableNode(header, (row,))) if node.facts else []
 
@@ -475,7 +471,7 @@ class _MarkdownWriter:
     def definition_list_lines(self, node: DefinitionList) -> list[str]:
         lines = ["<dl>"]
         for definition in node.definitions:
-            lines.append(f"<dt>{html.escape(_label_text(definition.term), quote=False)}</dt>")
+            lines.append(f"<dt>{html.escape(definition.term, quote=False)}</dt>")
             with self.inside_a_container(), self.inside_an_html_block():
                 body = self.blocks(definition.body)
             lines += ["<dd>", "", *body, "", "</dd>"] if body else ["<dd></dd>"]

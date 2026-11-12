@@ -23,7 +23,21 @@ from skaldr.export.tree import (
 from skaldr.models import ToneLiteral
 from skaldr.richtext import Plain, Styled
 from tests.factories import API_BADGES, lowered, lowered_as_written_today
-from tests.factories.export_factory import API_LEGEND, cell_texts_of
+from tests.factories.export_factory import (
+    API_LEGEND,
+    CARDS_LABELLED_WITH_A_TRAILING_COLON,
+    OPEN_ROWS_BADGE,
+    cell_texts_of,
+)
+
+
+def test_a_card_label_is_trimmed_once_in_the_lowering_whether_derived_or_authored() -> None:
+    assert lowered(CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE)[0] == Cards(
+        (
+            Card("Open rows", (Plain("1 (100.0%)"),), badge="amber"),
+            Card("Plain", (Plain("3"),)),
+        )
+    )
 
 
 def test_a_card_shows_its_share_delta_badges_and_note() -> None:
@@ -195,7 +209,7 @@ def test_a_fact_strip_and_a_key_value_block_lower_to_their_labelled_values() -> 
     ]
 
     assert lowered(blocks) == (
-        FactStrip((LabelledValue("Site:", (Plain("West wing"),)), LabelledValue(" ", (Plain("x"),)))),
+        FactStrip((LabelledValue("Site", (Plain("West wing"),)), LabelledValue("", (Plain("x"),)))),
         KeyValueList((LabelledValue("Owner", (Styled("bold", (Plain("ops"),)),)),)),
     )
 

@@ -96,6 +96,7 @@ from tests.factories.example_factory import (
     golden_of,
     golden_or_scratch_folder,
 )
+from tests.factories.export_factory import CARDS_LABELLED_WITH_A_TRAILING_COLON, OPEN_ROWS_BADGE
 
 REFUSED_IN_THE_REWORKED_EXAMPLE = ["range", "flow", "image", "fan"]
 CANVAS_STEP_DETAIL_TYPES = ("text", "list")
@@ -769,6 +770,14 @@ def test_a_second_list_in_one_list_item_is_rejected() -> None:
 
     assert vars(refusal_of([make_bullets(entry, make_list_entry("d"))], "slack")) == _canvas_rejection(
         _list_item_why("a second nested list"), OUT_OF_THE_LIST
+    )
+
+
+def test_a_card_label_has_no_trailing_colon_before_the_colon_the_writer_adds() -> None:
+    assert slack_of(CARDS_LABELLED_WITH_A_TRAILING_COLON, badges=OPEN_ROWS_BADGE) == (
+        "::: {.layout}\n::: {.column}\n🟡 **Open rows**: 1 (100.0%)\n:::\n"
+        "::: {.column}\n**Plain**: 3\n:::\n:::\n\n"
+        "|  | c |\n| --- | --- |\n| **r** | 🟡 Open rows: |\n"
     )
 
 
