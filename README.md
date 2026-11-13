@@ -15,7 +15,7 @@ layout, spacing, colour, light/dark, all decided once, here. No design work, no 
 | --- | --- |
 | ![The sales pipeline sample page in the light theme](docs/images/sales-light.png) | ![The warehouse count sample page in the dark theme](docs/images/warehouse-dark.png) |
 
-`scripts/render-images.sh` renders both samples and regenerates these images (needs `uv` and Google Chrome).
+`uv run bash scripts/render-images.sh` renders both samples and regenerates these images. It needs Google Chrome, at the macOS location by default; set `CHROME_PATH` to use another one.
 
 ## Install
 

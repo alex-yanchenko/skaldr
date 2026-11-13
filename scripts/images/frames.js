@@ -1,6 +1,5 @@
-const EXAMPLE_PATH = "../../examples/sales-pipeline.yaml";
+const EXAMPLE_PATH = "sales-pipeline.yaml";
 const EXCERPT_LINES = 25;
-const IMAGES = "../../docs/images";
 
 const element = (tag, className, children = []) => {
   const node = document.createElement(tag);
@@ -14,7 +13,7 @@ const escapeHtml = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;
 const highlightYamlLine = (line) =>
   escapeHtml(line)
     .replace(/"[^"]*"/g, (quoted) => `<span class="s">${quoted}</span>`)
-    .replace(/(^\s*-?\s*|[{,]\s*)([a-z_]+)(?=:)/g, '$1<span class="k">$2</span>')
+    .replace(/(^\s*-?\s*|[{,]\s*)([A-Za-z_]+)(?=:)/g, '$1<span class="k">$2</span>')
     .replace(/(:\s)(\d+)(?=[\s,}]|$)/g, '$1<span class="n">$2</span>')
     .replace(/(:\s)(true|false|green|amber|neutral|success|warning|heading|cards|callout|table)\b/g, '$1<span class="v">$2</span>');
 
@@ -28,7 +27,7 @@ const windowBar = (title, dark) =>
 
 const pageWindow = (title, image, dark, className) => {
   const picture = element("img", "shot");
-  picture.src = `${IMAGES}/${image}`;
+  picture.src = image;
   picture.alt = "";
   return element("div", `window ${className}`, [windowBar(title, dark), picture]);
 };
