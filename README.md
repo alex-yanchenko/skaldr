@@ -9,6 +9,14 @@ layout, spacing, colour, light/dark, all decided once, here. No design work, no 
 (rendered from [`examples/sales-pipeline.yaml`](examples/sales-pipeline.yaml) and
 [`data/example.yaml`](data/example.yaml)).
 
+![The start of examples/sales-pipeline.yaml beside the report page skaldr renders from it](docs/images/hero.png)
+
+| Light | Dark |
+| --- | --- |
+| ![The sales pipeline sample page in the light theme](docs/images/sales-light.png) | ![The warehouse count sample page in the dark theme](docs/images/warehouse-dark.png) |
+
+`scripts/render-images.sh` renders both samples and regenerates these images (needs `uv` and Google Chrome).
+
 ## Install
 
 ```bash
